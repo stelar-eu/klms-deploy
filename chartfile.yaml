@@ -8,5 +8,11 @@ repositories:
   url: https://charts.bitnami.com/bitnami
 - name: elastic
   url: https://helm.elastic.co
-requires: []
+- name: apache_airflow
+  url: https://airflow.apache.org
+requires:
+- chart: apache_airflow/airflow
+  version: 1.9.0
+- chart: bitnami/postgresql
+  version: 12.5.5
 version: 1
