@@ -12,7 +12,7 @@ While JSonnet is Turing complete, it is a very simple language whose principles 
 The deployment of STELAR requires some tools and is performed by the following steps
 
  1. Install Graphana Tanka and Jsonnet Bundler
- 1. Update Jsonnet packages
+ 1. Update Jsonnet packages and Helm charts
  1. Have access to a kubernetes cluster.
  1. Create a tanka environment.
  1. Apply the environment to the cluster.
@@ -31,14 +31,25 @@ Tanka can be found in the following link from Graphana Labs
 Tanka uses the [Jsonnet bundler](https://github.com/jsonnet-bundler/jsonnet-bundler) for 
 package management. Installation instructions for both tanka and jsonnet bundler can be found at https://tanka.dev/install.
 
+Note: besides `tanka` and `jb`, other dependencies include 
+ - `kubectl` to access some Kubernetes cluster
+ - `helm` to download existing charts
+
 ## Update the Jsonnet packages in this repository.
 
 Once jsonnet bundler is installed, please do
 ```
 user% jb update
+GET ...
+...
+
+user% tk tool charts add
+{ ... 
+
 ```
 
-This will make sure that you have all required Jsonnet libraries.
+This will make sure that you have all required Jsonnet libraries, as well
+as charts.
 
 ## Access to a kubernetes cluster
 
