@@ -6,6 +6,10 @@ __pycache__/
 # C extensions
 *.so
 
+
+# Jsonnet libraries
+/vendor
+
 # Distribution / packaging
 .Python
 build/

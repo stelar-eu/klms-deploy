@@ -1,15 +1,25 @@
 # Instructions to deploy STELAR KLMS 
 
+The STELAR KLMS is a Kubernetes-based system, and as such, it requires
+deployment. Because of the complex nature of STELAR KLMS deployments,
+we have decided to employ a **configuration-as-code** approach, by using the
+(Jsonnet language)[https://jsonnet.org/] to code configuration logic.
+
+JSonnet is a very clever extension of JSON which allows large and complex 
+JSON objects to be composed in a proncipled manner. In many ways, this is reminiscent of the classis OMG Model-Driven Development approach, but significantly simplified.
+While JSonnet is Turing complete, it is a very simple language whose principles can be learned by a programmer in under one hour.
+
 The deployment of STELAR requires some tools and is performed by the following steps
 
- 0. Install Graphana Tanka
+ 1. Install Graphana Tanka and Jsonnet Bundler
+ 1. Update Jsonnet packages
  1. Have access to a kubernetes cluster.
- 2. Create a tanka environment.
- 3. Apply the environment to the cluster.
+ 1. Create a tanka environment.
+ 1. Apply the environment to the cluster.
 
 The steps are outlined below.
 
-## Install Graphana Tanka
+## Install Graphana Tanka and Jsonnet Bundler
 
 Tanka is a tool for simplifying Kubernetes deployment and 
 configuration. Tanka is open-source and is being used by Graphana 
@@ -17,6 +27,18 @@ Labs to manage their own clusters.
 
 Tanka can be found in the following link from Graphana Labs 
 [https://grafana.com/oss/tanka/](https://grafana.com/oss/tanka/).
+
+Tanka uses the [Jsonnet bundler](https://github.com/jsonnet-bundler/jsonnet-bundler) for 
+package management. Installation instructions for both tanka and jsonnet bundler can be found at https://tanka.dev/install.
+
+## Update the Jsonnet packages in this repository.
+
+Once jsonnet bundler is installed, please do
+```
+user% jb update
+```
+
+This will make sure that you have all required Jsonnet libraries.
 
 ## Access to a kubernetes cluster
 
