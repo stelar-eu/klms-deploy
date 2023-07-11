@@ -4,7 +4,7 @@ local _env_spec = import "spec.json";
 {
     _env_spec:: _env_spec,
 
-    _config:: {
+    _config+:: {
         stelar_ns: _env_spec.spec.namespace,
         grafana: {
             port: 3000,

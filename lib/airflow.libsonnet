@@ -29,7 +29,25 @@ local helm = tanka.helm.new(std.thisFile);
     local service = k.core.v1.service,
 
     // The path to the vendored airflow chart must be relative...
-    airflow: helm.template("airflow", "../charts/airflow", {
-
+    new(namespace): helm.template("airflow", "../charts/airflow", {
+        namespace: namespace,
+        webserverSecretKey: '6d2ee82cc7dc510dd99fcec80fce4958',
+        values: {
+            workers: {
+                persistence: {
+                    size: '2Gi'
+                }
+            },
+            triggerer: {
+                persistence: {
+                    size: '2Gi'
+                }
+            },
+            logs: {
+                persistence: {
+                    size: '2Gi'
+                }
+            },
+        },
     })
 }

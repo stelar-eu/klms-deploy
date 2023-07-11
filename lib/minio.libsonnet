@@ -1,3 +1,4 @@
+
 local k = import "k.libsonnet";
 
 {
@@ -9,13 +10,29 @@ local k = import "k.libsonnet";
     local volume = k.core.v1.volume,
     local service = k.core.v1.service,
 
-    local _minio_pod = {
-        local m=pod.metadata,
-        local s=pod.spec,
-        thepod: pod.new("minio") + m.withLabels({
+    local volume_spec_data = pod.spec.withVolumes([
+            volume.fromHostPath(
+                name="localvolume",
+                hostPath="/data/localvolume",
+            ) + {
+                hostPath+: {
+                    type: "DirectoryOrCreate"
+                }
+            }
+        ]),
+
+
+    /*
+        This is a minimal install of minio with a hard-coded provision
+        for a data directory.
+     */
+
+    new(): 
+        pod.new("minio") 
+        + pod.metadata.withLabels({
             app: 'minio',
         })
-        + s.withContainers([
+        + pod.spec.withContainers([
             container.new(
                 name="minio",
                 image="quay.io/minio/minio:latest"
@@ -29,19 +46,8 @@ local k = import "k.libsonnet";
                     readOnly=false)
             ])
         ])
-        //+ s.withNodeSelector(nodeSelector)
-        + s.withVolumes([
-            volume.fromHostPath(
-                name="localvolume",
-                hostPath="/mnt/disk1/data",
-            ) + {
-                hostPath+: {
-                    type: "DirectoryOrCreate"
-                }
-            }
-        ])
+        //+ pod.spec.withNodeSelector(nodeSelector)
+        + volume_spec_data
         ,
-    },
 
-    minio_pod: _minio_pod.thepod,
 }
