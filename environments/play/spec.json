@@ -7,7 +7,7 @@
   },
   "spec": {
     "apiServer": "https://83.212.80.247:6443",
-    "namespace": "stelar",
+    "namespace": "playground",
 
     "injectLabels": true,
     "resourceDefaults": {

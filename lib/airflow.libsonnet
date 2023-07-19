@@ -2,7 +2,7 @@
     Logic for configuring Apache airflow.
 
     The basis for airflow is the official helm chart, which must be
-    installed in path ./charts/aiflow.
+    installed in path ./charts/airflow.
 
     The following command can be used to vendor charts
     $ tk tool charts add <repo>/<name>@<version>

@@ -27,7 +27,7 @@ local airflow = import "airflow.libsonnet";
     local stelar_ns = $._config.stelar_ns,
     local storageclass_hostpath_data = $._config.scls_host_data,
 
-    stelar_namespace: namespace.new(stelar_ns),
+    // stelar_namespace: namespace.new(stelar_ns),
 
     // Deploy postgresql
     //local pg1 = pg.new(stelar_ns),
@@ -40,5 +40,5 @@ local airflow = import "airflow.libsonnet";
     //minio_pod: minio.new(),
 
     // Deploy airflow
-    airflow: airflow.new(stelar_ns),
+    // airflow: airflow.new(stelar_ns),
 }
