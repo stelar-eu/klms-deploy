@@ -2,8 +2,8 @@
   "apiVersion": "tanka.dev/v1alpha1",
   "kind": "Environment",
   "metadata": {
-    "name": "environments/stelar/vsam",
-    "namespace": "environments/stelar/vsam/main.jsonnet"
+    "name": "environments/play",
+    "namespace": "environments/play/main.jsonnet"
   },
   "spec": {
     "apiServer": "https://83.212.80.247:6443",
