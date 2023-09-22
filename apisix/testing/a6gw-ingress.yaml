@@ -1,0 +1,18 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: a7gw-ingress
+  namespace: apisix
+spec:
+  ingressClassName: nginx
+  rules:
+  - host: stelar.vsamtuc.top
+    http:
+      paths:
+      - backend:
+          service:
+            name: apisix-gateway
+            port:
+              number: 80
+        path: /
+        pathType: Prefix
