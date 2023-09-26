@@ -20,5 +20,9 @@ bitnami/apisix                  	2.1.3        	3.5.0      	Apache APISIX is high
 then, created an ingress.
 
 ```
-kubectl create ingress a7gw-ingress --rule="stelar.vsamtuc.top/*=apisix-gateway:80" --class=nginx --save-config=true --namespace=apisix
+kubectl create ingress a6gw-ingress --rule="stelar.vsamtuc.top/*=apisix-gateway:80" --class=nginx --save-config=true --namespace=apisix
 ```
+(also look into manifest file `a6gw-ingress.yaml`)
+
+Finally, to test, deploy a route.
+
