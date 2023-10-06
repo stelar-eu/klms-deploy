@@ -35,3 +35,4 @@ wcwidth==0.2.6
 yaml2jsonnet==1.0.1
 requests==2.31.0
 qpass==2.3
+minio==7.1.17
