@@ -36,3 +36,8 @@ yaml2jsonnet==1.0.1
 requests==2.31.0
 qpass==2.3
 minio==7.1.17
+pandas==1.5.3
+jupyterlab
+jupysql
+duckdb
+duckdb-engine
