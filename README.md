@@ -4,7 +4,7 @@ The knowledge layer comprises: (a) a data catalog that offers automatically enha
 
 ![alt text](https://github.com/stelar-eu/klms-deploy/blob/main/misc/klms_architecture.png?raw=true)
 
-# KLMS core components
+## KLMS core components
 
 * [Keycloak](https://www.keycloak.org/) is used for Identity and Access Management;
 
@@ -29,7 +29,7 @@ The STELAR KLMS supports two alternative workflow engines:
 * In its Professional and Enterprise editions, it supports the [RapidMiner Studio & AI Hub](https://rapidminer.com/), which is a widely used commercial platform for machine learning and data science workflows.
 
 
-# KLMS tools 
+## KLMS tools 
 
 * [Synopses Data engine](https://sdeaas.github.io/) for Extreme Scale Analytics-as-a-Service.
 
@@ -52,6 +52,12 @@ The STELAR KLMS supports two alternative workflow engines:
 * [Synthetic Data Generation](https://github.com/stelar-eu/Synthetic-Data-Generation) for textual data in agri-food domain.
 
 * [Hazard-classification](https://github.com/stelar-eu/Hazard-classification) from incidents reported in agri-food domain.
+
+
+## Examples 
+
+* Orchestration of several KLMS components for [entity extraction and linking](https://github.com/stelar-eu/klms-deploy/tree/main/examples/workflows) over unstructured food safety data employing Airflow workflow engine and the Data API for publishing and searching in the Data Catalog.
+
 
 # License
 
