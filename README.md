@@ -2,7 +2,7 @@
 This repository provides instructions, documentation, and examples regarding deployment of the Knowledge Lake Management System (KLMS) developed by the [STELAR project](https://stelar-project.eu/). The STELAR KLMS supports and facilitates a holistic approach for FAIR (Findable, Accessible, Interoperable, Reusable) and AI-ready (high-quality, reliably labeled) data. It allows to (semi-)automatically turn a raw data lake into a knowledge lake by: (a) enhancing the data lake with a knowledge layer; and (b) developing and integrating a set of data management tools and workflows. 
 The knowledge layer comprises: (a) a data catalog that offers automatically enhanced metadata for the raw data assets in the lake; and (b) a knowledge graph that semantically describes and interlinks these data assets using suitable domain ontologies and vocabularies. The provided STELAR tools and workflows offer novel functionalities for: (a) data discovery and quality management; (b) data linking and alignment, and (c) data annotation and synthetic data generation.
 
-![alt text](https://github.com/stelar-eu/klms-deploy/blob/main/misc/stelar_architecture.png?raw=true)
+![alt text](https://github.com/stelar-eu/klms-deploy/blob/main/misc/klms_architecture.png?raw=true)
 
 # KLMS core components
 
