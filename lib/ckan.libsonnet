@@ -491,6 +491,33 @@ local redis_deployment = deploy.new(
         util.serviceFor(redis_deployment)
     ],
 
+
+    /****************************
+        Ingress for the data catalog
+
+     */
+
+    local ing = k.networking.v1.ingress,
+    local ingrule = k.networking.v1.ingressRule,
+    local ingpath = k.networking.v1.httpIngressPath,
+
+    ingress: ing.new("data-catalog")
+        + ing.metadata.withAnnotations({
+            'foo': 'bar'
+        })
+        + ing.spec.withIngressClassName("nginx")
+        + ing.spec.withRules([
+            ingrule.withHost("stelar.vsamtuc.top")
+            + ingrule.http.withPaths([
+                ingpath.withPath("/")
+                + ingpath.withPathType("Prefix")
+                + ingpath.backend.service.withName("ckan")
+                + ingpath.backend.service.port.withName("api")
+            ])
+        ])
+        ,
+
+
 }
 
 
