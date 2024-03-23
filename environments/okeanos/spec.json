@@ -1,0 +1,25 @@
+{
+  "apiVersion": "tanka.dev/v1alpha1",
+  "kind": "Environment",
+  "metadata": {
+    "name": "environments/okeanos",
+    "namespace": "environments/okeanos/main.jsonnet"
+  },
+  "spec": {
+    "apiServer": "https://83.212.80.247:6443",
+    "namespace": "default",
+
+    "injectLabels": true,
+    "resourceDefaults": {
+      "annotations": {
+        "stelar.eu/author": "vsamoladas@tuc.gr"
+      },
+      "labels": {
+        "app.kubernetes.io/part-of": "stelar",
+        "app.kubernetes.io/managed-by": "tanka",
+        "stelar.deployment": "devel"
+      }
+    },
+    "expectVersions": {}
+  }
+}

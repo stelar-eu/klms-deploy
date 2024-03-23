@@ -321,6 +321,56 @@ local CertificateAuthority(name, namespaced=false, secret=null, issuerRef=null) 
     // 1. a secret (for signing certificates), and
     // 2. The CA issuer / clusterissuer
     CertificateAuthority: CertificateAuthority,
+
+
+    /*
+        Returns two clusterissuer objects for letsencrypt.
+
+        The two issuers are named 
+        - letsencrypt-staging
+        - letsencrypt-production
+
+        and they refer to the two LetsEncrypt issuers. They are both issued
+        under the same email.
+    */
+    letsencrypt_clusterissuers(email): {
+        basic(name, solverURI, ingress_class="nginx"):: cm.ClusterIssuer {
+            metadata: {
+                name: name
+            },
+            spec: {
+                acme: {
+                    email: email,
+                    preferredChain: "",
+                    privateKeySecretRef: {
+                        name: name
+                    },
+                    server: solverURI,
+                    solvers: [
+                        {
+                            http01: {
+                                ingress: {
+                                    class: ingress_class
+                                }
+                            }
+                        }
+                    ]
+                }
+            }
+        },
+
+        staging: self.basic(
+            name="letsencrypt-staging", 
+            solverURI="https://acme-staging-v02.api.letsencrypt.org/directory"
+            ),
+
+        production: self.basic(
+            name="letsencrypt-production",
+            solverURI="https://acme-v02.api.letsencrypt.org/directory"
+        ),
+    }
+
+
 }
 
 
