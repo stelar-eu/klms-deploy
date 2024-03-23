@@ -18,6 +18,8 @@ local volumeMount = k.core.v1.volumeMount;
 local pod = k.core.v1.pod;
 local vol = k.core.v1.volume;
 local service = k.core.v1.service;
+local cm = k.core.v1.configMap;
+local secret = k.core.v1.secret;
 
 /**
     Used to create persistent volume claims
@@ -35,13 +37,7 @@ local pvcWithLonghornStorage(name, gibytes)=
 
 
 
-local psqlURI(user, password, host, db) = 
-   "postgresql://%(user)s:%(password)s@%(host)s/%(db)s" % {
-        user: user, 
-        password: password, 
-        host: host, 
-        db: db
-   };
+local psqlURI = "postgresql://%(user)s:%(password)s@%(host)s/%(db)s";
 
 
 
@@ -70,45 +66,36 @@ local DBENV = {
     
 };
 
-
-local ENV = DBENV {
-    # CKAN core
-    CKAN_VERSION: '2.10.0',
-    CKAN_PORT: "5000",
-    CKAN_PORT_HOST: "5000",
-    CKAN_SITE_URL: "http://ckan:5000/",
-    CKAN_SITE_ID: "default",
-
+local SESSION_SECRETS = {
     # These should be initialized randomly
     CKAN___BEAKER__SESSION__SECRET: 'string:2UXr0cQqC3ryE',
     CKAN___API_TOKEN__JWT__ENCODE__SECRET: 'string:0okIfaYpqiVXF',
     CKAN___API_TOKEN__JWT__DECODE__SECRET: 'string:I5VCpxaM20tbV',
+};
+
+local ENV = DBENV + SESSION_SECRETS + {
+    # CKAN core
+    CKAN_VERSION: '2.10.0',
+    CKAN_PORT: "5000",
+    CKAN_PORT_HOST: "5000",
+    //CKAN_SITE_URL: "http://ckan:5000/",
+    CKAN_SITE_URL: "https://stelar.vsamtuc.top/",
+    CKAN_SITE_ID: "default",
+
 
     # TODO: Move these in a secret!
     CKAN_SYSADMIN_NAME: "ckan_admin",
     CKAN_SYSADMIN_PASSWORD: "stelar1234",
-    CKAN_SYSADMIN_EMAIL: "your_email@example.com",
-    
-    CKAN_SQLALCHEMY_URL: psqlURI(
-        DBENV.CKAN_DB_USER, 
-        DBENV.CKAN_DB_PASSWORD, 
-        DBENV.POSTGRES_HOST,
-        DBENV.CKAN_DB
-    ),
+    CKAN_SYSADMIN_EMAIL: "vsam@softnet.tuc.gr",
 
-    CKAN_DATASTORE_WRITE_URL: psqlURI(
-        DBENV.CKAN_DB_USER, 
-        DBENV.CKAN_DB_PASSWORD, 
-        DBENV.POSTGRES_HOST,
-        DBENV.DATASTORE_DB
-    ),
+    local _DB_HOST = {host: DBENV.POSTGRES_HOST},
+    local _CKAN_U = _DB_HOST+{user: DBENV.CKAN_DB_USER, password: DBENV.CKAN_DB_PASSWORD},
+    local _DS_U = _DB_HOST+{user: DBENV.DATASTORE_READONLY_USER, password: DBENV.DATASTORE_READONLY_PASSWORD},
 
-    CKAN_DATASTORE_READ_URL: psqlURI(
-        DBENV.DATASTORE_READONLY_USER, 
-        DBENV.DATASTORE_READONLY_PASSWORD,
-        DBENV.POSTGRES_HOST,
-        DBENV.DATASTORE_DB
-    ),
+
+    CKAN_SQLALCHEMY_URL: psqlURI % (_CKAN_U + {db: DBENV.CKAN_DB}),
+    CKAN_DATASTORE_WRITE_URL: psqlURI % (_CKAN_U + {db: DBENV.DATASTORE_DB}),
+    CKAN_DATASTORE_READ_URL: psqlURI  % (_DS_U + {db: DBENV.DATASTORE_DB}),
 
     # Test database connections
     TEST_CKAN_SQLALCHEMY_URL: self.CKAN_SQLALCHEMY_URL+"_test",
@@ -161,13 +148,14 @@ local PORT = {
 };
 
 
-
+// These images are used unchanged
 local SOLR_IMAGE_NAME = "ckan/ckan-solr:%s" % ENV.SOLR_IMAGE_VERSION;
-local POSTGIS_IMAGE_NAME = 'vsam/stelar-okeanos:postgis';
-local CKAN_IMAGE_NAME = 'vsam/stelar-okeanos:ckan';
 local REDIS_IMAGE_NAME = "redis:%s" % ENV.REDIS_VERSION;
 local DATAPUSHER_IMAGE_NAME = "ckan/ckan-base-datapusher:%s" % ENV.DATAPUSHER_VERSION;
 
+// The following two images have been customized
+local POSTGIS_IMAGE_NAME = 'vsam/stelar-okeanos:postgis';
+local CKAN_IMAGE_NAME = 'vsam/stelar-okeanos:ckan';
 
 
 /**********************************
@@ -194,7 +182,7 @@ local postgis_deployment = stateful.new(name="db", containers=[
 
         // Expose 5432
         + container.withPorts([
-            k.core.v1.containerPort.newNamed(5432, "psql")      
+            containerPort.newNamed(5432, "psql")      
             ])
 
         // liveness check
@@ -238,12 +226,6 @@ local postgis_svc = service.new("db", {
  */
 
 
-
-local env_config_map = k.core.v1.configMap.new(
-    "ckan_config_map",
-    "Silly data"
-);
-
 local pvc_ckan_storage = pvcWithLonghornStorage("ckan-storage", "5Gi");
 
 local ckan_deployment = stateful.new(
@@ -263,7 +245,7 @@ local ckan_deployment = stateful.new(
 
         // Expose 5000
         + container.withPorts([
-            k.core.v1.containerPort.newNamed(5000, "api"),
+            containerPort.newNamed(5000, "api"),
         ])
 
         + container.withVolumeMounts([
@@ -317,25 +299,24 @@ local solr_deployment = stateful.new(
         container.new('solr', SOLR_IMAGE_NAME)
         + container.withEnvMap(ENV)
 
-        /*
         + container.livenessProbe.exec.withCommand(
             ["/usr/bin/wget", "-qO", "/dev/null", "http://127.0.0.1:8983/solr/"]
             )
         + container.livenessProbe.withInitialDelaySeconds(30)
         + container.livenessProbe.withPeriodSeconds(20)
+        + container.livenessProbe.withTimeoutSeconds(10)
 
         + container.readinessProbe.httpGet.withPort(8983)
         + container.readinessProbe.httpGet.withPath("/solr/")
-        + container.readinessProbe.withInitialDelaySeconds(50)
-        + container.readinessProbe.withPeriodSeconds(10)
-        //+ container.readinessProbe.withTimeoutSeconds(2)
+        + container.readinessProbe.withInitialDelaySeconds(120)
+        + container.readinessProbe.withPeriodSeconds(60)
+        + container.readinessProbe.withTimeoutSeconds(10)
         + container.readinessProbe.withFailureThreshold(3)
         + container.readinessProbe.withSuccessThreshold(1)
-        */
 
         // Expose 8983
         + container.withPorts([
-            k.core.v1.containerPort.newNamed(PORT.SOLR, "solr"),
+            containerPort.newNamed(PORT.SOLR, "solr"),
         ])
 
         + container.withVolumeMounts([
@@ -376,7 +357,7 @@ local solr_service =
  */
 
 local datapusher_deployment = deploy.new(
-   name="datapusher",
+    name="datapusher",
     containers = [
         container.new('datapusher', DATAPUSHER_IMAGE_NAME)
         + container.withEnvMap(ENV)
@@ -398,7 +379,7 @@ local datapusher_deployment = deploy.new(
 
         // Expose 
         + container.withPorts([
-            k.core.v1.containerPort.newNamed(PORT.DATAPUSHER, "datapusher"),
+            containerPort.newNamed(PORT.DATAPUSHER, "datapusher"),
         ])
 
     ],
@@ -439,7 +420,7 @@ local redis_deployment = deploy.new(
 
         // Expose 
         + container.withPorts([
-            k.core.v1.containerPort.newNamed(PORT.REDIS, "redis"),
+            containerPort.newNamed(PORT.REDIS, "redis"),
         ])
 
     ],
@@ -460,9 +441,16 @@ local redis_deployment = deploy.new(
  */
 
 
-
-
 {
+
+    local obfuscate(m)=std.mapWithKey(function(k,d) std.base64(std.manifestJsonMinified(d)), m),
+
+    configs: [
+        cm.new("ckan-dbenv", DBENV),
+        secret.new("ckan-session-secrets",{})
+        + secret.withData(obfuscate(SESSION_SECRETS))
+    ],
+
     ckan: [
         pvc_ckan_storage,
         ckan_deployment,
@@ -503,7 +491,9 @@ local redis_deployment = deploy.new(
 
     ingress: ing.new("data-catalog")
         + ing.metadata.withAnnotations({
-            'foo': 'bar'
+            "cert-manager.io/cluster-issuer": "letsencrypt-production",
+            "nginx.ingress.kubernetes.io/proxy-connect-timeout": "60s",
+            "nginx.ingress.kubernetes.io/ssl-redirect": "true"
         })
         + ing.spec.withIngressClassName("nginx")
         + ing.spec.withRules([
@@ -515,8 +505,12 @@ local redis_deployment = deploy.new(
                 + ingpath.backend.service.port.withName("api")
             ])
         ])
-        ,
 
+        + ing.spec.withTls([
+            k.networking.v1.ingressTLS.withHosts("stelar.vsamtuc.top")
+            + k.networking.v1.ingressTLS.withSecretName("ckan-ui-tls")
+        ])
+        ,
 
 }
 
