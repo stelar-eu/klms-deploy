@@ -7,6 +7,7 @@
 */
 local k = import "k.libsonnet";
 local util = import "github.com/grafana/jsonnet-libs/ksonnet-util/util.libsonnet";
+local podinit = import "podinit.libsonnet";
 
 local deploy = k.apps.v1.deployment;
 local stateful = k.apps.v1.statefulSet;
@@ -73,7 +74,23 @@ local SESSION_SECRETS = {
     CKAN___API_TOKEN__JWT__DECODE__SECRET: 'string:I5VCpxaM20tbV',
 };
 
-local ENV = DBENV + SESSION_SECRETS + {
+
+
+local KEYCLOAK_CONFIG = {
+    CKANEXT__KEYCLOAK__SERVER_URL: "https://authst.vsamtuc.top/",
+    CKANEXT__KEYCLOAK__CLIENT_ID: "dummy_client",
+    CKANEXT__KEYCLOAK__REALM_NAME:  "stelarstaging2",
+    CKANEXT__KEYCLOAK__REDIRECT_URI:  "https://stelar.vsamtuc.top/",
+    CKANEXT__KEYCLOAK__CLIENT_SECRET_KEY:  "fooofootos",
+    CKANEXT__KEYCLOAK__BUTTON_STYLE:  "",
+    CKANEXT__KEYCLOAK__ENABLE_CKAN_INTERNAL_LOGIN: "True",
+};
+
+
+local ENV = DBENV 
+    + SESSION_SECRETS 
+    + KEYCLOAK_CONFIG
+    + {
     # CKAN core
     CKAN_VERSION: '2.10.0',
     CKAN_PORT: "5000",
@@ -112,12 +129,15 @@ local ENV = DBENV + SESSION_SECRETS + {
     'CKAN_SMTP_PASSWORD': "pass",
     'CKAN_SMTP_MAIL_FROM': "ckan@localhost",
 
-    CKAN__PLUGINS: "envvars image_view text_view recline_view datastore datapusher",
-    # KLMS also requires these CKAN plugins: "resource_proxy geo_view spatial_metadata spatial_query keycloak"
-    'CKAN__HARVEST__MQ__TYPE': "redis",
-    'CKAN__HARVEST__MQ__HOSTNAME': "redis",
-    'CKAN__HARVEST__MQ__PORT': "6379",
-    'CKAN__HARVEST__MQ__REDIS_DB': "1",
+    CKAN__PLUGINS: "envvars image_view text_view recline_view datastore datapusher"
+      +" keycloak"
+      +" resource_proxy geo_view"
+      +" spatial_metadata spatial_query"
+      ,
+    CKAN__HARVEST__MQ__TYPE: "redis",
+    CKAN__HARVEST__MQ__HOSTNAME: "redis",
+    CKAN__HARVEST__MQ__PORT: "6379",
+    CKAN__HARVEST__MQ__REDIS_DB: "1",
 
     # timezone!
     TZ: "UTC",
@@ -128,7 +148,7 @@ local ENV = DBENV + SESSION_SECRETS + {
     DATAPUSHER_REWRITE_RESOURCES: "True",
     DATAPUSHER_REWRITE_URL: "http://ckan:5000",
 
-    SOLR_IMAGE_VERSION: "2.10-solr9",
+    SOLR_IMAGE_VERSION: "2.10-solr9-spatial",
     CKAN_SOLR_URL: "http://solr:8983/solr/ckan",
     TEST_CKAN_SOLR_URL: "http://solr:8983/solr/ckan",
 
@@ -234,14 +254,14 @@ local ckan_deployment = stateful.new(
         container.new('ckan', CKAN_IMAGE_NAME)
         + container.withImagePullPolicy("Always")
         + container.withEnvMap(ENV)
-
-        /*
+        
         + container.livenessProbe.exec.withCommand(
-            ["/usr/bin/wget", "-qO", "/dev/null", "http://localhost:%s" % ENV.CKAN_PORT_HOST]
+            ["/usr/bin/curl", "--fail", "http://localhost:%s/api/3/action/status_show" % ENV.CKAN_PORT_HOST]
             )
         + container.livenessProbe.withInitialDelaySeconds(30)
-        + container.livenessProbe.withPeriodSeconds(20)
-        */
+        + container.livenessProbe.withPeriodSeconds(60)
+        + container.livenessProbe.withTimeoutSeconds(5)
+        + container.livenessProbe.withFailureThreshold(5)
 
         // Expose 5000
         + container.withPorts([
@@ -260,6 +280,11 @@ local ckan_deployment = stateful.new(
         'app.kubernetes.io/component': 'ckan',
     }
 )
++ stateful.spec.template.spec.withInitContainers([
+    podinit.wait4_http("wait4-solr", "http://solr:8983/solr/"),
+    podinit.wait4_postgresql("wait4-db", ENV.CKAN_SQLALCHEMY_URL + "?sslmode=disable"),
+    podinit.wait4_redis("wait4-redis", ENV.CKAN_REDIS_URL),
+])
 + stateful.spec.template.spec.withVolumes([
     vol.fromPersistentVolumeClaim("ckan-storage-vol", "ckan-storage")
 ])
@@ -302,16 +327,21 @@ local solr_deployment = stateful.new(
         + container.livenessProbe.exec.withCommand(
             ["/usr/bin/wget", "-qO", "/dev/null", "http://127.0.0.1:8983/solr/"]
             )
-        + container.livenessProbe.withInitialDelaySeconds(30)
+        + container.livenessProbe.withInitialDelaySeconds(120)
         + container.livenessProbe.withPeriodSeconds(20)
-        + container.livenessProbe.withTimeoutSeconds(10)
+        + container.livenessProbe.withFailureThreshold(3)
+        + container.livenessProbe.withTimeoutSeconds(45)
 
-        + container.readinessProbe.httpGet.withPort(8983)
-        + container.readinessProbe.httpGet.withPath("/solr/")
+        //+ container.readinessProbe.httpGet.withPort(8983)
+        //+ container.readinessProbe.httpGet.withPath("/solr/")
+        + container.readinessProbe.exec.withCommand(
+            ["/usr/bin/curl", "http://127.0.0.1:8983/solr/"]
+            )
+
         + container.readinessProbe.withInitialDelaySeconds(120)
-        + container.readinessProbe.withPeriodSeconds(60)
-        + container.readinessProbe.withTimeoutSeconds(10)
-        + container.readinessProbe.withFailureThreshold(3)
+        + container.readinessProbe.withPeriodSeconds(20)
+        + container.readinessProbe.withTimeoutSeconds(45)
+        + container.readinessProbe.withFailureThreshold(5)
         + container.readinessProbe.withSuccessThreshold(1)
 
         // Expose 8983
@@ -360,20 +390,21 @@ local datapusher_deployment = deploy.new(
     name="datapusher",
     containers = [
         container.new('datapusher', DATAPUSHER_IMAGE_NAME)
-        + container.withEnvMap(ENV)
+        //+ container.withEnvMap(ENV)
 
         + container.livenessProbe.exec.withCommand(
             ["/usr/bin/wget", "-qO", "/dev/null", "http://127.0.0.1:8800"]
             )
         + container.livenessProbe.withInitialDelaySeconds(30)
-        + container.livenessProbe.withPeriodSeconds(5)
-        + container.livenessProbe.withFailureThreshold(12)
+        + container.livenessProbe.withPeriodSeconds(15)
+        + container.livenessProbe.withTimeoutSeconds(10)
+        + container.livenessProbe.withFailureThreshold(5)
 
         + container.readinessProbe.httpGet.withPort(8800)
-        + container.readinessProbe.withInitialDelaySeconds(50)
-        + container.readinessProbe.withPeriodSeconds(10)
-        + container.readinessProbe.withTimeoutSeconds(2)
-        + container.readinessProbe.withFailureThreshold(3)
+        + container.readinessProbe.withInitialDelaySeconds(15)
+        + container.readinessProbe.withPeriodSeconds(15)
+        + container.readinessProbe.withTimeoutSeconds(10)
+        + container.readinessProbe.withFailureThreshold(5)
         + container.readinessProbe.withSuccessThreshold(1)
 
 
@@ -404,7 +435,7 @@ local redis_deployment = deploy.new(
    name="redis",
     containers = [
         container.new('redis', REDIS_IMAGE_NAME)
-        + container.withEnvMap(ENV)
+        //+ container.withEnvMap(ENV)
 
         + container.livenessProbe.exec.withCommand(
             ["/usr/local/bin/redis-cli", "-e", "QUIT"]
