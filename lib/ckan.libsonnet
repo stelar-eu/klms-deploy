@@ -69,9 +69,12 @@ local DBENV = {
 
 local SESSION_SECRETS = {
     # These should be initialized randomly
-    CKAN___BEAKER__SESSION__SECRET: 'string:2UXr0cQqC3ryE',
-    CKAN___API_TOKEN__JWT__ENCODE__SECRET: 'string:0okIfaYpqiVXF',
-    CKAN___API_TOKEN__JWT__DECODE__SECRET: 'string:I5VCpxaM20tbV',
+    # However, it is possible to let the ckan setup code to do it.
+    # Note: if we do it here, the values override the ones in ckan.ini (from setup)
+    #
+    # CKAN___BEAKER__SESSION__SECRET: 'string:2UXr0cQqC3ryE',
+    # CKAN___API_TOKEN__JWT__ENCODE__SECRET: 'string:I5VCpxaM20tbV0okIfaYpqiVXF',
+    # CKAN___API_TOKEN__JWT__DECODE__SECRET: 'string:I5VCpxaM20tbV0okIfaYpqiVXF',
 };
 
 
@@ -191,6 +194,7 @@ local pvc_db_storage = pvcWithLonghornStorage("postgis-storage", "5Gi");
 
 local postgis_deployment = stateful.new(name="db", containers=[
         container.new("postgis", POSTGIS_IMAGE_NAME)
+        + container.withImagePullPolicy("Always")
         + container.withEnvMap(DBENV)
 
         + container.withEnvMap({
@@ -281,9 +285,9 @@ local ckan_deployment = stateful.new(
     }
 )
 + stateful.spec.template.spec.withInitContainers([
-    podinit.wait4_http("wait4-solr", "http://solr:8983/solr/"),
-    podinit.wait4_postgresql("wait4-db", ENV.CKAN_SQLALCHEMY_URL + "?sslmode=disable"),
     podinit.wait4_redis("wait4-redis", ENV.CKAN_REDIS_URL),
+    podinit.wait4_postgresql("wait4-db", ENV.CKAN_SQLALCHEMY_URL + "?sslmode=disable"),
+    podinit.wait4_http("wait4-solr", "http://solr:8983/solr/"),
 ])
 + stateful.spec.template.spec.withVolumes([
     vol.fromPersistentVolumeClaim("ckan-storage-vol", "ckan-storage")
@@ -544,5 +548,4 @@ local redis_deployment = deploy.new(
         ,
 
 }
-
 
