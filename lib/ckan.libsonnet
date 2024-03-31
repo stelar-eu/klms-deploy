@@ -37,6 +37,35 @@ local pvcWithLonghornStorage(name, gibytes)=
 ;
 
 
+/**
+    Used to create headless services
+ */
+local headlessService = {
+
+    /*
+        Return a manifest for a headless Service.
+
+        Headless services are 
+
+        name(str): the name of the resource
+        component(str): annotation value for 'app.kubernetes.io/component' to select on
+        port(int): the port of the service
+        portName(str, optional): the name of the port
+     */
+    new(name, component, port, portName=null):: service.new(name, {
+            'app.kubernetes.io/component': component
+        },
+        [
+            if portName != null then
+                servicePort.newNamed(portName, port, port)
+            else
+                servicePort.new(port, port)
+        ]
+    )
+    + service.spec.withClusterIP("None")
+};
+
+
 
 local psqlURI = "postgresql://%(user)s:%(password)s@%(host)s/%(db)s";
 
@@ -67,10 +96,11 @@ local DBENV = {
     
 };
 
+
+# These should be initialized randomly
+# However, it is possible to let the ckan setup code to do it.
+# Note: if we do it here, the values override the ones in ckan.ini (from setup)
 local SESSION_SECRETS = {
-    # These should be initialized randomly
-    # However, it is possible to let the ckan setup code to do it.
-    # Note: if we do it here, the values override the ones in ckan.ini (from setup)
     #
     # CKAN___BEAKER__SESSION__SECRET: 'string:2UXr0cQqC3ryE',
     # CKAN___API_TOKEN__JWT__ENCODE__SECRET: 'string:I5VCpxaM20tbV0okIfaYpqiVXF',
@@ -168,6 +198,7 @@ local PORT = {
     REDIS: 6379,
     SOLR: 8983,
     DATAPUSHER: 8800,
+    PG: 5432,
 };
 
 
@@ -179,6 +210,8 @@ local DATAPUSHER_IMAGE_NAME = "ckan/ckan-base-datapusher:%s" % ENV.DATAPUSHER_VE
 // The following two images have been customized
 local POSTGIS_IMAGE_NAME = 'vsam/stelar-okeanos:postgis';
 local CKAN_IMAGE_NAME = 'vsam/stelar-okeanos:ckan';
+
+
 
 
 /**********************************
@@ -204,9 +237,9 @@ local postgis_deployment = stateful.new(name="db", containers=[
             PGDATA: "/var/lib/postgresql/data/pgdata",
         })
 
-        // Expose 5432
+        // Expose port 
         + container.withPorts([
-            containerPort.newNamed(5432, "psql")      
+            containerPort.newNamed(PORT.PG, "psql")      
             ])
 
         // liveness check
@@ -225,16 +258,6 @@ local postgis_deployment = stateful.new(name="db", containers=[
     + stateful.spec.template.spec.withVolumes([
         vol.fromPersistentVolumeClaim("postgis-storage-vol", "postgis-storage")
     ])
-;
-
-local postgis_svc = service.new("db", {
-        'app.kubernetes.io/component': "postgis"
-    },
-    [
-        servicePort.new(5432, 5432)
-    ]
- )
-    + service.spec.withClusterIP("None")
 ;
 
 
@@ -259,13 +282,15 @@ local ckan_deployment = stateful.new(
         + container.withImagePullPolicy("Always")
         + container.withEnvMap(ENV)
         
-        + container.livenessProbe.exec.withCommand(
+        + (
+        container.livenessProbe.exec.withCommand(
             ["/usr/bin/curl", "--fail", "http://localhost:%s/api/3/action/status_show" % ENV.CKAN_PORT_HOST]
             )
         + container.livenessProbe.withInitialDelaySeconds(30)
         + container.livenessProbe.withPeriodSeconds(60)
         + container.livenessProbe.withTimeoutSeconds(5)
         + container.livenessProbe.withFailureThreshold(5)
+        )
 
         // Expose 5000
         + container.withPorts([
@@ -297,18 +322,6 @@ local ckan_deployment = stateful.new(
 + stateful.spec.template.spec.securityContext.withFsGroup(92)
 ;
 
-local ckan_service = 
-    service.new("ckan", {
-            'app.kubernetes.io/component': "ckan"
-        },
-        [
-            servicePort.newNamed("api", 5000, 5000),
-        ]
-    )
-        + service.spec.withClusterIP("None")    
-;
-
-
 
 /*********************
     The SOLR deployment.
@@ -326,7 +339,6 @@ local solr_deployment = stateful.new(
    name="solr",
     containers = [
         container.new('solr', SOLR_IMAGE_NAME)
-        + container.withEnvMap(ENV)
 
         + container.livenessProbe.exec.withCommand(
             ["/usr/bin/wget", "-qO", "/dev/null", "http://127.0.0.1:8983/solr/"]
@@ -368,17 +380,6 @@ local solr_deployment = stateful.new(
     vol.fromPersistentVolumeClaim("solr-storage-vol", "solr-data")
 ])
 + stateful.spec.template.spec.securityContext.withFsGroup(8983)
-;
-
-local solr_service = 
-    service.new("solr", {
-            'app.kubernetes.io/component': "solr"
-        },
-        [
-            servicePort.newNamed("solr", PORT.SOLR, PORT.SOLR),
-        ]
-    )
-        + service.spec.withClusterIP("None")    
 ;
 
 
@@ -489,19 +490,19 @@ local redis_deployment = deploy.new(
     ckan: [
         pvc_ckan_storage,
         ckan_deployment,
-        ckan_service
+        headlessService.new("ckan", "ckan", PORT.CKAN, "api")
     ],
 
     db: [
         pvc_db_storage,
         postgis_deployment,
-        postgis_svc
+        headlessService.new("db", "postgis", PORT.PG)
     ],
 
     solr: [
         pvc_solr_data, 
         solr_deployment,
-        solr_service
+        headlessService.new("solr", "solr", PORT.SOLR, "solr")
     ],
 
     datapusher: [
