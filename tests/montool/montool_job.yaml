@@ -1,0 +1,21 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: montool
+  namespace: playground
+  labels:
+    app.kubernetes.io/instance: montool
+    app.kubernetes.io/component: job
+spec:
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/instance: montool
+        app.kubernetes.io/component: process
+    spec:
+      serviceAccountName: montool-sa
+      containers:
+        - name: main
+          image: vsam/stelar-okeanos:montool
+          imagePullPolicy: Always
+      restartPolicy: Never

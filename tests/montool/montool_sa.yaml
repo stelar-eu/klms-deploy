@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: montool-sa
+  namespace: playground
+  labels:
+    app.kubernetes.io/instance: montool
+    app.kubernetes.io/component: authz
