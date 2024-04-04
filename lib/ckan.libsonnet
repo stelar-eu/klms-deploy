@@ -213,7 +213,6 @@ local CKAN_IMAGE_NAME = 'vsam/stelar-okeanos:ckan';
 
 
 
-
 /**********************************
 
     POSTGIS is required. 
@@ -243,7 +242,10 @@ local postgis_deployment = stateful.new(name="db", containers=[
             ])
 
         // liveness check
-        + container.livenessProbe.exec.withCommand("pg_isready")
+        //+ container.livenessProbe.exec.withCommand("pg_isready")
+        + container.livenessProbe.exec.withCommand([
+            "pg_isready", "-U", "postgres"
+        ])
         + container.livenessProbe.withInitialDelaySeconds(30)
         + container.livenessProbe.withPeriodSeconds(10)
 
@@ -477,6 +479,7 @@ local redis_deployment = deploy.new(
  */
 
 
+
 {
 
     local obfuscate(m)=std.mapWithKey(function(k,d) std.base64(std.manifestJsonMinified(d)), m),
@@ -515,7 +518,6 @@ local redis_deployment = deploy.new(
         util.serviceFor(redis_deployment)
     ],
 
-
     /****************************
         Ingress for the data catalog
 
@@ -548,5 +550,6 @@ local redis_deployment = deploy.new(
         ])
         ,
 
+    ontop: import "ontop.libsonnet"
 }
 
