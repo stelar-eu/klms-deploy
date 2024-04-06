@@ -34,6 +34,7 @@ local DBENV = import "dbenv.jsonnet";
             ONTOP_DB_PASSWORD: DBENV.CKAN_DB_PASSWORD,
             ONTOP_DB_URL: "jdbc:postgresql://db/ckan",
         })
+        + container.withImagePullPolicy('Always')
     ,
 
 
@@ -79,7 +80,8 @@ local DBENV = import "dbenv.jsonnet";
         podinit.wait4_http("wait4-ckan", ckan_url),
 
         /* Now we need to bootstrap the database */
-        self.bootstrap_ctr
+        // Disabling bootstrap container
+        // self.bootstrap_ctr
     ])
     ,
 
