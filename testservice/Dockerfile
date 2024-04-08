@@ -1,2 +1,3 @@
 FROM busybox
-CMD /bin/echo 'Hello World!'
+ENTRYPOINT ["/bin/echo"]
+CMD ["'Hello World!'"]
