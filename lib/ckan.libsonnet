@@ -6,12 +6,16 @@
 
 */
 local k = import "k.libsonnet";
-local util = import "github.com/grafana/jsonnet-libs/ksonnet-util/util.libsonnet";
-local podinit = import "podinit.libsonnet";
+//local util = import "github.com/grafana/jsonnet-libs/ksonnet-util/util.libsonnet";
 
+local podinit = import "podinit.libsonnet";
+local pvol = import "pvolumes.libsonnet";
+local svcs = import "services.libsonnet";
+
+
+/* K8S API MODEL */
 local deploy = k.apps.v1.deployment;
 local stateful = k.apps.v1.statefulSet;
-local pvc = k.core.v1.persistentVolumeClaim;
 local container = k.core.v1.container;
 local containerPort = k.core.v1.containerPort;
 local servicePort = k.core.v1.servicePort;
@@ -22,48 +26,6 @@ local service = k.core.v1.service;
 local cm = k.core.v1.configMap;
 local secret = k.core.v1.secret;
 
-/**
-    Used to create persistent volume claims
-
- */
-local pvcWithLonghornStorage(name, gibytes)=
-    pvc.new(name)
-    + pvc.spec.withStorageClassName("longhorn")
-    + pvc.spec.withAccessModes(['ReadWriteOnce'])
-    + pvc.spec.withVolumeMode('Filesystem')
-    + pvc.spec.resources.withRequests({
-        storage: gibytes
-    })
-;
-
-
-/**
-    Used to create headless services
- */
-local headlessService = {
-
-    /*
-        Return a manifest for a headless Service.
-
-        Headless services are 
-
-        name(str): the name of the resource
-        component(str): annotation value for 'app.kubernetes.io/component' to select on
-        port(int): the port of the service
-        portName(str, optional): the name of the port
-     */
-    new(name, component, port, portName=null):: service.new(name, {
-            'app.kubernetes.io/component': component
-        },
-        [
-            if portName != null then
-                servicePort.newNamed(portName, port, port)
-            else
-                servicePort.new(port, port)
-        ]
-    )
-    + service.spec.withClusterIP("None")
-};
 
 
 
@@ -78,23 +40,7 @@ local psqlURI = "postgresql://%(user)s:%(password)s@%(host)s/%(db)s";
  */
 
 
-local DBENV = {
-    # CKAN databases
-    POSTGRES_USER: "postgres",
-    POSTGRES_PASSWORD: "postgres",
-    POSTGRES_DB: "postgres",
-    POSTGRES_HOST: "db",
-    POSTGRES_PORT: "5432",
-
-    CKAN_DB_USER: "ckan",
-    CKAN_DB_PASSWORD: "ckan",
-    CKAN_DB: "ckan",
-
-    DATASTORE_READONLY_USER: "datastore_ro",
-    DATASTORE_READONLY_PASSWORD: "datastore",
-    DATASTORE_DB: "datastore"
-    
-};
+local DBENV = import "dbenv.jsonnet";
 
 
 # These should be initialized randomly
@@ -191,15 +137,7 @@ local ENV = DBENV
 };
 
 
-// Used to collect hard-coded ports above.
-// TODO: actually, make links consistent with this map.
-local PORT = {
-    CKAN: 5000,
-    REDIS: 6379,
-    SOLR: 8983,
-    DATAPUSHER: 8800,
-    PG: 5432,
-};
+local PORT = import "stdports.libsonnet";
 
 
 // These images are used unchanged
@@ -207,60 +145,9 @@ local SOLR_IMAGE_NAME = "ckan/ckan-solr:%s" % ENV.SOLR_IMAGE_VERSION;
 local REDIS_IMAGE_NAME = "redis:%s" % ENV.REDIS_VERSION;
 local DATAPUSHER_IMAGE_NAME = "ckan/ckan-base-datapusher:%s" % ENV.DATAPUSHER_VERSION;
 
-// The following two images have been customized
-local POSTGIS_IMAGE_NAME = 'vsam/stelar-okeanos:postgis';
+// The following image has been customized
 local CKAN_IMAGE_NAME = 'vsam/stelar-okeanos:ckan';
 
-
-
-/**********************************
-
-    POSTGIS is required. 
-
-    A custom image also contains the schema of the tool execution metadata.
-
- */
-
-
-local pvc_db_storage = pvcWithLonghornStorage("postgis-storage", "5Gi");
-
-local postgis_deployment = stateful.new(name="db", containers=[
-        container.new("postgis", POSTGIS_IMAGE_NAME)
-        + container.withImagePullPolicy("Always")
-        + container.withEnvMap(DBENV)
-
-        + container.withEnvMap({
-            /* We are using /var/lib/postgresql/data as mountpoint, and initdb does not like it,
-            so we just use a subdirectory...
-            */
-            PGDATA: "/var/lib/postgresql/data/pgdata",
-        })
-
-        // Expose port 
-        + container.withPorts([
-            containerPort.newNamed(PORT.PG, "psql")      
-            ])
-
-        // liveness check
-        //+ container.livenessProbe.exec.withCommand("pg_isready")
-        + container.livenessProbe.exec.withCommand([
-            "pg_isready", "-U", "postgres"
-        ])
-        + container.livenessProbe.withInitialDelaySeconds(30)
-        + container.livenessProbe.withPeriodSeconds(10)
-
-        + container.withVolumeMounts([
-            volumeMount.new("postgis-storage-vol", "/var/lib/postgresql/data", false)
-        ])
-    ],
-    podLabels={
-        'app.kubernetes.io/name': 'data-catalog',
-        'app.kubernetes.io/component': 'postgis',
-    })
-    + stateful.spec.template.spec.withVolumes([
-        vol.fromPersistentVolumeClaim("postgis-storage-vol", "postgis-storage")
-    ])
-;
 
 
 /*********************
@@ -275,7 +162,7 @@ local postgis_deployment = stateful.new(name="db", containers=[
  */
 
 
-local pvc_ckan_storage = pvcWithLonghornStorage("ckan-storage", "5Gi");
+local pvc_ckan_storage = pvol.pvcWithLonghornStorage("ckan-storage", "5Gi");
 
 local ckan_deployment = stateful.new(
     name="ckan",
@@ -335,7 +222,7 @@ local ckan_deployment = stateful.new(
 
 
 
-local pvc_solr_data = pvcWithLonghornStorage("solr-data", "5Gi");
+local pvc_solr_data = pvol.pvcWithLonghornStorage("solr-data", "5Gi");
 
 local solr_deployment = stateful.new(
    name="solr",
@@ -490,33 +377,33 @@ local redis_deployment = deploy.new(
         + secret.withData(obfuscate(SESSION_SECRETS))
     ],
 
+
+    db: import "db.libsonnet",
+
     ckan: [
         pvc_ckan_storage,
         ckan_deployment,
-        headlessService.new("ckan", "ckan", PORT.CKAN, "api")
+        svcs.headlessService.new("ckan", "ckan", PORT.CKAN, "api")
     ],
 
-    db: [
-        pvc_db_storage,
-        postgis_deployment,
-        headlessService.new("db", "postgis", PORT.PG)
-    ],
 
     solr: [
         pvc_solr_data, 
         solr_deployment,
-        headlessService.new("solr", "solr", PORT.SOLR, "solr")
+        svcs.headlessService.new("solr", "solr", PORT.SOLR, "solr")
     ],
 
     datapusher: [
         datapusher_deployment,
-        util.serviceFor(datapusher_deployment)
+        svcs.serviceFor(datapusher_deployment)
     ],
 
     redis: [
         redis_deployment,
-        util.serviceFor(redis_deployment)
+        svcs.serviceFor(redis_deployment)
     ],
+
+    ontop: import "ontop.libsonnet",
 
     /****************************
         Ingress for the data catalog
@@ -550,6 +437,5 @@ local redis_deployment = deploy.new(
         ])
         ,
 
-    ontop: import "ontop.libsonnet"
 }
 
