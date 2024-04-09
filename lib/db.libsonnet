@@ -26,6 +26,15 @@ local DBENV = import "dbenv.jsonnet";
 local PORT = import "stdports.libsonnet";
 local POSTGIS_IMAGE_NAME = 'vsam/stelar-okeanos:postgis';
 
+
+local ENV = DBENV {
+            /* We are using /var/lib/postgresql/data as mountpoint, and initdb does not like it,
+            so we just use a subdirectory...
+            */
+            PGDATA: "/var/lib/postgresql/data/pgdata",
+};
+
+
 /**********************************
 
     POSTGIS is required. 
@@ -42,8 +51,8 @@ local POSTGIS_IMAGE_NAME = 'vsam/stelar-okeanos:postgis';
     postgis_deployment: stateful.new(name="db", containers=[
         container.new("postgis", POSTGIS_IMAGE_NAME)
         + container.withImagePullPolicy("Always")
-        + container.withEnvMap(DBENV)
 
+        + container.withEnvMap(DBENV)
         + container.withEnvMap({
             /* We are using /var/lib/postgresql/data as mountpoint, and initdb does not like it,
             so we just use a subdirectory...

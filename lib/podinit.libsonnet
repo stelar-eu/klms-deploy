@@ -47,9 +47,19 @@ local option_pair(key, value)=
 
 
 local flags_map_to_array(flags_map, default_map)=
-    local objpairs = std.objectKeysValues(default_map + flags_map);
-    local arrpairs = [ option_pair(p.key, p.value) for p in objpairs ];
-    std.flattenArrays(arrpairs);
+
+    // In version 0.20  (tk) we could use this...
+    // local objpairs = std.objectKeysValues(default_map + flags_map);
+    // local arrpairs = [ option_pair(p.key, p.value) for p in objpairs ];
+    // std.flattenArrays(arrpairs);
+    //
+    // Keeping compatibility with Jsonnet v 0.17
+    local objKV(m) = [ 
+        option_pair(k, m[k])
+        for k in std.objectFields(m) 
+    ];
+    std.flattenArrays(objKV(default_map+flags_map));
+
 
 /*
     Global defaults: Wait for 10s (interval), try for ever!

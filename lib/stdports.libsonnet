@@ -13,4 +13,6 @@
     SOLR: 8983,
     DATAPUSHER: 8800,
     PG: 5432,
+    ONTOP: 8080,
+    STELARAPI: 80,
 }

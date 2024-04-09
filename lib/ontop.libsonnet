@@ -25,6 +25,7 @@ local podinit = import "podinit.libsonnet";
 local ONTOP_IMAGE_NAME = 'vsam/stelar-okeanos:ontop';
 
 local DBENV = import "dbenv.jsonnet";
+local PORT = import "stdports.libsonnet";
 
 {
 
@@ -56,14 +57,14 @@ local DBENV = import "dbenv.jsonnet";
         host: "db",
         db: DBENV.CKAN_DB
     },
-    local ckan_url = "http://ckan:%s/api/3/action/status_show" % 5000,
+    local ckan_url = "http://ckan:%s/api/3/action/status_show" % PORT.CKAN,
 
     deployment: deploy.new(
         "ontop",
         containers=[
             self.base_container("ontop")
             + container.withPorts([
-                containerPort.newNamed(8080, "ontop")                    
+                containerPort.newNamed(PORT.ONTOP, "ontop")                    
             ])
         ],
         podLabels = {

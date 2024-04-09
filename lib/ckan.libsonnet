@@ -26,11 +26,7 @@ local service = k.core.v1.service;
 local cm = k.core.v1.configMap;
 local secret = k.core.v1.secret;
 
-
-
-
 local psqlURI = "postgresql://%(user)s:%(password)s@%(host)s/%(db)s";
-
 
 
 /*****************************
@@ -183,7 +179,7 @@ local ckan_deployment = stateful.new(
 
         // Expose 5000
         + container.withPorts([
-            containerPort.newNamed(5000, "api"),
+            containerPort.newNamed(PORT.CKAN, "api"),
         ])
 
         + container.withVolumeMounts([
@@ -404,6 +400,8 @@ local redis_deployment = deploy.new(
     ],
 
     ontop: import "ontop.libsonnet",
+
+    stelarapi: import "stelarapi.libsonnet",
 
     /****************************
         Ingress for the data catalog
