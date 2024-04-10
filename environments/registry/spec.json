@@ -1,0 +1,14 @@
+{
+  "apiVersion": "tanka.dev/v1alpha1",
+  "kind": "Environment",
+  "metadata": {
+    "name": "environments/registry",
+    "namespace": "environments/registry/main.jsonnet"
+  },
+  "spec": {
+    "apiServer": "https://83.212.80.247:6443",
+    "namespace": "docker-registry",
+    "resourceDefaults": {},
+    "expectVersions": {}
+  }
+}
