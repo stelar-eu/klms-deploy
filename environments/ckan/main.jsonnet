@@ -1,7 +1,17 @@
 local tk_env = import "spec.json";
 
-/*
-local declared_items_from_spec = {
+
+local ckan = import "ckan.libsonnet";
+local db = import "db.libsonnet";
+local ontop = import "ontop.libsonnet";
+local stelarapi = import "stelarapi.libsonnet";
+
+db +
+ckan +
+ontop + 
+stelarapi +
+{
+
     _tk_env:: tk_env.spec,
 
     _config+:: {
@@ -10,22 +20,45 @@ local declared_items_from_spec = {
         dynamicStorageClass: "longhorn"
     },    
 
-};
 
-local main = (import "ckan.libsonnet");
+    /****************************
+        Ingress for the data catalog
 
-main+declared_items_from_spec
-*/
+     */
 
-local main = (import "ckan.libsonnet");
+    local k = import "k.libsonnet",
 
-main {
-    _tk_env:: tk_env.spec,
+    local ing = k.networking.v1.ingress,
+    local ingrule = k.networking.v1.ingressRule,
+    local ingpath = k.networking.v1.httpIngressPath,
 
-    _config+:: {
-        namespace: tk_env.spec.namespace,
+    ingress: ing.new("data-catalog")
+        + ing.metadata.withAnnotations({
+            "cert-manager.io/cluster-issuer": "letsencrypt-production",
+            "nginx.ingress.kubernetes.io/proxy-connect-timeout": "60s",
+            "nginx.ingress.kubernetes.io/ssl-redirect": "true",
+            "nginx.ingress.kubernetes.io/rewrite-target": "/$2",
+        })
+        + ing.spec.withIngressClassName("nginx")
+        + ing.spec.withRules([
+            ingrule.withHost("stelar.vsamtuc.top")
+            + ingrule.http.withPaths([
+                ingpath.withPath("/dc(/|$)(.*)")
+                + ingpath.withPathType("Prefix")
+                + ingpath.backend.service.withName("ckan")
+                + ingpath.backend.service.port.withName("api"),
 
-        dynamicStorageClass: "longhorn"
-    },    
+                ingpath.withPath("/stelar(/|$)(.*)")
+                + ingpath.withPathType("Prefix")
+                + ingpath.backend.service.withName("stelarapi")
+                + ingpath.backend.service.port.withName("apiserver-api"),
+
+            ])
+        ])
+
+        + ing.spec.withTls([
+            k.networking.v1.ingressTLS.withHosts("stelar.vsamtuc.top")
+            + k.networking.v1.ingressTLS.withSecretName("ckan-ui-tls")
+        ])
 
 }

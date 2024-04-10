@@ -62,7 +62,6 @@ local ENV = {
 };
 
 {
-
     deployment: deploy.new(
         name="stelarapi",
         containers=[

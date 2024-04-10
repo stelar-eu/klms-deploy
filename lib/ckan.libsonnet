@@ -375,7 +375,6 @@ local redis_deployment = deploy.new(
     ],
 
 
-    db: import "db.libsonnet",
 
     ckan: [
         pvc_ckan_storage,
@@ -399,49 +398,6 @@ local redis_deployment = deploy.new(
         redis_deployment,
         svcs.serviceFor(redis_deployment)
     ],
-
-    ontop: import "ontop.libsonnet",
-
-    stelarapi: import "stelarapi.libsonnet",
-
-    /****************************
-        Ingress for the data catalog
-
-     */
-
-    local ing = k.networking.v1.ingress,
-    local ingrule = k.networking.v1.ingressRule,
-    local ingpath = k.networking.v1.httpIngressPath,
-
-    ingress: ing.new("data-catalog")
-        + ing.metadata.withAnnotations({
-            "cert-manager.io/cluster-issuer": "letsencrypt-production",
-            "nginx.ingress.kubernetes.io/proxy-connect-timeout": "60s",
-            "nginx.ingress.kubernetes.io/ssl-redirect": "true",
-            "nginx.ingress.kubernetes.io/rewrite-target": "/$2",
-        })
-        + ing.spec.withIngressClassName("nginx")
-        + ing.spec.withRules([
-            ingrule.withHost("stelar.vsamtuc.top")
-            + ingrule.http.withPaths([
-                ingpath.withPath("/dc(/|$)(.*)")
-                + ingpath.withPathType("Prefix")
-                + ingpath.backend.service.withName("ckan")
-                + ingpath.backend.service.port.withName("api"),
-
-                ingpath.withPath("/stelar(/|$)(.*)")
-                + ingpath.withPathType("Prefix")
-                + ingpath.backend.service.withName("stelarapi")
-                + ingpath.backend.service.port.withName("apiserver-api"),
-
-            ])
-        ])
-
-        + ing.spec.withTls([
-            k.networking.v1.ingressTLS.withHosts("stelar.vsamtuc.top")
-            + k.networking.v1.ingressTLS.withSecretName("ckan-ui-tls")
-        ])
-        ,
 
 }
 
