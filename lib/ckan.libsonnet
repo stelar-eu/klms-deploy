@@ -71,7 +71,8 @@ local ENV = DBENV
     CKAN_PORT: "5000",
     CKAN_PORT_HOST: "5000",
     //CKAN_SITE_URL: "http://ckan:5000/",
-    CKAN_SITE_URL: "https://stelar.vsamtuc.top/",
+    CKAN_SITE_URL: "https://stelar.vsamtuc.top",
+    CKAN__ROOT_PATH: "/dc",
     CKAN_SITE_ID: "default",
 
 
@@ -416,16 +417,23 @@ local redis_deployment = deploy.new(
         + ing.metadata.withAnnotations({
             "cert-manager.io/cluster-issuer": "letsencrypt-production",
             "nginx.ingress.kubernetes.io/proxy-connect-timeout": "60s",
-            "nginx.ingress.kubernetes.io/ssl-redirect": "true"
+            "nginx.ingress.kubernetes.io/ssl-redirect": "true",
+            "nginx.ingress.kubernetes.io/rewrite-target": "/$2",
         })
         + ing.spec.withIngressClassName("nginx")
         + ing.spec.withRules([
             ingrule.withHost("stelar.vsamtuc.top")
             + ingrule.http.withPaths([
-                ingpath.withPath("/")
+                ingpath.withPath("/dc(/|$)(.*)")
                 + ingpath.withPathType("Prefix")
                 + ingpath.backend.service.withName("ckan")
-                + ingpath.backend.service.port.withName("api")
+                + ingpath.backend.service.port.withName("api"),
+
+                ingpath.withPath("/stelar(/|$)(.*)")
+                + ingpath.withPathType("Prefix")
+                + ingpath.backend.service.withName("stelarapi")
+                + ingpath.backend.service.port.withName("apiserver-api"),
+
             ])
         ])
 

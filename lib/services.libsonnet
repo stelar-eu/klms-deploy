@@ -4,7 +4,6 @@
  */
 
 local k = import "k.libsonnet";
-//local util = import "github.com/grafana/jsonnet-libs/ksonnet-util/util.libsonnet";
 
 
 /* K8S API MODEL */
@@ -82,6 +81,40 @@ local secret = k.core.v1.secret;
         ) 
         + service.mixin.metadata.withLabels({ name: deployment.metadata.name })
         ,
+
+
+    // serviceFor create service for a given deployment.
+    serviceForPod(thepod, ignored_labels=[], nameFormat='%(container)s-%(port)s')::
+        
+        local ports = [
+            servicePort.newNamed(
+                name=(nameFormat % { container: c.name, port: port.name }),
+                port=port.containerPort,
+                targetPort=port.containerPort
+        ) 
+        +
+        if std.objectHas(port, 'protocol')
+        then servicePort.withProtocol(port.protocol)
+        else {}
+        
+        for c in thepod.spec.containers
+        for port in (c + container.withPortsMixin([])).ports
+        ];
+        
+        local labels = {
+            [x]: thepod.metadata.labels[x]
+            for x in std.objectFields(thepod.metadata.labels)
+            if std.count(ignored_labels, x) == 0
+        };
+
+        service.new(
+            thepod.metadata.name,  // name
+            labels,  // selector
+            ports,
+        ) 
+        + service.mixin.metadata.withLabels({ name: thepod.metadata.name })
+        ,
+
 
 
 }
