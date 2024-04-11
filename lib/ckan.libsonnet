@@ -115,6 +115,8 @@ local ENV = DBENV
     CKAN__HARVEST__MQ__PORT: "6379",
     CKAN__HARVEST__MQ__REDIS_DB: "1",
 
+    CKANEXT__SPATIAL__COMMON_MAP__TYPE: "OpenStreetMap.Mapnik",
+
     # timezone!
     TZ: "UTC",
 
