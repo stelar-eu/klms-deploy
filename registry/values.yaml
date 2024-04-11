@@ -1,0 +1,29 @@
+#
+# This is a values file for the harbor helm chart
+# See:
+#
+#  https://www.talkingquickly.co.uk/harbor-docker-registry-on-kubernetes-authentication-with-keycloak
+#  
+
+expose:
+  type: ingress
+  tls:
+    certSource: secret
+    secret:
+      secretName: registry
+  ingress:
+    annotations:
+      cert-manager.io/cluster-issuer: letsencrypt-production
+
+    hosts:
+      core: registry.vsamtuc.top
+
+harborAdminPassword: SulStQ1pRdA2HAe
+externalURL: https://registry.vsamtuc.top
+secretKey: E5314dwRabfLoBeU
+
+notary:
+  enabled: false
+
+metrics:
+  enabled: true

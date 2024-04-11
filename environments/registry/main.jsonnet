@@ -36,9 +36,9 @@ local tk_env = import "spec.json";
 
     regcm: cm.new("registry",{
         'config.yml': |||
-foo bar
-|||
-    })
+            foo bar
+        |||
+    }),
 
 
     storage: pvol.pvcWithLonghornStorage("registry-claim", "60Gi"),
@@ -75,8 +75,8 @@ foo bar
 
     reging: ing.new("registry")
         + ing.metadata.withAnnotations({
-            //"cert-manager.io/cluster-issuer": "letsencrypt-production",
-            "cert-manager.io/cluster-issuer": "letsencrypt-staging",
+            "cert-manager.io/cluster-issuer": "letsencrypt-production",
+            //"cert-manager.io/cluster-issuer": "letsencrypt-staging",
             "nginx.ingress.kubernetes.io/proxy-connect-timeout": "60s",
             "nginx.ingress.kubernetes.io/ssl-redirect": "true"
         })
@@ -93,7 +93,7 @@ foo bar
 
         + ing.spec.withTls([
             k.networking.v1.ingressTLS.withHosts("registry.vsamtuc.top")
-            + k.networking.v1.ingressTLS.withSecretName("registry-tls")
+            + k.networking.v1.ingressTLS.withSecretName("registry")
         ])
         ,
 

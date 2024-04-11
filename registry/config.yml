@@ -13,12 +13,14 @@ http:
     X-Content-Type-Options: [nosniff]
 auth:
   token:
-    realm: basic-realm
-    service: 
-    issuer:
-    rootcertbundle:
+    realm: https://authst.vsamtuc.top/realms/okeanos/protocol/openid-connect/auth
+    service: registry.vsamtuc.top
+    issuer: https://authst.vsamtuc.top/realms/okeanos
+    rootcertbundle: "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAopa292B6dsROGNm5wYgvi7VAWqdto5lBq2xnn9IRWFzB/S9b1tjKmYtkmLUHImzFauh3VNyFj9yhlGLJ37pmlFDss6/4uAdpZqu/pdjUa7QVLuBsOIkxBt/Xu/IsllDD4lV3wfOGgq00mzL3zrqElKf8gx10w8tw9P+GZafhlCua742gRFroZ3ASgIXr88TCMlEXtNG3ViJayNd2sVXHG1aUSZcglDUWsebiQHIiBNn9mDXiuuYfjtFOYyj5xiD8N3VVWQzoUZVQLmbArOyD1IGZcMUp8LC1RluREmBz+xsNvvT4RWbIOt/ATdW+bkIAvJ20BkoQbDh5iC6SU6ciUwIDAQAB"
 health:
   storagedriver:
     enabled: true
     interval: 10s
     threshold: 3
+
+https://authst.vsamtuc.top/realms/okeanos/protocol/openid-connect/auth
