@@ -43,15 +43,31 @@ stelarapi +
         + ing.spec.withRules([
             ingrule.withHost("stelar.vsamtuc.top")
             + ingrule.http.withPaths([
+
+                /*
+                    CKAN
+
+                */
                 ingpath.withPath("/dc(/|$)(.*)")
                 + ingpath.withPathType("Prefix")
                 + ingpath.backend.service.withName("ckan")
                 + ingpath.backend.service.port.withName("api"),
 
+                /*
+                    STELARAPI
+                 */
                 ingpath.withPath("/stelar(/|$)(.*)")
                 + ingpath.withPathType("Prefix")
                 + ingpath.backend.service.withName("stelarapi")
                 + ingpath.backend.service.port.withName("apiserver-api"),
+
+                /*
+                    ONTOP
+                 */
+                ingpath.withPath("/kg(/|$)(.*)")
+                + ingpath.withPathType("Prefix")
+                + ingpath.backend.service.withName("ontop")
+                + ingpath.backend.service.port.withName("ontop-ontop"),
 
             ])
         ])
