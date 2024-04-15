@@ -13,7 +13,7 @@ def J() -> JsonnetRunner:
     )
 
 
-def test_urllib(J):
+def test_urllib(J: JsonnetRunner):
 
     assert J("""url(netloc="foobar")""") == "http://foobar"
 
@@ -25,7 +25,7 @@ def test_urllib(J):
     )
 
 
-def test_urllib_user_pass(J):
+def test_urllib_user_pass(J: JsonnetRunner):
 
     assert J("""url(netloc="foobar", user='vsam')""") == "http://vsam@foobar"
 
@@ -59,7 +59,7 @@ def test_urllib_user_pass(J):
     )
 
 
-def test_urllib_errors(J):
+def test_urllib_errors(J: JsonnetRunner):
 
     with pytest.raises(RuntimeError):
         J(""" url() """)
