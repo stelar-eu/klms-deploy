@@ -368,38 +368,40 @@ local redis_deployment = deploy.new(
 
 {
 
-    local obfuscate(m)=std.mapWithKey(function(k,d) std.base64(std.manifestJsonMinified(d)), m),
+    /*
+        local obfuscate(m)=std.mapWithKey(function(k,d) std.base64(std.manifestJsonMinified(d)), m),
 
-    configs: [
-        cm.new("ckan-dbenv", DBENV),
-        secret.new("ckan-session-secrets",{})
-        + secret.withData(obfuscate(SESSION_SECRETS))
-    ],
-
-
-
-    ckan: [
-        pvc_ckan_storage,
-        ckan_deployment,
-        svcs.headlessService.new("ckan", "ckan", PORT.CKAN, "api")
-    ],
+        configs: [
+            cm.new("ckan-dbenv", DBENV),
+            secret.new("ckan-session-secrets",{})
+            + secret.withData(obfuscate(SESSION_SECRETS))
+        ],
+    */
 
 
-    solr: [
-        pvc_solr_data, 
-        solr_deployment,
-        svcs.headlessService.new("solr", "solr", PORT.SOLR, "solr")
-    ],
+    manifest(psm): {
+        ckan: [
+            pvc_ckan_storage,
+            ckan_deployment,
+            svcs.headlessService.new("ckan", "ckan", PORT.CKAN, "api")
+        ],
 
-    datapusher: [
-        datapusher_deployment,
-        svcs.serviceFor(datapusher_deployment)
-    ],
 
-    redis: [
-        redis_deployment,
-        svcs.serviceFor(redis_deployment)
-    ],
+        solr: [
+            pvc_solr_data, 
+            solr_deployment,
+            svcs.headlessService.new("solr", "solr", PORT.SOLR, "solr")
+        ],
 
+        datapusher: [
+            datapusher_deployment,
+            svcs.serviceFor(datapusher_deployment)
+        ],
+
+        redis: [
+            redis_deployment,
+            svcs.serviceFor(redis_deployment)
+        ],
+    }
 }
 

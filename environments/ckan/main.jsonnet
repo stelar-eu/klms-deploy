@@ -6,19 +6,33 @@ local db = import "db.libsonnet";
 local ontop = import "ontop.libsonnet";
 local stelarapi = import "stelarapi.libsonnet";
 
+
+
+local system_model = {
+
+    /* Specification of the deployment of STELAR components */
+    deploy_model:: {
+        /* K8s namespace to deploy into */
+        namespace: tk_env.spec.namespace,
+
+        /* Hostname used by ingress */
+        stelar_hostname: "stelar.vsamtuc.top"
+    },
+
+    storage_model:: {
+        /* Storage class used for dynamic PV provisioning */
+        dynamic_volume_storage_class: "longhorn"
+    },
+
+
+};
+
+
 db +
 ckan +
 ontop + 
 stelarapi +
 {
-
-    _tk_env:: tk_env.spec,
-
-    _config+:: {
-        namespace: tk_env.spec.namespace,
-
-        dynamicStorageClass: "longhorn"
-    },    
 
 
     /****************************
