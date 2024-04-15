@@ -19,7 +19,10 @@ local volumeMount = k.core.v1.volumeMount;
 local pod = k.core.v1.pod;
 local vol = k.core.v1.volume;
 local service = k.core.v1.service;
+
 local cm = k.core.v1.configMap;
+
+
 local secret = k.core.v1.secret;
 local envVar = k.core.v1.envVar;
 local envVarSource = k.core.v1.envVarSource;
@@ -50,7 +53,7 @@ local ENV = {
     CKAN_SITE_URL: "http://ckan:%d" % PORT.CKAN,
     SPARQL_ENDPOINT: "http://ontop:%d/sparql" % PORT.ONTOP,
 
-    FLASK_SERVER_NAME: "stelar.vsamtuc.top",
+    #FLASK_SERVER_NAME: "stelar.vsamtuc.top",
     FLASK_APPLICATION_ROOT: "/stelar",
 
     // Note: this is not the actual API url, but instead it is the
@@ -62,6 +65,15 @@ local ENV = {
 };
 
 {
+
+    minio_config: cm.new('minio-stelar-api', {
+        MINIO_ENDPOINT: 'miniost.vsamtuc.top',
+        MINIO_ACCESS_KEY: '4Xu8G48MXz8vGT9qAiAC',
+        MINIO_SECRET_KEY: 'kTrI8Zm3y9XsXjqDBB0f7UoLXSq9YPMT0pojL5g7',
+        MINIO_BUCKET: 'agroknow-bucket',
+    }),
+
+
     deployment: deploy.new(
         name="stelarapi",
         containers=[
@@ -72,6 +84,14 @@ local ENV = {
                 // Needed to configure exec engine!
                 envVar.fromFieldPath('API_NAMESPACE', 'metadata.namespace')
             ])
+            + container.withEnvFromMixin([
+                {
+                    configMapRef: {
+                        name: "minio-stelar-api"
+                    }
+                }
+            ])
+
             + container.withPorts([
                 containerPort.newNamed(PORT.STELARAPI, "api")
             ])
