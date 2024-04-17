@@ -50,7 +50,6 @@ local ENV = {
     CKAN_SITE_URL: "http://ckan:%d" % PORT.CKAN,
     SPARQL_ENDPOINT: "http://ontop:%d/sparql" % PORT.ONTOP,
 
-    FLASK_SERVER_NAME: "stelar.vsamtuc.top",
     FLASK_APPLICATION_ROOT: "/stelar",
 
     // Note: this is not the actual API url, but instead it is the
@@ -61,51 +60,56 @@ local ENV = {
     EXECUTION_ENGINE: "kubernetes",
 };
 
-{
-    deployment: deploy.new(
-        name="stelarapi",
-        containers=[
-            container.new("apiserver", IMAGE_NAME)
-            + container.withImagePullPolicy("Always")
-            + container.withEnvMap(ENV)
-            + container.withEnvMixin([
-                // Needed to configure exec engine!
-                envVar.fromFieldPath('API_NAMESPACE', 'metadata.namespace')
-            ])
-            + container.withPorts([
-                containerPort.newNamed(PORT.STELARAPI, "api")
-            ])
 
-            /* TODO: Add liveness and readiness probes */
+{ 
+    manifest(psm): {
 
-        ],
-        podLabels={
-            'app.kubernetes.io/name': 'stelar-api',
-            'app.kubernetes.io/component': 'stelarapi',
-        }
-    )
+        deployment: deploy.new(
+            name="stelarapi",
+            containers=[
+                container.new("apiserver", IMAGE_NAME)
+                + container.withImagePullPolicy("Always")
+                + container.withEnvMap(ENV)
+                + container.withEnvMixin([
+                    // Needed to configure exec engine!
+                    envVar.fromFieldPath('API_NAMESPACE', 'metadata.namespace')
+                ])
+                + container.withPorts([
+                    containerPort.newNamed(PORT.STELARAPI, "api")
+                ])
 
-    + deploy.spec.template.spec.withInitContainers([
-        /* We need to wait for ckan to be ready */
-        podinit.wait4_postgresql("wait4-db", db_url),
-        podinit.wait4_http("wait4-ckan", ckan_url),
-    ])
-    + deploy.spec.template.spec.withServiceAccountName("stelarapi")
-    ,
+                /* TODO: Add liveness and readiness probes */
 
-    svc: svcs.serviceFor(self.deployment),
-
-    // This is needed to allow the executor to create jobs
-    rbac: rbac.namespacedRBAC("stelarapi", [
-        rbac.resourceRule(
-            ["get", "list", "watch"], 
-            [""], 
-            ["*"])
-            ,
-        rbac.resourceRule(
-            ["create", "delete", "deletecollection", "get", "list", "patch", "update", "watch"],
-            ["batch"],
-            ["jobs"]
+            ],
+            podLabels={
+                'app.kubernetes.io/name': 'stelar-api',
+                'app.kubernetes.io/component': 'stelarapi',
+            }
         )
-    ])
+
+        + deploy.spec.template.spec.withInitContainers([
+            /* We need to wait for ckan to be ready */
+            podinit.wait4_postgresql("wait4-db", db_url),
+            podinit.wait4_http("wait4-ckan", ckan_url),
+        ])
+        + deploy.spec.template.spec.withServiceAccountName("stelarapi")
+        ,
+
+        svc: svcs.serviceFor(self.deployment),
+
+        // This is needed to allow the executor to create jobs
+        rbac: rbac.namespacedRBAC("stelarapi", [
+            rbac.resourceRule(
+                ["get", "list", "watch"], 
+                [""], 
+                ["*"])
+                ,
+            rbac.resourceRule(
+                ["create", "delete", "deletecollection", "get", "list", "patch", "update", "watch"],
+                ["batch"],
+                ["jobs"]
+            )
+        ])
+    }
+
 }

@@ -1,5 +1,6 @@
 local tk_env = import 'spec.json';
 
+local urllib = import "urllib.libsonnet";
 local t = import 'transform.libsonnet';
 
 
@@ -14,9 +15,11 @@ local t = import 'transform.libsonnet';
 
   access:: {
     // External access to the STELAR core deployment
-    hostname: 'devel.vsamtuc.top',
-    port: null,
-    protocol: 'https',
+    endpoint: {
+      scheme: 'https',
+      host: 'devel.vsamtuc.top',
+      port: null,
+    },
 
     // certificates, passwords etc
   },
@@ -28,11 +31,7 @@ local t = import 'transform.libsonnet';
 
   psm::
     self.access {
-      access_url: '%(protocol)s://%(hostname)s%(portspec)s/' % ($.access {
-                                                                  portspec: if super.port == null then '' else ':' + super.port,
-                                                                }),
-
-
+      endpoint+: { url: urllib.url_from(self) }
     }
     +
     self.provisioning,
@@ -42,6 +41,7 @@ local t = import 'transform.libsonnet';
     import 'ckan.libsonnet',
     import 'stelarapi.libsonnet',
     import 'ontop.libsonnet',
+    import 'stelar_ingress.libsonnet',
   ],
 
 
@@ -49,8 +49,7 @@ local t = import 'transform.libsonnet';
       Translate to manifests
   */
 
-  thepsm: self.psm,
+  //thepsm: self.psm,
 
-  //manifests:
-  //    t.transform_psm($.psm, $.components)
+  manifests: t.transform_psm($.psm, $.components)
 }

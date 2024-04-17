@@ -43,15 +43,29 @@ local _usrpw(user, password) =
     else
         "%(user)s@" % up;
 
+
  {
 
-    url(scheme='http', netloc=null, path="", host=null, port=null, user=null, password=null):
-        
-        "%(scheme)s://%(usrpw)s%(netloc)s%(path)s" % {
+    url(scheme='http', netloc=null, path="", host=null, port=null, user=null, password=null):      
+        (
+          "%(scheme)s://%(usrpw)s%(netloc)s%(path)s" % {
             scheme: scheme,
             usrpw: _usrpw(user, password),
             netloc: _netloc(netloc, host, port),
             path: path
-        }
+        }),
+
+    # Endpoint must be an object with fields named as parameters of `url()`.
+    url_from(endpoint):
+        (self.url(
+            scheme=std.get(endpoint, 'scheme', 'http'),
+            netloc=std.get(endpoint, 'netloc', null),
+            path=std.get(endpoint, 'path', ""),
+
+            host=std.get(endpoint, 'host', null),
+            port=std.get(endpoint, 'port', null),
+            user=std.get(endpoint, 'user', null),
+            password=std.get(endpoint, 'password', null)
+        )),
 
  }

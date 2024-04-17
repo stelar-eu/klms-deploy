@@ -7,9 +7,11 @@ def J() -> JsonnetRunner:
     return JsonnetRunner(
         "foo/test.jsonnet",
         ["lib"],
-        """local u = import "urllib.libsonnet";
-                           local url=u.url;
-                        """,
+        """
+        local u = import "urllib.libsonnet";
+        local url = u.url;
+        local url_from = u.url_from;
+        """,
     )
 
 
@@ -81,3 +83,18 @@ def test_urllib_errors(J: JsonnetRunner):
 
     with pytest.raises(RuntimeError):
         J(""" url(netloc="foo", password="aaa") """)
+
+
+def test_url_from(J):
+
+    v = J("""
+    local endp ={
+        scheme: 'https', 'host':'devel.vsamtuc.top', port:null
+    } + {
+          url: url(self)
+    };
+     
+    url_from(endp { path: '/dc' })
+     """)
+
+    assert v == "https://devel.vsamtuc.top/dc"

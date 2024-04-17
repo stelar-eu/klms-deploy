@@ -43,48 +43,52 @@ local ENV = DBENV {
 
  */
 
-
 {
 
-    pvc_db_storage: pvol.pvcWithLonghornStorage("postgis-storage", "5Gi"),
+    manifest(psm): {
 
-    postgis_deployment: stateful.new(name="db", containers=[
-        container.new("postgis", POSTGIS_IMAGE_NAME)
-        + container.withImagePullPolicy("Always")
+        pvc_db_storage: pvol.pvcWithLonghornStorage("postgis-storage", "5Gi"),
 
-        + container.withEnvMap(DBENV)
-        + container.withEnvMap({
-            /* We are using /var/lib/postgresql/data as mountpoint, and initdb does not like it,
-            so we just use a subdirectory...
-            */
-            PGDATA: "/var/lib/postgresql/data/pgdata",
-        })
+        postgis_deployment: stateful.new(name="db", containers=[
+            container.new("postgis", POSTGIS_IMAGE_NAME)
+            + container.withImagePullPolicy("Always")
 
-        // Expose port 
-        + container.withPorts([
-            containerPort.newNamed(PORT.PG, "psql")      
+            + container.withEnvMap(DBENV)
+            + container.withEnvMap({
+                /* We are using /var/lib/postgresql/data as mountpoint, and initdb does not like it,
+                so we just use a subdirectory...
+                */
+                PGDATA: "/var/lib/postgresql/data/pgdata",
+            })
+
+            // Expose port 
+            + container.withPorts([
+                containerPort.newNamed(PORT.PG, "psql")      
+                ])
+
+            // liveness check
+            //+ container.livenessProbe.exec.withCommand("pg_isready")
+            + container.livenessProbe.exec.withCommand([
+                "pg_isready", "-U", "postgres"
             ])
+            + container.livenessProbe.withInitialDelaySeconds(30)
+            + container.livenessProbe.withPeriodSeconds(10)
 
-        // liveness check
-        //+ container.livenessProbe.exec.withCommand("pg_isready")
-        + container.livenessProbe.exec.withCommand([
-            "pg_isready", "-U", "postgres"
-        ])
-        + container.livenessProbe.withInitialDelaySeconds(30)
-        + container.livenessProbe.withPeriodSeconds(10)
+            + container.withVolumeMounts([
+                volumeMount.new("postgis-storage-vol", "/var/lib/postgresql/data", false)
+            ])
+        ],
+        podLabels={
+            'app.kubernetes.io/name': 'data-catalog',
+            'app.kubernetes.io/component': 'postgis',
+        })
+        + stateful.spec.template.spec.withVolumes([
+            vol.fromPersistentVolumeClaim("postgis-storage-vol", "postgis-storage")
+        ]),
 
-        + container.withVolumeMounts([
-            volumeMount.new("postgis-storage-vol", "/var/lib/postgresql/data", false)
-        ])
-    ],
-    podLabels={
-        'app.kubernetes.io/name': 'data-catalog',
-        'app.kubernetes.io/component': 'postgis',
-    })
-    + stateful.spec.template.spec.withVolumes([
-        vol.fromPersistentVolumeClaim("postgis-storage-vol", "postgis-storage")
-    ]),
+        postgis_svc: svcs.headlessService.new("db", "postgis", PORT.PG)
+        
+    }
 
-    postgis_svc: svcs.headlessService.new("db", "postgis", PORT.PG)
 
 }
