@@ -49,6 +49,15 @@ local ingpath = k.networking.v1.httpIngressPath;
                     + ingpath.backend.service.withName("ontop")
                     + ingpath.backend.service.port.withName("ontop-ontop"),
 
+                    /*
+                        Superset
+                     */
+                    ingpath.withPath("/(superset)(/|$)(.*)")
+                    + ingpath.withPathType("Prefix")
+                    + ingpath.backend.service.withName("superset")
+                    + ingpath.backend.service.port.withName("superset-http"),
+
+
                 ])
             ])
 

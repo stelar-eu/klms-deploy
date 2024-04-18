@@ -164,7 +164,10 @@ local CKAN_IMAGE_NAME = 'vsam/stelar-okeanos:ckan';
  */
 
 
-local pvc_ckan_storage(psm) = pvol.pvcWithLonghornStorage("ckan-storage", "5Gi");
+local pvc_ckan_storage(psm) = 
+    pvol.pvcWithLonghornStorage(
+        "ckan-storage", "5Gi", 
+        psm.dynamic_volume_storage_class);
 
 local ckan_deployment(psm) = 
     local MYENV = ENV {
@@ -230,7 +233,9 @@ local ckan_deployment(psm) =
 
 
 
-local pvc_solr_data(psm) = pvol.pvcWithLonghornStorage("solr-data", "5Gi");
+local pvc_solr_data(psm) = 
+    pvol.pvcWithLonghornStorage("solr-data", 
+        "5Gi", psm.dynamic_volume_storage_class);
 
 local solr_deployment(psm) = stateful.new(
    name="solr",

@@ -47,7 +47,10 @@ local ENV = DBENV {
 
     manifest(psm): {
 
-        pvc_db_storage: pvol.pvcWithLonghornStorage("postgis-storage", "5Gi"),
+        pvc_db_storage: pvol.pvcWithLonghornStorage(
+            "postgis-storage", 
+            "5Gi", 
+            psm.dynamic_volume_storage_class),
 
         postgis_deployment: stateful.new(name="db", containers=[
             container.new("postgis", POSTGIS_IMAGE_NAME)

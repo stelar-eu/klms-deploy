@@ -5,6 +5,7 @@ from flask_caching.backends.rediscache import RedisCache
 def env(key, default=None):
     return os.getenv(key, default)
 
+SECRET_KEY="BgJO/KmU1pkInEQ2xUoUqIc64Bzx8PfeM2pVZUY3CaoNlQsl7r4rGOI1"
 
 # Enable the ProxyFix middleware
 ENABLE_PROXY_FIX = True
@@ -44,3 +45,4 @@ RESULTS_BACKEND = RedisCache(
     port=env("REDIS_PORT"),
     key_prefix="superset_results",
 )
+
