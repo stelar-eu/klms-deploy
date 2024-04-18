@@ -19,4 +19,8 @@
   DATASTORE_READONLY_PASSWORD: 'datastore',
   DATASTORE_DB: 'datastore',
 
+  SUPERSET_USER: 'superset',
+  SUPERSET_PASSWORD: 'superset',
+  SUPERSET_DB: 'superset',
+
 }

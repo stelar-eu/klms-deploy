@@ -135,7 +135,6 @@ local ENV =
     CKAN_SOLR_URL: "http://solr:8983/solr/ckan",
     TEST_CKAN_SOLR_URL: "http://solr:8983/solr/ckan",
 
-    REDIS_VERSION: "6",
     CKAN_REDIS_URL: "redis://redis:6379/1",
     TEST_CKAN_REDIS_URL: "redis://redis:6379/1",
 };
@@ -146,7 +145,6 @@ local PORT = import "stdports.libsonnet";
 
 // These images are used unchanged
 local SOLR_IMAGE_NAME = "ckan/ckan-solr:%s" % ENV.SOLR_IMAGE_VERSION;
-local REDIS_IMAGE_NAME = "redis:%s" % ENV.REDIS_VERSION;
 local DATAPUSHER_IMAGE_NAME = "ckan/ckan-base-datapusher:%s" % ENV.DATAPUSHER_VERSION;
 
 // The following image has been customized
@@ -328,44 +326,6 @@ local datapusher_deployment(psm) = deploy.new(
 
 
 
-/*********************
-    The REDIS deployment.
-
-    It requires
-    (c) the deployment itself
- */
-
-local redis_deployment(psm) = deploy.new(
-   name="redis",
-    containers = [
-        container.new('redis', REDIS_IMAGE_NAME)
-        //+ container.withEnvMap(ENV)
-
-        + container.livenessProbe.exec.withCommand(
-            ["/usr/local/bin/redis-cli", "-e", "QUIT"]
-            )
-        + container.livenessProbe.withInitialDelaySeconds(30)
-        + container.livenessProbe.withPeriodSeconds(10)
-
-        + container.readinessProbe.exec.withCommand(
-            ["/usr/local/bin/redis-cli", "-e", "QUIT"]
-            )
-        + container.readinessProbe.withInitialDelaySeconds(30)
-        + container.readinessProbe.withPeriodSeconds(10)
-
-        // Expose 
-        + container.withPorts([
-            containerPort.newNamed(PORT.REDIS, "redis"),
-        ])
-
-    ],
-    podLabels = {
-        'app.kubernetes.io/name': 'data-catalog',
-        'app.kubernetes.io/component': 'redis',
-    }
-)
-;
-
 
 
 
@@ -410,11 +370,6 @@ local redis_deployment(psm) = deploy.new(
             svcs.serviceFor(datapusher_dep)
         ],
 
-        local redis_dep = redis_deployment(psm),
-        redis: [
-            redis_dep,
-            svcs.serviceFor(redis_dep)
-        ],
     }
 }
 

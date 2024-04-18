@@ -15,4 +15,5 @@
     PG: 5432,
     ONTOP: 8080,
     STELARAPI: 80,
+    SUPERSET: 8088,
 }

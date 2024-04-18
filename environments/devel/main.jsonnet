@@ -41,6 +41,7 @@ local t = import 'transform.libsonnet';
     import 'ckan.libsonnet',
     import 'stelarapi.libsonnet',
     import 'ontop.libsonnet',
+    import 'superset.libsonnet',
     import 'stelar_ingress.libsonnet',
   ],
 
