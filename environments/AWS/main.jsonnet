@@ -26,7 +26,7 @@ local t = import 'transform.libsonnet';
 
   provisioning:: {
     namespace: $._config.namespace,
-    dynamic_volume_storage_class: 'csi-hostpath-sc',
+    dynamic_volume_storage_class: 'gp2',
   },
 
   psm::
