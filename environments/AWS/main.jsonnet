@@ -10,7 +10,7 @@ local t = import 'transform.libsonnet';
   _config+:: {
     namespace: tk_env.spec.namespace,
 
-    dynamicStorageClass: 'longhorn',
+    dynamicStorageClass: 'gp2',
   },
 
   access:: {
