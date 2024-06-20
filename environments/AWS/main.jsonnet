@@ -10,7 +10,7 @@ local t = import 'transform.libsonnet';
   _config+:: {
     namespace: tk_env.spec.namespace,
 
-    dynamicStorageClass: 'gp2',
+    dynamicStorageClass: 'ebs-sc',
   },
 
   access:: {
@@ -26,7 +26,7 @@ local t = import 'transform.libsonnet';
 
   provisioning:: {
     namespace: $._config.namespace,
-    dynamic_volume_storage_class: 'gp2',
+    dynamic_volume_storage_class: 'ebs-sc',
   },
 
   psm::
