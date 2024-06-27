@@ -7,7 +7,7 @@ local pvc = k.core.v1.persistentVolumeClaim;
 /**
     Used to create persistent volume claims
  */
-    pvcWithLonghornStorage(name, gibytes, storage_class):
+    pvcWithDynamicStorage(name, gibytes, storage_class):
         pvc.new(name)
         + pvc.spec.withStorageClassName(storage_class)
         + pvc.spec.withAccessModes(['ReadWriteOnce'])

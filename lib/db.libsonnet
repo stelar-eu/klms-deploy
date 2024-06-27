@@ -47,7 +47,7 @@ local ENV = DBENV {
 
     manifest(psm): {
 
-        pvc_db_storage: pvol.pvcWithLonghornStorage(
+        pvc_db_storage: pvol.pvcWithDynamicStorage(
             "postgis-storage", 
             "5Gi", 
             psm.dynamic_volume_storage_class),
