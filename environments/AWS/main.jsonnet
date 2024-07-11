@@ -17,7 +17,7 @@ local t = import 'transform.libsonnet';
     // External access to the STELAR core deployment
     endpoint: {
       scheme: 'https',
-      host: 'minikube',
+      host: 'klms-test.stelar-klms.eu',
       port: null,
     },
 
