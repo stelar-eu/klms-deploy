@@ -33,7 +33,7 @@ local APICONFIG = import 'apiconfig.jsonnet';
 { 
     manifest(psm): {
 
-        cmap: configMap.new("api_config_map") + 
+        cmap: configMap.new("api-config-map") + 
               configMap.withData(APICONFIG.API_ENV),
 
         deployment: deploy.new(
@@ -43,7 +43,7 @@ local APICONFIG = import 'apiconfig.jsonnet';
                 + container.withImagePullPolicy("Always")
                 + container.withEnvFrom([{
                     configMapRef: {
-                        name: "api_config_map",
+                        name: "api-config-map",
                     },
                 }])
                 + container.withEnvMixin([
