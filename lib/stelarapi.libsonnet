@@ -24,61 +24,35 @@ local secret = k.core.v1.secret;
 local envVar = k.core.v1.envVar;
 local envVarSource = k.core.v1.envVarSource;
 local policyRule = k.rbac.v1.policyRule;
-
-local DBENV = import "dbenv.jsonnet";
-local PORT = import "stdports.libsonnet";
-local IMAGE_NAME = "vsam/stelar-okeanos:stelarapi";
+local configMap = k.core.v1.configMap;
 
 
-local db_url = "postgresql://%(user)s:%(password)s@%(host)s/%(db)s?sslmode=disable" % {
-    user: DBENV.CKAN_DB_USER,
-    password: DBENV.CKAN_DB_PASSWORD,
-    host: "db",
-    db: DBENV.CKAN_DB
-};
-
-local ckan_url = "http://ckan:%s/api/3/action/status_show" % PORT.CKAN;
-
-local ENV = {
-    POSTGRES_HOST: 'db',
-    POSTGRES_PORT: std.toString(PORT.PG),
-    POSTGRES_USER: DBENV.CKAN_DB_USER,
-    POSTGRES_PASSWORD: DBENV.CKAN_DB_PASSWORD,
-    POSTGRES_DB: DBENV.CKAN_DB,
-
-    SERVICE_PORT: std.toString(PORT.STELARAPI),
-    CKAN_SITE_URL: "http://ckan:%d" % PORT.CKAN,
-    SPARQL_ENDPOINT: "http://ontop:%d/sparql" % PORT.ONTOP,
-
-    FLASK_APPLICATION_ROOT: "/stelar",
-
-    // Note: this is not the actual API url, but instead it is the
-    // URL sent to tool executions as hookup!
-    API_URL: "http://stelarapi/",
-
-    // duh!
-    EXECUTION_ENGINE: "kubernetes",
-};
-
+local IMAGE_CONFIG = import "images.jsonnet";
+local APICONFIG = import 'apiconfig.jsonnet';
 
 { 
     manifest(psm): {
 
+        cmap: configMap.new("api_config_map") + 
+              configMap.withData(APICONFIG.API_ENV),
+
         deployment: deploy.new(
             name="stelarapi",
             containers=[
-                container.new("apiserver", IMAGE_NAME)
+                container.new("apiserver", IMAGE_CONFIG.API_IMAGE)
                 + container.withImagePullPolicy("Always")
-                + container.withEnvMap(ENV)
+                + container.withEnvFrom([{
+                    configMapRef: {
+                        name: "api_config_map",
+                    },
+                }])
                 + container.withEnvMixin([
                     // Needed to configure exec engine!
                     envVar.fromFieldPath('API_NAMESPACE', 'metadata.namespace')
                 ])
                 + container.withPorts([
-                    containerPort.newNamed(PORT.STELARAPI, "api")
+                    containerPort.newNamed(APICONFIG.API_PORT, "api")
                 ])
-
-                /* TODO: Add liveness and readiness probes */
 
             ],
             podLabels={
@@ -89,8 +63,8 @@ local ENV = {
 
         + deploy.spec.template.spec.withInitContainers([
             /* We need to wait for ckan to be ready */
-            podinit.wait4_postgresql("wait4-db", db_url),
-            podinit.wait4_http("wait4-ckan", ckan_url),
+            podinit.wait4_postgresql("wait4-db", APICONFIG.DB_URL),
+            podinit.wait4_http("wait4-ckan", APICONFIG.CKAN_URL),
         ])
         + deploy.spec.template.spec.withServiceAccountName("stelarapi")
         ,
