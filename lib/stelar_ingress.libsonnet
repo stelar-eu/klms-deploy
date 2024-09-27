@@ -21,7 +21,7 @@ local ingpath = k.networking.v1.httpIngressPath;
             })
             + ing.spec.withIngressClassName("nginx")
             + ing.spec.withRules([
-                ingrule.withHost(psm.endpoint.host)
+                ingrule.withHost("tb.petrounetwork.gr")
                 + ingrule.http.withPaths([
 
                     /*
@@ -42,21 +42,34 @@ local ingpath = k.networking.v1.httpIngressPath;
                     + ingpath.backend.service.port.withName("apiserver-api"),
 
                     /*
+                        MinIO
+                     */
+                    ingpath.withPath("/(s3)(/|$)(.*)")
+                    + ingpath.withPathType("Prefix")
+                    + ingpath.backend.service.withName("minio")
+                    + ingpath.backend.service.port.withName("minio-minio"),
+
+                    /*
+                        Keycloak
+                    */
+                    ingpath.withPath("/(kc)(/|$)(.*)")
+                    + ingpath.withPathType("Prefix")
+                    + ingpath.backend.service.withName("keycloak")
+                    + ingpath.backend.service.port.withName("keycloak-kc"),
+
+                    /*
                         ONTOP
                     */
                     ingpath.withPath("/(kg)(/|$)(.*)")
                     + ingpath.withPathType("Prefix")
                     + ingpath.backend.service.withName("ontop")
                     + ingpath.backend.service.port.withName("ontop-ontop"),
-
-                    /*
-                        Superset
-                     */
+                    
+                    
                     ingpath.withPath("/(superset)(/|$)(.*)")
                     + ingpath.withPathType("Prefix")
                     + ingpath.backend.service.withName("superset")
                     + ingpath.backend.service.port.withName("superset-http"),
-
 
                 ])
             ])
