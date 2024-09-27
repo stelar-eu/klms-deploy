@@ -16,4 +16,5 @@
     ONTOP: 8080,
     STELARAPI: 80,
     SUPERSET: 8088,
+    MINIO:9001,
 }

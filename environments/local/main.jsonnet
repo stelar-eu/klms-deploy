@@ -34,7 +34,16 @@ local t = import 'transform.libsonnet';
       endpoint+: { url: urllib.url_from(self) }
     }
     +
-    self.provisioning,
+    self.provisioning
+    + {
+        images: {
+          stelarapi: 'petroud/stelar-tuc:data-api-prod',
+          redis: '',
+          minio: '',
+          keycloak: '',
+          db: '',
+        },
+      } ,
 
   components:: [
     import 'db.libsonnet',
@@ -42,6 +51,7 @@ local t = import 'transform.libsonnet';
     import 'ckan.libsonnet',
     import 'stelarapi.libsonnet',
     import 'ontop.libsonnet',
+    import 'minio.libsonnet',
     import 'stelar_ingress.libsonnet',
   ],
 

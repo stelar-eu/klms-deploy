@@ -26,7 +26,7 @@ local envVarSource = k.core.v1.envVarSource;
 local policyRule = k.rbac.v1.policyRule;
 local configMap = k.core.v1.configMap;
 
-
+// Configuration Imports
 local IMAGE_CONFIG = import "images.jsonnet";
 local APICONFIG = import 'apiconfig.jsonnet';
 
@@ -39,7 +39,7 @@ local APICONFIG = import 'apiconfig.jsonnet';
         deployment: deploy.new(
             name="stelarapi",
             containers=[
-                container.new("apiserver", IMAGE_CONFIG.API_IMAGE)
+                container.new("apiserver", psm.images.stelarapi)
                 + container.withImagePullPolicy("Always")
                 + container.withEnvFrom([{
                     configMapRef: {
