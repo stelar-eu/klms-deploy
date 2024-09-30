@@ -34,7 +34,7 @@ local PORT = import "stdports.libsonnet";
             + container.withEnvMap({
                 ONTOP_DB_USER: DBENV.CKAN_DB_USER,
                 ONTOP_DB_PASSWORD: DBENV.CKAN_DB_PASSWORD,
-                ONTOP_DB_URL: "jdbc:postgresql://db/ckan",
+                ONTOP_DB_URL: "jdbc:postgresql://db/stelar",
             })
             + container.withImagePullPolicy('Always')
         ,
@@ -42,7 +42,7 @@ local PORT = import "stdports.libsonnet";
 
         bootstrap_ctr:: self.base_container("ontop-bootstrap")
             + container.withCommand(['ontop', 'bootstrap',
-                '--db-url', "jdbc:postgresql://db/ckan",
+                '--db-url', "jdbc:postgresql://db/stelar",
                 '--db-user', DBENV.CKAN_DB_USER,
                 '--db-password', DBENV.CKAN_DB_PASSWORD,
                 '--db-driver', 'org.postgresql.Driver',
