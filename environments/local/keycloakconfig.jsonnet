@@ -2,16 +2,21 @@ local k = import "k.libsonnet";
 local DBENV = import "dbenv.jsonnet";
 
 
-local db_url = "jdbc:postgresql://%(host)s:%(port)s/ckan" % { 
+local db_url = "jdbc:postgresql://%(host)s:%(port)s/stelar" % { 
                                                             host: DBENV.POSTGRES_HOST, 
                                                             port: DBENV.POSTGRES_PORT
                                                           };
-
+local DB_URL_PROBE = "postgresql://%(user)s:%(password)s@%(host)s/%(db)s?sslmode=disable" % {
+                    user: DBENV.CKAN_DB_USER,
+                    password: DBENV.CKAN_DB_PASSWORD,
+                    host: "db",
+                    db: DBENV.KEYCLOAK_DB
+                };
 local ENV = {
     KC_DB: "postgres",
     KC_DB_URL: db_url,
-    KC_DB_USERNAME: "ckan",
-    KC_DB_PASSWORD: "ckan",
+    KC_DB_USERNAME: "keycloak",
+    KC_DB_PASSWORD: "keycloak",
     KC_DB_SCHEMA: "keycloak",
     KEYCLOAK_ADMIN: "admin",
     KEYCLOAK_ADMIN_PASSWORD: "stelartuc",
@@ -29,4 +34,5 @@ local ENV = {
 
 {   
     ENV: ENV,
+    DB_URL_PROBE: DB_URL_PROBE,
 }
