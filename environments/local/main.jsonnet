@@ -2,7 +2,7 @@ local tk_env = import 'spec.json';
 
 local urllib = import "urllib.libsonnet";
 local t = import 'transform.libsonnet';
-
+local IMAGE_CONFIG = import 'images.jsonnet';
 
 {
   _tk_env:: tk_env.spec,
@@ -36,12 +36,8 @@ local t = import 'transform.libsonnet';
     +
     self.provisioning
     + {
-        images: {
-          stelarapi: 'petroud/stelar-tuc:data-api-prod',
-          redis: '',
-          minio: '',
-          keycloak: '',
-          db: '',
+        images: IMAGE_CONFIG {
+          API_IMAGE: 'petroud/stelar-tuc:data-api-prod',
         },
       } ,
 
@@ -52,6 +48,7 @@ local t = import 'transform.libsonnet';
     import 'stelarapi.libsonnet',
     import 'ontop.libsonnet',
     import 'minio.libsonnet',
+    import 'keycloak.libsonnet',
     import 'stelar_ingress.libsonnet',
   ],
 

@@ -39,7 +39,7 @@ local APICONFIG = import 'apiconfig.jsonnet';
         deployment: deploy.new(
             name="stelarapi",
             containers=[
-                container.new("apiserver", psm.images.stelarapi)
+                container.new("apiserver", psm.images.API_IMAGE)
                 + container.withImagePullPolicy("Always")
                 + container.withEnvFrom([{
                     configMapRef: {

@@ -44,7 +44,7 @@ local IMAGE_CONFIG = import "images.jsonnet";
             psm.dynamic_volume_storage_class),
 
         postgis_deployment: stateful.new(name="db", containers=[
-            container.new("postgis", IMAGE_CONFIG.POSTGIS_IMAGE_NAME)
+            container.new("postgis", psm.images.POSTGIS_IMAGE_NAME)
             + container.withImagePullPolicy("Always")
 
             + container.withEnvMap(DBENV)
