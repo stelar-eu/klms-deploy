@@ -51,7 +51,8 @@ stelarapi +
             "cert-manager.io/cluster-issuer": "letsencrypt-production",
             "nginx.ingress.kubernetes.io/proxy-connect-timeout": "60s",
             "nginx.ingress.kubernetes.io/ssl-redirect": "true",
-            "nginx.ingress.kubernetes.io/rewrite-target": "/$2",
+            "nginx.ingress.kubernetes.io/x-forwarded-prefix": "/$1",
+            "nginx.ingress.kubernetes.io/rewrite-target": "/$3",
         })
         + ing.spec.withIngressClassName("nginx")
         + ing.spec.withRules([
@@ -62,7 +63,7 @@ stelarapi +
                     CKAN
 
                 */
-                ingpath.withPath("/dc(/|$)(.*)")
+                ingpath.withPath("/(dc)(/|$)(.*)")
                 + ingpath.withPathType("Prefix")
                 + ingpath.backend.service.withName("ckan")
                 + ingpath.backend.service.port.withName("api"),
@@ -70,7 +71,7 @@ stelarapi +
                 /*
                     STELARAPI
                  */
-                ingpath.withPath("/stelar(/|$)(.*)")
+                ingpath.withPath("/(stelar)(/|$)(.*)")
                 + ingpath.withPathType("Prefix")
                 + ingpath.backend.service.withName("stelarapi")
                 + ingpath.backend.service.port.withName("apiserver-api"),
@@ -78,7 +79,7 @@ stelarapi +
                 /*
                     ONTOP
                  */
-                ingpath.withPath("/kg(/|$)(.*)")
+                ingpath.withPath("/(kg)(/|$)(.*)")
                 + ingpath.withPathType("Prefix")
                 + ingpath.backend.service.withName("ontop")
                 + ingpath.backend.service.port.withName("ontop-ontop"),
