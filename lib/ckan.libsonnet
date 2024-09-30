@@ -44,10 +44,15 @@ local DBENV = import "dbenv.jsonnet";
 # However, it is possible to let the ckan setup code to do it.
 # Note: if we do it here, the values override the ones in ckan.ini (from setup)
 local SESSION_SECRETS = {
-    #
-    # CKAN___BEAKER__SESSION__SECRET: 'string:2UXr0cQqC3ryE',
-    # CKAN___API_TOKEN__JWT__ENCODE__SECRET: 'string:I5VCpxaM20tbV0okIfaYpqiVXF',
-    # CKAN___API_TOKEN__JWT__DECODE__SECRET: 'string:I5VCpxaM20tbV0okIfaYpqiVXF',
+  #
+  # CKAN___BEAKER__SESSION__SECRET: 'string:2UXr0cQqC3ryE',
+  # CKAN___API_TOKEN__JWT__ENCODE__SECRET: 'string:I5VCpxaM20tbV0okIfaYpqiVXF',
+  # CKAN___API_TOKEN__JWT__DECODE__SECRET: 'string:I5VCpxaM20tbV0okIfaYpqiVXF',
+  
+  CKAN___BEAKER__SESSION__SECRET: 'qD-fHjSOa6xTMsAJDkfLKY-eRaYZnlI-5YBkkponncA',
+  CKAN___API_TOKEN__JWT__ENCODE__SECRET: 'string:ixORfkMa1CYT2yj1LApKM1S6GW7CUHlTjObiA5DgfXM',
+  CKAN___API_TOKEN__JWT__DECODE__SECRET: 'string:ixORfkMa1CYT2yj1LApKM1S6GW7CUHlTjObiA5DgfXM',
+  
 };
 
 
@@ -120,7 +125,18 @@ local ENV =
     CKAN__HARVEST__MQ__PORT: "6379",
     CKAN__HARVEST__MQ__REDIS_DB: "1",
 
-    CKANEXT__SPATIAL__COMMON_MAP__TYPE: "OpenStreetMap.Mapnik",
+    
+    # Using settings for the standard OSM tile server
+    CKANEXT__SPATIAL__COMMON_MAP__TYPE: "custom",
+    CKANEXT__SPATIAL__COMMON_MAP__CUSTOM__URL: "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+    CKANEXT__SPATIAL__COMMON_MAP__ATTRIBUTION: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+
+    # There is also the option to use the standard OSM subdomains, to speed up map
+    # retrieval, but I need to check as to how they are used. Theoretically,
+    # I also need to use the {s} substitution in the URL above. But in fact,
+    # there are three subdomains, 'a' 'b' and 'c'. I am not sure about the
+    # correct format of this environment variable!
+    # CKANEXT__SPATIAL__COMMON_MAP__SUBDOMAINS: "abc"
 
     # timezone!
     TZ: "UTC",
