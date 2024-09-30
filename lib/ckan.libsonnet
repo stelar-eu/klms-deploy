@@ -7,6 +7,7 @@
 */
 local k = import "k.libsonnet";
 //local util = import "github.com/grafana/jsonnet-libs/ksonnet-util/util.libsonnet";
+local urllib = "urllib.libsonnet";
 
 local podinit = import "podinit.libsonnet";
 local pvol = import "pvolumes.libsonnet";
@@ -56,27 +57,31 @@ local SESSION_SECRETS = {
 
 
 
-local KEYCLOAK_CONFIG = {
+local KEYCLOAK_CONFIG(psm) = {
+    //local ckan_endpoint = urllib.url_from(psm.endpoint+{ path: "/dc" }),
+    local ckan_endp = psm.endpoint { path: '/dc' },
+    local ckan_endp_url1 =  "%(scheme)s://%(host)s%(path)s" %  ckan_endp,
+    local ckan_endp_url2 = urllib.url_from(ckan_endp),
+
     CKANEXT__KEYCLOAK__SERVER_URL: "https://authst.vsamtuc.top/",
     CKANEXT__KEYCLOAK__CLIENT_ID: "dummy_client",
     CKANEXT__KEYCLOAK__REALM_NAME:  "stelarstaging2",
-    CKANEXT__KEYCLOAK__REDIRECT_URI:  "https://stelar.vsamtuc.top/",
+    CKANEXT__KEYCLOAK__REDIRECT_URI:  ckan_endp_url1,
     CKANEXT__KEYCLOAK__CLIENT_SECRET_KEY:  "fooofootos",
     CKANEXT__KEYCLOAK__BUTTON_STYLE:  "",
     CKANEXT__KEYCLOAK__ENABLE_CKAN_INTERNAL_LOGIN: "True",
 };
 
 
-local ENV = DBENV 
+local ENV = 
+    DBENV 
     + SESSION_SECRETS 
-    + KEYCLOAK_CONFIG
     + {
     # CKAN core
     CKAN_VERSION: '2.10.0',
     CKAN_PORT: "5000",
     CKAN_PORT_HOST: "5000",
-    //CKAN_SITE_URL: "http://ckan:5000/",
-    CKAN_SITE_URL: "https://stelar.vsamtuc.top",
+    CKAN_SITE_URL: "<from psm>",
     CKAN__ROOT_PATH: "/dc",
     CKAN_SITE_ID: "default",
 
@@ -146,7 +151,6 @@ local ENV = DBENV
     CKAN_SOLR_URL: "http://solr:8983/solr/ckan",
     TEST_CKAN_SOLR_URL: "http://solr:8983/solr/ckan",
 
-    REDIS_VERSION: "6",
     CKAN_REDIS_URL: "redis://redis:6379/1",
     TEST_CKAN_REDIS_URL: "redis://redis:6379/1",
 };
@@ -157,7 +161,6 @@ local PORT = import "stdports.libsonnet";
 
 // These images are used unchanged
 local SOLR_IMAGE_NAME = "ckan/ckan-solr:%s" % ENV.SOLR_IMAGE_VERSION;
-local REDIS_IMAGE_NAME = "redis:%s" % ENV.REDIS_VERSION;
 local DATAPUSHER_IMAGE_NAME = "ckan/ckan-base-datapusher:%s" % ENV.DATAPUSHER_VERSION;
 
 // The following image has been customized
@@ -177,14 +180,23 @@ local CKAN_IMAGE_NAME = 'vsam/stelar-okeanos:ckan';
  */
 
 
-local pvc_ckan_storage = pvol.pvcWithLonghornStorage("ckan-storage", "5Gi");
+local pvc_ckan_storage(psm) = 
+    pvol.pvcWithDynamicStorage(
+        "ckan-storage", "5Gi", 
+        psm.dynamic_volume_storage_class);
 
-local ckan_deployment = stateful.new(
+local ckan_deployment(psm) = 
+    local MYENV = ENV {
+        CKAN_SITE_URL: psm.endpoint.url
+    }
+    + KEYCLOAK_CONFIG(psm)
+    ;
+    stateful.new(
     name="ckan",
     containers = [
         container.new('ckan', CKAN_IMAGE_NAME)
         + container.withImagePullPolicy("Always")
-        + container.withEnvMap(ENV)
+        + container.withEnvMap(MYENV)
         
         + (
         container.livenessProbe.exec.withCommand(
@@ -237,9 +249,11 @@ local ckan_deployment = stateful.new(
 
 
 
-local pvc_solr_data = pvol.pvcWithLonghornStorage("solr-data", "5Gi");
+local pvc_solr_data(psm) = 
+    pvol.pvcWithDynamicStorage("solr-data", 
+        "5Gi", psm.dynamic_volume_storage_class);
 
-local solr_deployment = stateful.new(
+local solr_deployment(psm) = stateful.new(
    name="solr",
     containers = [
         container.new('solr', SOLR_IMAGE_NAME)
@@ -295,7 +309,7 @@ local solr_deployment = stateful.new(
     (c) the deployment itself
  */
 
-local datapusher_deployment = deploy.new(
+local datapusher_deployment(psm) = deploy.new(
     name="datapusher",
     containers = [
         container.new('datapusher', DATAPUSHER_IMAGE_NAME)
@@ -333,44 +347,6 @@ local datapusher_deployment = deploy.new(
 
 
 
-/*********************
-    The REDIS deployment.
-
-    It requires
-    (c) the deployment itself
- */
-
-local redis_deployment = deploy.new(
-   name="redis",
-    containers = [
-        container.new('redis', REDIS_IMAGE_NAME)
-        //+ container.withEnvMap(ENV)
-
-        + container.livenessProbe.exec.withCommand(
-            ["/usr/local/bin/redis-cli", "-e", "QUIT"]
-            )
-        + container.livenessProbe.withInitialDelaySeconds(30)
-        + container.livenessProbe.withPeriodSeconds(10)
-
-        + container.readinessProbe.exec.withCommand(
-            ["/usr/local/bin/redis-cli", "-e", "QUIT"]
-            )
-        + container.readinessProbe.withInitialDelaySeconds(30)
-        + container.readinessProbe.withPeriodSeconds(10)
-
-        // Expose 
-        + container.withPorts([
-            containerPort.newNamed(PORT.REDIS, "redis"),
-        ])
-
-    ],
-    podLabels = {
-        'app.kubernetes.io/name': 'data-catalog',
-        'app.kubernetes.io/component': 'redis',
-    }
-)
-;
-
 
 
 
@@ -384,38 +360,37 @@ local redis_deployment = deploy.new(
 
 {
 
-    local obfuscate(m)=std.mapWithKey(function(k,d) std.base64(std.manifestJsonMinified(d)), m),
+    /*
+        local obfuscate(m)=std.mapWithKey(function(k,d) std.base64(std.manifestJsonMinified(d)), m),
 
-    configs: [
-        cm.new("ckan-dbenv", DBENV),
-        secret.new("ckan-session-secrets",{})
-        + secret.withData(obfuscate(SESSION_SECRETS))
-    ],
-
-
-
-    ckan: [
-        pvc_ckan_storage,
-        ckan_deployment,
-        svcs.headlessService.new("ckan", "ckan", PORT.CKAN, "api")
-    ],
+        configs: [
+            cm.new("ckan-dbenv", DBENV),
+            secret.new("ckan-session-secrets",{})
+            + secret.withData(obfuscate(SESSION_SECRETS))
+        ],
+    */
 
 
-    solr: [
-        pvc_solr_data, 
-        solr_deployment,
-        svcs.headlessService.new("solr", "solr", PORT.SOLR, "solr")
-    ],
+    manifest(psm): {
+        ckan: [
+            pvc_ckan_storage(psm),
+            ckan_deployment(psm),
+            svcs.headlessService.new("ckan", "ckan", PORT.CKAN, "api")
+        ],
 
-    datapusher: [
-        datapusher_deployment,
-        svcs.serviceFor(datapusher_deployment)
-    ],
 
-    redis: [
-        redis_deployment,
-        svcs.serviceFor(redis_deployment)
-    ],
+        solr: [
+            pvc_solr_data(psm), 
+            solr_deployment(psm),
+            svcs.headlessService.new("solr", "solr", PORT.SOLR, "solr")
+        ],
 
+        local datapusher_dep = datapusher_deployment(psm),
+        datapusher: [
+            datapusher_dep,
+            svcs.serviceFor(datapusher_dep)
+        ],
+
+    }
 }
 

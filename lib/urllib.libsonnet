@@ -7,39 +7,65 @@
 
 
 local _portspec(port) =
-        if port==null || port=="" then ""
-        else if std.isNumber(port) then ":%d" %port
-        else port;
+    if port==null || port=="" then 
+        ""
+    else if std.isNumber(port) then 
+        ":%d" % port
+    else if std.isString(port) then
+        ":"+port
+    else
+        error "A port must be integer or string.";
 
-local _netloc(args) = 
-    if args.host!=null then
-    (if args.port!= null then "%(host)s:%(port)s" % {host: args.host, port: })
-    
-    std.isString() then netlock
-    else if std.isObject(netlock) then std.format("%(host)%(portspec)", netlock { portspec: _portspec}
+local _netloc_from_obj(netloc) = 
+    if std.isString(netloc) then 
+        netloc
+    else if std.isObject(netloc) then 
+        "%(host)s%(portspec)s" % (netloc { portspec: _portspec(netloc.port) })
+    else
+        error "Illegal type for netloc";
+        
+local _netloc(netloc, host, port) = 
+    assert netloc!=null || host!=null;
+    assert netloc==null || host==null;
+    assert port==null || host!=null;
+    if netloc!=null then
+        _netloc_from_obj(netloc)
+    else
+        _netloc_from_obj({host: host, port: port});
+
+local _usrpw(user, password) =
+    assert password==null || user!=null;
+    local up = {user: user, password: password};
+    if user==null then
+        ""
+    else if password!=null then
+        "%(user)s:%(password)s@" % up
+    else
+        "%(user)s@" % up;
 
 
  {
 
-    /*
-        Compose a URL from arguments.
-
-        If `host` is specified, then host/port is used, else netloc must be specified.
-     */
-    url(scheme='http', netloc=null, path="", host=null, port=null, user=null, password=null):
-        local args={
+    url(scheme='http', netloc=null, path="", host=null, port=null, user=null, password=null):      
+        (
+          "%(scheme)s://%(usrpw)s%(netloc)s%(path)s" % {
             scheme: scheme,
-            netloc: netloc,
-            path: path,
-            host: host,
-            port: port,
-            user: user,
-            password: password,
-        };
-        "%(scheme)s://%auth%(netloc)s%(path)s" % {
-            scheme: scheme,
-            netloc: _netloc(args),
+            usrpw: _usrpw(user, password),
+            netloc: _netloc(netloc, host, port),
+            path: path
+        }),
 
-        }
+    # Endpoint must be an object with fields named as parameters of `url()`.
+    url_from(endpoint):
+        (self.url(
+            scheme=std.get(endpoint, 'scheme', 'http'),
+            netloc=std.get(endpoint, 'netloc', null),
+            path=std.get(endpoint, 'path', ""),
+
+            host=std.get(endpoint, 'host', null),
+            port=std.get(endpoint, 'port', null),
+            user=std.get(endpoint, 'user', null),
+            password=std.get(endpoint, 'password', null)
+        )),
 
  }

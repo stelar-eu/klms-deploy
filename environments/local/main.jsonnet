@@ -2,7 +2,7 @@ local tk_env = import 'spec.json';
 
 local urllib = import "urllib.libsonnet";
 local t = import 'transform.libsonnet';
-
+local IMAGE_CONFIG = import 'images.jsonnet';
 
 {
   _tk_env:: tk_env.spec,
@@ -17,7 +17,7 @@ local t = import 'transform.libsonnet';
     // External access to the STELAR core deployment
     endpoint: {
       scheme: 'https',
-      host: 'devel.vsamtuc.top',
+      host: 'minikube',
       port: null,
     },
 
@@ -26,7 +26,7 @@ local t = import 'transform.libsonnet';
 
   provisioning:: {
     namespace: $._config.namespace,
-    dynamic_volume_storage_class: 'longhorn',
+    dynamic_volume_storage_class: 'csi-hostpath-sc',
   },
 
   psm::
@@ -34,14 +34,21 @@ local t = import 'transform.libsonnet';
       endpoint+: { url: urllib.url_from(self) }
     }
     +
-    self.provisioning,
+    self.provisioning
+    + {
+        images: IMAGE_CONFIG {
+          API_IMAGE: 'petroud/stelar-tuc:data-api-prod',
+        },
+      } ,
 
   components:: [
     import 'db.libsonnet',
+    import 'redis.libsonnet',
     import 'ckan.libsonnet',
     import 'stelarapi.libsonnet',
     import 'ontop.libsonnet',
-    import 'superset.libsonnet',
+    import 'minio.libsonnet',
+    import 'keycloak.libsonnet',
     import 'stelar_ingress.libsonnet',
   ],
 

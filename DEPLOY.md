@@ -1,13 +1,42 @@
-# Instructions to deploy STELAR KLMS 
+# STELAR KLMS deployment
+
 
 The STELAR KLMS is a Kubernetes-based system, and as such, it requires
-deployment. Because of the complex nature of STELAR KLMS deployments,
+flexible deployment logic on kubernetes clusters. 
+Because of the complex nature of STELAR KLMS deployments,
 we have decided to employ a **configuration-as-code** approach, by using the
 (Jsonnet language)[https://jsonnet.org/] to code configuration logic.
 
 JSonnet is a very clever extension of JSON which allows large and complex 
-JSON objects to be composed in a proncipled manner. In many ways, this is reminiscent of the classis OMG Model-Driven Development approach, but significantly simplified.
-While JSonnet is Turing complete, it is a very simple language whose principles can be learned by a programmer in under one hour.
+JSON objects to be composed in a proncipled manner. In many ways, this is reminiscent of the classis 
+OMG Model-Driven Development approach, but significantly simplified.
+While JSonnet is Turing complete, it is a very simple language whose principles can be 
+learned by a programmer in under one hour.
+
+## Deployment configuration
+
+A deployment of STELAR considers several issues:
+
+ - Accessing the system after deploymment, including
+   hostname, security concerns (certificates, passwords),
+   coordination with storage etc.
+
+ - Provisioning issues, relating the the provisioning of 
+   STELAR components (kubernetes version, storage arrangement,
+   scheduling on nodes, resource use etc)
+
+ - Component configurations desired (versions, storage 
+   allocations to modules, optional functions, replication 
+   for services, HA requirements, etc. ).
+
+
+To get from the above description to a set of kubernetes manifests for deployment, we empoy a model transofrmation 
+approach.
+
+    
+
+
+## Instructions for STELAR deployment
 
 The deployment of STELAR requires some tools and is performed by the following steps
 
@@ -19,7 +48,7 @@ The deployment of STELAR requires some tools and is performed by the following s
 
 The steps are outlined below.
 
-## Install Graphana Tanka and Jsonnet Bundler
+### Install Graphana Tanka and Jsonnet Bundler
 
 Tanka is a tool for simplifying Kubernetes deployment and 
 configuration. Tanka is open-source and is being used by Graphana 
@@ -35,7 +64,7 @@ Note: besides `tanka` and `jb`, other dependencies include
  - `kubectl` to access some Kubernetes cluster
  - `helm` to download existing charts
 
-## Update the Jsonnet packages in this repository.
+### Update the Jsonnet packages in this repository.
 
 Once jsonnet bundler is installed, please do
 ```
@@ -51,7 +80,7 @@ user% tk tool charts vendor
 This will make sure that you have all required Jsonnet libraries, as well
 as charts.
 
-## Access to a kubernetes cluster
+### Access to a kubernetes cluster
 
 The standard tool for Kubernetes cluster access is `kubectl`. Since a user may
 have access to multiple clusters, `kubectl` configuration contains several 
@@ -64,7 +93,7 @@ CURRENT   NAME       CLUSTER    AUTHINFO   NAMESPACE
 In the above example, there is a single context installed. The name of this
 context is __minikube__.
 
-## Create a tanka environment
+### Create a tanka environment
 
 A tanka environment customizes the STELAR release to the individual deployment. For example, you may want to create a __stelar_devel__ 
 environment as well as a __stelar_testing__ deployment on the same cluster.
@@ -77,7 +106,7 @@ user% tk env add environments/stelar/my_env --namespace stelar --server-from-con
 This will create the environment on the Kubernetes cluster accessible
 via the __minikube__ kubectl context.
 
-## Apply an environment to the cluster
+### Apply an environment to the cluster
 
 This can be achieved with the following command:
 ```

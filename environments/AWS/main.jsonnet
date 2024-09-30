@@ -10,14 +10,14 @@ local t = import 'transform.libsonnet';
   _config+:: {
     namespace: tk_env.spec.namespace,
 
-    dynamicStorageClass: 'longhorn',
+    dynamicStorageClass: 'ebs-sc',
   },
 
   access:: {
     // External access to the STELAR core deployment
     endpoint: {
       scheme: 'https',
-      host: 'devel.vsamtuc.top',
+      host: 'minikube',
       port: null,
     },
 
@@ -26,7 +26,7 @@ local t = import 'transform.libsonnet';
 
   provisioning:: {
     namespace: $._config.namespace,
-    dynamic_volume_storage_class: 'longhorn',
+    dynamic_volume_storage_class: 'ebs-sc',
   },
 
   psm::
@@ -38,6 +38,7 @@ local t = import 'transform.libsonnet';
 
   components:: [
     import 'db.libsonnet',
+    import 'redis.libsonnet',
     import 'ckan.libsonnet',
     import 'stelarapi.libsonnet',
     import 'ontop.libsonnet',
