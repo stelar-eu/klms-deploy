@@ -40,7 +40,8 @@ local PORT = import "stdports.libsonnet";
                     },
                 }])
            + container.withPorts([
-                containerPort.newNamed(PORT.MINIO, "minio")
+                containerPort.newNamed(PORT.MINIO, "minio"),
+                containerPort.newNamed(PORT.MINIOAPI, "minapi")
            ])
            + container.withCommand(['minio','server','/data','--console-address',':9001'])
            + container.withVolumeMounts([
