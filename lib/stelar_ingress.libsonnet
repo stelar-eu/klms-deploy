@@ -42,12 +42,20 @@ local ingpath = k.networking.v1.httpIngressPath;
                     + ingpath.backend.service.port.withName("apiserver-api"),
 
                     /*
-                        MinIO
+                        MinIO Console
                      */
                     ingpath.withPath("/(s3)(/|$)(.*)")
                     + ingpath.withPathType("Prefix")
                     + ingpath.backend.service.withName("minio")
                     + ingpath.backend.service.port.withName("minio-minio"),
+
+                    /*
+                        MinIO API
+                     */
+                    ingpath.withPath("/(minio)(/|$)(.*)")
+                    + ingpath.withPathType("Prefix")
+                    + ingpath.backend.service.withName("minio")
+                    + ingpath.backend.service.port.withName("minio-minapi"),
 
                     /*
                         Keycloak
