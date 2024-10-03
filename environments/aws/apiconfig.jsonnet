@@ -30,14 +30,14 @@ local API_ENV = {
     ###Keycloak URL should contain protocol
     KEYCLOAK_URL: "http://keycloak:8080",
     KEYCLOAK_CLIENT_ID: "minio",
-    KEYCLOAK_CLIENT_SECRET: "FD8hy6fhjXSNDxj38IePSbfRkvUfmrZc",
+    KEYCLOAK_CLIENT_SECRET: "thNbgeYSvmmF7tACA8yokdqKjsCAwixR",
     REALM_NAME: "master",
-    CKAN_ADMIN_TOKEN: 'eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJqdGkiOiJCTkNhZ01YZTFjRlNjZnV2cUc0T0xHbFRKQmMtMk9NdTVMYW5ndTVkdXhnIiwiaWF0IjoxNzI3OTgwMTI5fQ.d7o-_sabMcSw3sFEkTJx7BAbmEUu_NLfiW3kcEmuRHo',
+    CKAN_ADMIN_TOKEN: 'eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJqdGkiOiJjalFteEVQV2VXQ0gxanJiM2JsTDZxRnNJVVVST1h1M3pzUENGUDctcWs0IiwiaWF0IjoxNzI3OTg4MzUyfQ.dbbZkaltyisjrTRuxwN5NowNRzzHnxFe2JnHQQlSkSk',
 
     FLASK_APPLICATION_ROOT: "/stelar",
 
     ###Plain domain name without protocol!!!
-    KLMS_DOMAIN_NAME: 'petrounetwork.gr',
+    KLMS_DOMAIN_NAME: 'stelar.gr',
 
     // Note: this is not the actual API url, but instead it is the
     // URL sent to tool executions as hookup!

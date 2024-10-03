@@ -10,14 +10,14 @@ local IMAGE_CONFIG = import 'images.jsonnet';
   _config+:: {
     namespace: tk_env.spec.namespace,
 
-    dynamicStorageClass: 'longhorn',
+    dynamicStorageClass: 'ebs-sc',
   },
 
   access:: {
     // External access to the STELAR core deployment
     endpoint: {
       scheme: 'https',
-      host: 'petrounetwork.gr',
+      host: 'stelar.gr',
       port: null,
     },
 
@@ -26,7 +26,7 @@ local IMAGE_CONFIG = import 'images.jsonnet';
 
   provisioning:: {
     namespace: $._config.namespace,
-    dynamic_volume_storage_class: 'csi-hostpath-sc',
+    dynamic_volume_storage_class: 'ebs-sc',
   },
 
   psm::
