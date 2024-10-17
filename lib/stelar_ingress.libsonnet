@@ -11,6 +11,45 @@ local ingpath = k.networking.v1.httpIngressPath;
 {
     manifest(psm): {
 
+        ingress_kc: ing.new("kc")
+            + ing.metadata.withAnnotations({
+                "cert-manager.io/cluster-issuer": "letsencrypt-production",
+                "nginx.ingress.kubernetes.io/proxy-connect-timeout": "60s",
+                "nginx.ingress.kubernetes.io/ssl-redirect": "true",
+                "nginx.ingress.kubernetes.io/proxy-body-size": "5120m",
+            })
+            + ing.spec.withIngressClassName("nginx")
+            + ing.spec.withRules([
+                ingrule.withHost("kc."+psm.endpoint.host)
+                + ingrule.http.withPaths([                
+                    ingpath.withPath("/")
+                    + ingpath.withPathType("Prefix")
+                    + ingpath.backend.service.withName("keycloak")
+                    + ingpath.backend.service.port.withName("keycloak-kc"),
+                ]),
+
+                ingrule.withHost("minio."+psm.endpoint.host)
+                + ingrule.http.withPaths([
+
+                    /*
+                        MinIO API - Root Path "/"
+                    */
+                    ingpath.withPath("/")
+                    + ingpath.withPathType("Prefix")
+                    + ingpath.backend.service.withName("minio")
+                    + ingpath.backend.service.port.withName("minio-minapi"),
+                ]),
+            ])
+
+            + ing.spec.withTls([
+                k.networking.v1.ingressTLS.withHosts(["kc."+psm.endpoint.host])
+                + k.networking.v1.ingressTLS.withSecretName("kc-tls"),
+
+                k.networking.v1.ingressTLS.withHosts(["minio."+psm.endpoint.host])
+                + k.networking.v1.ingressTLS.withSecretName("minio-tls"),
+
+            ]),
+
         ingress: ing.new("stelar")
             + ing.metadata.withAnnotations({
                 "cert-manager.io/cluster-issuer": "letsencrypt-production",
@@ -18,15 +57,16 @@ local ingpath = k.networking.v1.httpIngressPath;
                 "nginx.ingress.kubernetes.io/ssl-redirect": "true",
                 "nginx.ingress.kubernetes.io/x-forwarded-prefix": "/$1",
                 "nginx.ingress.kubernetes.io/rewrite-target": "/$3",
+                "nginx.ingress.kubernetes.io/proxy-body-size": "5120m",
             })
             + ing.spec.withIngressClassName("nginx")
             + ing.spec.withRules([
-                ingrule.withHost("tb.petrounetwork.gr")
+
+                ingrule.withHost("klms."+psm.endpoint.host)
                 + ingrule.http.withPaths([
 
                     /*
                         CKAN
-
                     */
                     ingpath.withPath("/(dc)(/|$)(.*)")
                     + ingpath.withPathType("Prefix")
@@ -50,41 +90,27 @@ local ingpath = k.networking.v1.httpIngressPath;
                     + ingpath.backend.service.port.withName("minio-minio"),
 
                     /*
-                        MinIO API
-                     */
-                    ingpath.withPath("/(minio)(/|$)(.*)")
-                    + ingpath.withPathType("Prefix")
-                    + ingpath.backend.service.withName("minio")
-                    + ingpath.backend.service.port.withName("minio-minapi"),
-
-                    /*
-                        Keycloak
-                    */
-                    ingpath.withPath("/(kc)(/|$)(.*)")
-                    + ingpath.withPathType("Prefix")
-                    + ingpath.backend.service.withName("keycloak")
-                    + ingpath.backend.service.port.withName("keycloak-kc"),
-
-                    /*
                         ONTOP
                     */
                     ingpath.withPath("/(kg)(/|$)(.*)")
                     + ingpath.withPathType("Prefix")
                     + ingpath.backend.service.withName("ontop")
                     + ingpath.backend.service.port.withName("ontop-ontop"),
-                    
-                    
+
+                    /*
+                        Superset
+                    */
                     ingpath.withPath("/(superset)(/|$)(.*)")
                     + ingpath.withPathType("Prefix")
                     + ingpath.backend.service.withName("superset")
                     + ingpath.backend.service.port.withName("superset-http"),
 
-                ])
+                ]),
             ])
 
             + ing.spec.withTls([
-                k.networking.v1.ingressTLS.withHosts(psm.endpoint.host)
-                + k.networking.v1.ingressTLS.withSecretName("stelar-tls")
+                k.networking.v1.ingressTLS.withHosts(["klms."+psm.endpoint.host])
+                + k.networking.v1.ingressTLS.withSecretName("stelar-tls"),
             ])
 
     }

@@ -17,7 +17,7 @@ local IMAGE_CONFIG = import 'images.jsonnet';
     // External access to the STELAR core deployment
     endpoint: {
       scheme: 'https',
-      host: 'minikube',
+      host: 'petrounetwork.gr',
       port: null,
     },
 
@@ -38,6 +38,7 @@ local IMAGE_CONFIG = import 'images.jsonnet';
     + {
         images: IMAGE_CONFIG {
           API_IMAGE: 'petroud/stelar-tuc:data-api-prod',
+          CKAN_IMAGE: 'petroud/stelar-tuc:ckan',
         },
       } ,
 

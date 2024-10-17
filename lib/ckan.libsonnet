@@ -58,16 +58,15 @@ local SESSION_SECRETS = {
 
 
 local KEYCLOAK_CONFIG(psm) = {
-    //local ckan_endpoint = urllib.url_from(psm.endpoint+{ path: "/dc" }),
     local ckan_endp = psm.endpoint { path: '/dc' },
     local ckan_endp_url1 =  "%(scheme)s://%(host)s%(path)s" %  ckan_endp,
     local ckan_endp_url2 = urllib.url_from(ckan_endp),
 
-    CKANEXT__KEYCLOAK__SERVER_URL: "https://authst.vsamtuc.top/",
-    CKANEXT__KEYCLOAK__CLIENT_ID: "dummy_client",
-    CKANEXT__KEYCLOAK__REALM_NAME:  "stelarstaging2",
+    CKANEXT__KEYCLOAK__SERVER_URL: "https://kc.stelar.gr/",
+    CKANEXT__KEYCLOAK__CLIENT_ID: "ckan",
+    CKANEXT__KEYCLOAK__REALM_NAME:  "master",
     CKANEXT__KEYCLOAK__REDIRECT_URI:  ckan_endp_url1,
-    CKANEXT__KEYCLOAK__CLIENT_SECRET_KEY:  "fooofootos",
+    CKANEXT__KEYCLOAK__CLIENT_SECRET_KEY:  "fga1Ffy0XQDxrnFjIivdjz0q1zaa2hC2",
     CKANEXT__KEYCLOAK__BUTTON_STYLE:  "",
     CKANEXT__KEYCLOAK__ENABLE_CKAN_INTERNAL_LOGIN: "True",
 };
@@ -163,10 +162,6 @@ local PORT = import "stdports.libsonnet";
 local SOLR_IMAGE_NAME = "ckan/ckan-solr:%s" % ENV.SOLR_IMAGE_VERSION;
 local DATAPUSHER_IMAGE_NAME = "ckan/ckan-base-datapusher:%s" % ENV.DATAPUSHER_VERSION;
 
-// The following image has been customized
-local CKAN_IMAGE_NAME = 'vsam/stelar-okeanos:ckan';
-
-
 
 /*********************
 
@@ -187,14 +182,14 @@ local pvc_ckan_storage(psm) =
 
 local ckan_deployment(psm) = 
     local MYENV = ENV {
-        CKAN_SITE_URL: psm.endpoint.url
+        CKAN_SITE_URL: "https://klms."+psm.endpoint.host
     }
     + KEYCLOAK_CONFIG(psm)
     ;
     stateful.new(
     name="ckan",
     containers = [
-        container.new('ckan', CKAN_IMAGE_NAME)
+        container.new('ckan', psm.images.CKAN_IMAGE)
         + container.withImagePullPolicy("Always")
         + container.withEnvMap(MYENV)
         
