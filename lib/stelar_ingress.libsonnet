@@ -16,6 +16,7 @@ local ingpath = k.networking.v1.httpIngressPath;
                 "cert-manager.io/cluster-issuer": "letsencrypt-production",
                 "nginx.ingress.kubernetes.io/proxy-connect-timeout": "60s",
                 "nginx.ingress.kubernetes.io/ssl-redirect": "true",
+                "nginx.ingress.kubernetes.io/proxy-body-size": "5120m",
             })
             + ing.spec.withIngressClassName("nginx")
             + ing.spec.withRules([
@@ -56,6 +57,7 @@ local ingpath = k.networking.v1.httpIngressPath;
                 "nginx.ingress.kubernetes.io/ssl-redirect": "true",
                 "nginx.ingress.kubernetes.io/x-forwarded-prefix": "/$1",
                 "nginx.ingress.kubernetes.io/rewrite-target": "/$3",
+                "nginx.ingress.kubernetes.io/proxy-body-size": "5120m",
             })
             + ing.spec.withIngressClassName("nginx")
             + ing.spec.withRules([
