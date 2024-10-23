@@ -37,7 +37,7 @@ local secret = k.core.v1.secret;
         local db_url = "postgresql://%(user)s:%(password)s@%(host)s/%(db)s?sslmode=disable" % {
             user: pim.db.CKAN_DB_USER,
             password: psm.db.CKAN_DB_PASSWORD,
-            host: "db",
+            host: pim.db.POSTGRES_HOST,
             db: pim.db.CKAN_DB
         },
         local ckan_url = "http://ckan:%s/api/3/action/status_show" % pim.ports.CKAN,
