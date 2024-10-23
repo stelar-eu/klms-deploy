@@ -26,15 +26,73 @@ local envVarSource = k.core.v1.envVarSource;
 local policyRule = k.rbac.v1.policyRule;
 local configMap = k.core.v1.configMap;
 
-// Configuration Imports
-local IMAGE_CONFIG = import "images.jsonnet";
-local APICONFIG = import 'apiconfig.jsonnet';
+
+#Liveness probe urls used by wait4x during init container(s) runtime.
+local CKAN_URL(pim) = "http://ckan:%s/api/3/action/status_show" % pim.ports.CKAN;
+
+local DB_URL(pim, psm) = "postgresql://%(user)s:%(password)s@%(host)s/%(db)s?sslmode=disable" % { user: pim.db.CKAN_DB_USER, password: psm.db.CKAN_DB_PASSWORD, host: pim.db.POSTGRES_HOST, db: pim.db.CKAN_DB };
+
+local API_CONFIG(pim, psm) = {
+
+    ########################################
+    ##  DATABASE  ##########################
+    ########################################
+    POSTGRES_HOST: pim.db.POSTGRES_HOST,
+    POSTGRES_PORT: std.toString(pim.ports.PG),
+    POSTGRES_USER: pim.db.CKAN_DB_USER,
+    POSTGRES_PASSWORD: psm.db.CKAN_DB_PASSWORD,
+    POSTGRES_DB: psm.db.CKAN_DB,
+
+
+    ########################################
+    ##  CKAN ###############################
+    ########################################
+    CKAN_SITE_URL: "http://ckan:%d" % pim.ports.CKAN,
+    SPARQL_ENDPOINT: "http://ontop:%d/sparql" % pim.ports.ONTOP,
+
+
+    ########################################
+    ##  KEYCLOAK  ##########################
+    ########################################
+    KEYCLOAK_URL: pim.keycloak.HOSTNAME +":"+std.toString(pim.ports.KEYCLOAK), #Note: Keycloak URL should contain protocol like "http://keycloak:8080"
+    KEYCLOAK_CLIENT_ID: psm.api.KEYCLOAK_CLIENT_ID,
+    REALM_NAME: pim.keycloak.REALM,
+
+
+    ########################################
+    ##  DOMAINS  ###########################
+    ########################################
+    # Note: Plain domains name without protocol!!!
+    KLMS_DOMAIN_NAME: psm.cluster.ROOT_DOMAIN, # eg "stelar.gr"
+    MAIN_INGRESS_SUBDOMAIN: psm.cluster.endpoint.PRIMARY_SUBDOMAIN, # eg "klms"
+    KEYCLOAK_SUBDOMAIN: psm.cluster.endpoint.KEYCLOAK_SUBDOMAIN, # eg "kc"
+    MINIO_API_SUBDOMAIN: psm.cluster.endpoint.MINIO_API_SUBDOMAIN, # eg "minio"
+
+
+    ########################################
+    ##  API CORE  ##########################
+    ########################################
+    FLASK_APPLICATION_ROOT: pim.api.FLASK_ROOT, # "/stelar"
+    FLASK_RUN_PORT: std.toString(pim.ports.STELARAPI),
+    API_URL: pim.api.INTERNAL_URL, # Note: this is not the actual API url, but instead it is the URL sent to tool executions as hookup!
+
+
+    ########################################
+    ##  SMTP  ##############################
+    ########################################
+    SMTP_USERNAME: psm.api.SMTP_USERNAME,
+    SMTP_PASSWORD: psm.api.SMTP_PASSWORD, # 
+    SMTP_SERVER: psm.api.SMTP_PASSWORD,
+    SMTP_PORT: psm.api.SMTP_PORT,
+
+    EXECUTION_ENGINE: pim.api.EXEC_ENGINE, # "kubernetes"
+};
 
 { 
-    manifest(psm): {
+    manifest(pim, psm): {
 
         cmap: configMap.new("api-config-map") + 
-              configMap.withData(APICONFIG.API_ENV),
+              configMap.withData(API_CONFIG(pim, psm)),
 
         deployment: deploy.new(
             name="stelarapi",
@@ -51,7 +109,7 @@ local APICONFIG = import 'apiconfig.jsonnet';
                     envVar.fromFieldPath('API_NAMESPACE', 'metadata.namespace')
                 ])
                 + container.withPorts([
-                    containerPort.newNamed(APICONFIG.API_PORT, "api")
+                    containerPort.newNamed(pim.ports.STELARAPI, "api")
                 ])
 
             ],
@@ -63,8 +121,8 @@ local APICONFIG = import 'apiconfig.jsonnet';
 
         + deploy.spec.template.spec.withInitContainers([
             /* We need to wait for ckan to be ready */
-            podinit.wait4_postgresql("wait4-db", APICONFIG.DB_URL),
-            podinit.wait4_http("wait4-ckan", APICONFIG.CKAN_URL),
+            podinit.wait4_postgresql("wait4-db", DB_URL(pim)),
+            podinit.wait4_http("wait4-ckan", CKAN_URL(pim, psm)),
         ])
         + deploy.spec.template.spec.withServiceAccountName("stelarapi")
         ,
