@@ -14,16 +14,24 @@ local vol = k.core.v1.volume;
 local cmap = k.core.v1.configMap;
 local service = k.core.v1.service;
 
-local MINIOCONFIG = import 'minioconfig.jsonnet';
-local IMAGE_CONFIG = import 'images.jsonnet';
-local PORT = import "stdports.libsonnet";
+// local MINIOCONFIG = import 'minioconfig.jsonnet';
+// local IMAGE_CONFIG = import 'images.jsonnet';
+// local PORT = import "stdports.libsonnet";
+
+local MINIO_CONFIG(pim,psm) = {
+    MINIO_ROOT_USER : pim.minio.MINIO_ROOT_USER,# 'root'
+    MINIO_ROOT_PASSWORD: psm.minio.MINIO_ROOT_PASSWORD,# "stelartuc"
+    MINIO_BROWSER_REDIRECT: pim.minio.MINIO_BROWSER_REDIRECT,# "true"
+    MINIO_BROWSER_REDIRECT_URL: 'https://'+psm.cluster.endpoint.PRIMARY_SUBDOMAIN+'.'+psm.cluster.endpoint.ROOT_DOMAIN+'/s3',# "https://klms.stelar.gr/s3"
+    MINIO_IDENTITY_OPENID_REDIRECT_URI: 'https://'+psm.cluster.endpoint.PRIMARY_SUBDOMAIN+'.'+psm.cluster.endpoint.ROOT_DOMAIN+'/s3',# "https://klms.stelar.gr/s3"
+};
 
 
 {
-    manifest(psm):  {
+    manifest(pim,psm):  {
 
         minio_cmap: cmap.new("minio-cmap") + 
-                    cmap.withData(MINIOCONFIG.ENV),
+                    cmap.withData(MINIO_CONFIG(pim,psm)),
 
         pvc_minio_storage: pvol.pvcWithDynamicStorage(
             "minio-storage",
@@ -32,7 +40,8 @@ local PORT = import "stdports.libsonnet";
         
 
         minio_deployment: stateful.new(name="minio", containers=[
-            container.new("minio",IMAGE_CONFIG.MINIO_IMAGE)
+            // container.new("minio",IMAGE_CONFIG.MINIO_IMAGE)
+            container.new("minio",psm.images.MINIO_IMAGE)
            + container.withImagePullPolicy("Always")
            + container.withEnvFrom([{
                     configMapRef: {
@@ -40,8 +49,10 @@ local PORT = import "stdports.libsonnet";
                     },
                 }])
            + container.withPorts([
-                containerPort.newNamed(PORT.MINIO, "minio"),
-                containerPort.newNamed(PORT.MINIOAPI, "minapi")
+                // containerPort.newNamed(PORT.MINIO, "minio"),
+                // containerPort.newNamed(PORT.MINIOAPI, "minapi")
+                containerPort.newNamed(pim.ports.MINIO, "minio"),
+                containerPort.newNamed(pim.ports.MINIOAPI, "minapi")
            ])
            + container.withCommand(['minio','server','/data','--console-address',':9001'])
            + container.withVolumeMounts([
