@@ -29,7 +29,7 @@ local secret = k.core.v1.secret;
             + container.withEnvMap({
                 ONTOP_DB_USER: pim.db.CKAN_DB_USER,
                 ONTOP_DB_PASSWORD: pim.db.CKAN_DB_PASSWORD,
-                ONTOP_DB_URL: "jdbc:postgresql://db/stelar",
+                ONTOP_DB_URL: "jdbc:postgresql://"+pim.db.POSTGRES_HOST+"/"+pim.db.CKAN_DB,
             })
             + container.withImagePullPolicy('Always')
         ,
