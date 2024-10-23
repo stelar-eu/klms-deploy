@@ -24,17 +24,10 @@ local service = k.core.v1.service;
 local cm = k.core.v1.configMap;
 local secret = k.core.v1.secret;
 
-
-local PORT = import "stdports.libsonnet";
-
-
 /*
     Superset seems to require v.7. Although CKAN specified v.6,
     there does not seem to be an issue.
  */
-local REDIS_VERSION="7";
-local REDIS_IMAGE_NAME = "redis:%s" % REDIS_VERSION;
-
 
 /*********************
     The REDIS deployment.
@@ -43,11 +36,10 @@ local REDIS_IMAGE_NAME = "redis:%s" % REDIS_VERSION;
     (c) the deployment itself
  */
 
-local redis_deployment(psm) = deploy.new(
+local redis_deployment(psm, pim) = deploy.new(
    name="redis",
     containers = [
-        container.new('redis', REDIS_IMAGE_NAME)
-        //+ container.withEnvMap(ENV)
+        container.new('redis', psm.images.REDIS_IMAGE)
 
         + container.livenessProbe.exec.withCommand(
             ["/usr/local/bin/redis-cli", "-e", "QUIT"]
@@ -63,7 +55,7 @@ local redis_deployment(psm) = deploy.new(
 
         // Expose 
         + container.withPorts([
-            containerPort.newNamed(PORT.REDIS, "redis"),
+            containerPort.newNamed(pim.ports.REDIS, "redis"),
         ])
 
     ],
@@ -77,8 +69,8 @@ local redis_deployment(psm) = deploy.new(
 
 
 {
-    manifest(psm): {
-        local redis_dep = redis_deployment(psm),
+    manifest(pim, psm): {
+        local redis_dep = redis_deployment(pim, psm),
         redis: [
             redis_dep,
             svcs.serviceFor(redis_dep)
