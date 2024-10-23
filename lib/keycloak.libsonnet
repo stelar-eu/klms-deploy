@@ -24,7 +24,7 @@ local KEYCLOAK_CONFIG(pim,psm) = {
                                                             host: pim.db.POSTGRES_HOST, 
                                                             port: pim.db.POSTGRES_PORT
                                                           },
-    local DB_URL_PROBE = "postgresql://%(user)s:%(password)s@%(host)s/%(db)s?sslmode=disable" % {
+    DB_URL_PROBE : "postgresql://%(user)s:%(password)s@%(host)s/%(db)s?sslmode=disable" % {
                     user: pim.db.CKAN_DB_USER,
                     password: psm.db.CKAN_DB_PASSWORD,
                     host: pim.db.POSTGRES_HOST,
