@@ -36,7 +36,7 @@ local secret = k.core.v1.secret;
     (c) the deployment itself
  */
 
-local redis_deployment(psm, pim) = deploy.new(
+local redis_deployment(pim, psm) = deploy.new(
    name="redis",
     containers = [
         container.new('redis', psm.images.REDIS_IMAGE)
