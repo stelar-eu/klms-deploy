@@ -53,7 +53,7 @@ local PORTS = import 'stdports.libsonnet';
       KEYCLOAK_SUBDOMAIN: "kc", # kc.stelar.gr
       MINIO_API_SUBDOMAIN: "minio", # minio.stelar.gr
     }
-  }
+  },
 
   provisioning:: {
     namespace: $._config.namespace,
@@ -81,7 +81,9 @@ local PORTS = import 'stdports.libsonnet';
           CKAN_IMAGE: 'petroud/stelar-tuc:ckan',
         },
     } 
-    + cluster: self.cluster,
+    + {
+        cluster: self.cluster
+      },
 
 
   ##########################################

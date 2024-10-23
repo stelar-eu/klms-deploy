@@ -57,16 +57,16 @@ local SESSION_SECRETS = {
 
 
 
-local KEYCLOAK_CONFIG(psm) = {
-    local ckan_endp = psm.endpoint { path: '/dc' },
-    local ckan_endp_url1 =  "%(scheme)s://%(host)s%(path)s" %  ckan_endp,
-    local ckan_endp_url2 = urllib.url_from(ckan_endp),
+local KEYCLOAK_CONFIG(pim,psm) = {
+    local ckan_endp = psm.cluster.endpoint { path: '/dc/user/sso_login' },
+    local ckan_endp_url1 =  "https://%(PRIMARY_SUBDOMAIN)s%.%(ROOT_DOMAIN)s%(path)s" %  ckan_endp,
+    // local ckan_endp_url2 = urllib.url_from(ckan_endp),
 
-    CKANEXT__KEYCLOAK__SERVER_URL: "https://kc.stelar.gr/",
-    CKANEXT__KEYCLOAK__CLIENT_ID: "ckan",
-    CKANEXT__KEYCLOAK__REALM_NAME:  "master",
+    CKANEXT__KEYCLOAK__SERVER_URL: 'https://'+psm.cluster.endpoint.KEYCLOAK_SUBDOMAIN+'.'+psm.cluster.endpoint.ROOT_DOMAIN, #"https://kc.stelar.gr/",
+    CKANEXT__KEYCLOAK__CLIENT_ID: pim.ckan.CKANEXT__KEYCLOAK__CLIENT_ID, #"ckan",
+    CKANEXT__KEYCLOAK__REALM_NAME:  pim.keycloak.REALM, #"master",
     CKANEXT__KEYCLOAK__REDIRECT_URI:  ckan_endp_url1,
-    CKANEXT__KEYCLOAK__CLIENT_SECRET_KEY:  "fga1Ffy0XQDxrnFjIivdjz0q1zaa2hC2",
+    CKANEXT__KEYCLOAK__CLIENT_SECRET_KEY:  psm.ckan.CKANEXT__KEYCLOAK__CLIENT_SECRET_KEY, #"fga1Ffy0XQDxrnFjIivdjz0q1zaa2hC2",
     CKANEXT__KEYCLOAK__BUTTON_STYLE:  "",
     CKANEXT__KEYCLOAK__ENABLE_CKAN_INTERNAL_LOGIN: "True",
 };
