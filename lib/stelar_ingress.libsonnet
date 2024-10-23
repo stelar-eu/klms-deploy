@@ -20,7 +20,8 @@ local ingpath = k.networking.v1.httpIngressPath;
             })
             + ing.spec.withIngressClassName("nginx")
             + ing.spec.withRules([
-                ingrule.withHost("kc."+psm.endpoint.host)
+                // ingrule.withHost("kc."+psm.endpoint.host)
+                ingrule.withHost(psm.cluster.endpoint.KEYCLOAK_SUBDOMAIN+'.'+psm.cluster.endpoint.ROOT_DOMAIN)
                 + ingrule.http.withPaths([                
                     ingpath.withPath("/")
                     + ingpath.withPathType("Prefix")
@@ -28,7 +29,8 @@ local ingpath = k.networking.v1.httpIngressPath;
                     + ingpath.backend.service.port.withName("keycloak-kc"),
                 ]),
 
-                ingrule.withHost("minio."+psm.endpoint.host)
+                // ingrule.withHost("minio."+psm.endpoint.host)
+                ingrule.withHost(psm.cluster.endpoint.MINIO_SUBDOMAIN+'.'+psm.cluster.endpoint.ROOT_DOMAIN)
                 + ingrule.http.withPaths([
 
                     /*
@@ -42,10 +44,12 @@ local ingpath = k.networking.v1.httpIngressPath;
             ])
 
             + ing.spec.withTls([
-                k.networking.v1.ingressTLS.withHosts(["kc."+psm.endpoint.host])
+                // k.networking.v1.ingressTLS.withHosts(["kc."+psm.endpoint.host])
+                k.networking.v1.ingressTLS.withHosts([psm.cluster.endpoint.KEYCLOAK_SUBDOMAIN+'.'+psm.cluster.endpoint.ROOT_DOMAIN])
                 + k.networking.v1.ingressTLS.withSecretName("kc-tls"),
 
-                k.networking.v1.ingressTLS.withHosts(["minio."+psm.endpoint.host])
+                // k.networking.v1.ingressTLS.withHosts(["minio."+psm.endpoint.host])
+                k.networking.v1.ingressTLS.withHosts([psm.cluster.endpoint.MINIO_SUBDOMAIN+'.'+psm.cluster.endpoint.ROOT_DOMAIN])
                 + k.networking.v1.ingressTLS.withSecretName("minio-tls"),
 
             ]),
@@ -62,7 +66,8 @@ local ingpath = k.networking.v1.httpIngressPath;
             + ing.spec.withIngressClassName("nginx")
             + ing.spec.withRules([
 
-                ingrule.withHost("klms."+psm.endpoint.host)
+                // ingrule.withHost("klms."+psm.endpoint.host)
+                ingrule.withHost(psm.cluster.endpoint.PRIMARY_SUBDOMAIN+'.'+psm.cluster.endpoint.ROOT_DOMAIN)
                 + ingrule.http.withPaths([
 
                     /*
@@ -109,7 +114,8 @@ local ingpath = k.networking.v1.httpIngressPath;
             ])
 
             + ing.spec.withTls([
-                k.networking.v1.ingressTLS.withHosts(["klms."+psm.endpoint.host])
+                // k.networking.v1.ingressTLS.withHosts(["klms."+psm.endpoint.host])
+                k.networking.v1.ingressTLS.withHosts([psm.cluster.endpoint.PRIMARY_SUBDOMAIN+'.'+psm.cluster.endpoint.ROOT_DOMAIN])
                 + k.networking.v1.ingressTLS.withSecretName("stelar-tls"),
             ])
 
