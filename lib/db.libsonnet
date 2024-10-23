@@ -1,13 +1,10 @@
 /*
-    Code to deploy the STELAR core database component
-
+    Deployment of the STELAR core database component as statefulset
  */
 local k = import "k.libsonnet";
-
 local podinit = import "podinit.libsonnet";
 local pvol = import "pvolumes.libsonnet";
 local svcs = import "services.libsonnet";
-
 
 /* K8S API MODEL */
 local deploy = k.apps.v1.deployment;
@@ -22,21 +19,46 @@ local service = k.core.v1.service;
 local cm = k.core.v1.configMap;
 local secret = k.core.v1.secret;
 
-local DBENV = import "dbenv.jsonnet";
-local PORT = import "stdports.libsonnet";
-local IMAGE_CONFIG = import "images.jsonnet";
 
-/**********************************
+local DB_CONFIG(pim, psm) = {
 
-    POSTGIS is required. 
+    ########################################
+    ##  DEFAULT DATABASE & SERVER ##########
+    ########################################  
+    POSTGRES_USER: pim.db.POSTGRES_USER, # 'postgres'
+    POSTGRES_PASSWORD: psm.db.POSTGRES_USER_PASSWORD, # 'postgres'
+    POSTGRES_DB: pim.db.POSTGRES_DEFAULT_DB, # 'postgres'
+    POSTGRES_HOST: pim.db.POSTGRES_HOST,
+    POSTGRES_PORT: std.toString(pim.ports.PG),
 
-    A custom image also contains the schema of the tool execution metadata.
 
- */
+    ########################################
+    ##  STELAR DATABASE W/ LOT OF SCHEMAS  #
+    ########################################  
+    CKAN_DB_USER: pim.db.CKAN_DB_USER, # 'ckan'
+    CKAN_DB_PASSWORD: psm.db.CKAN_DB_PASSWORD, # 'ckan'
+    CKAN_DB: pim.db.CKAN_DB, #'stelar'
+
+
+    ########################################
+    ##  KEYCLOAK SCHEMA AND USER ###########
+    ########################################  
+    KEYCLOAK_DB_USER: pim.db.KEYCLOAK_DB_USER, # 'keycloak'
+    KEYCLOAK_DB_PASSWORD: psm.db.KEYCLOAK_DB_PASSWORD, # 'keycloak'
+    KEYCLOAK_DB: pim.db.CKAN_DB, # 'stelar'
+    KEYCLOAK_DB_SCHEMA: pim.db.KEYCLOAK_DB_SCHEMA, # 'keycloak'
+
+
+    //CKAN modules schemata and databases ??????????? what about this
+    DATASTORE_READONLY_USER: 'datastore_ro',
+    DATASTORE_READONLY_PASSWORD: 'datastore',
+    DATASTORE_DB: 'datastore',
+}
+
 
 {
 
-    manifest(psm): {
+    manifest(pim, psm): {
 
         pvc_db_storage: pvol.pvcWithDynamicStorage(
             "postgis-storage", 
@@ -44,10 +66,10 @@ local IMAGE_CONFIG = import "images.jsonnet";
             psm.dynamic_volume_storage_class),
 
         postgis_deployment: stateful.new(name="db", containers=[
-            container.new("postgis", psm.images.POSTGIS_IMAGE_NAME)
+            container.new("postgis", psm.images.POSTGIS_IMAGE)
             + container.withImagePullPolicy("Always")
 
-            + container.withEnvMap(DBENV)
+            + container.withEnvMap(DB_CONFIG(pim,psm))
             + container.withEnvMap({
                 /* We are using /var/lib/postgresql/data as mountpoint, and initdb does not like it,
                 so we just use a subdirectory...
@@ -57,11 +79,10 @@ local IMAGE_CONFIG = import "images.jsonnet";
 
             // Expose port 
             + container.withPorts([
-                containerPort.newNamed(PORT.PG, "psql")      
+                containerPort.newNamed(pim.ports.PG, "psql")      
                 ])
 
             // liveness check
-            //+ container.livenessProbe.exec.withCommand("pg_isready")
             + container.livenessProbe.exec.withCommand([
                 "pg_isready", "-U", "postgres"
             ])
@@ -80,7 +101,7 @@ local IMAGE_CONFIG = import "images.jsonnet";
             vol.fromPersistentVolumeClaim("postgis-storage-vol", "postgis-storage")
         ]),
 
-        postgis_svc: svcs.headlessService.new("db", "postgis", PORT.PG)
+        postgis_svc: svcs.headlessService.new("db", "postgis", pim.ports.PG)
         
     }
 
