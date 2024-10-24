@@ -28,23 +28,19 @@ local KEYCLOAK_CONFIG(pim,psm) = {
                     user: pim.db.CKAN_DB_USER,
                     password: psm.db.CKAN_DB_PASSWORD,
                     host: pim.db.POSTGRES_HOST,
-                    db: pim.db.KEYCLOAK_DB
+                    db: pim.db.STELAR_DB,
                 },
     KC_DB: pim.keycloak.DB_TYPE,
     KC_DB_URL: db_url,
-    KC_DB_USERNAME: psm.keycloak.KC_DB_USERNAME,
+    KC_DB_USERNAME: pim.db.KEYCLOAK_DB_USER,
     KC_DB_PASSWORD: psm.keycloak.KC_DB_PASSWORD,
-    KC_DB_SCHEMA: pim.keycloak.KC_DB_SCHEMA,
+    KC_DB_SCHEMA: pim.db.KEYCLOAK_DB_SCHEMA,
     KEYCLOAK_ADMIN: pim.keycloak.KEYCLOAK_ADMIN,
     KEYCLOAK_ADMIN_PASSWORD: psm.keycloak.KEYCLOAK_ADMIN_PASSWORD,
     KC_HOSTNAME: psm.keycloak.KC_HOSTNAME,
     KC_HOSTNAME_ADMIN: psm.keycloak.KC_HOSTNAME_ADMIN,
-    // KC_HOSTNAME_DEBUG: "true",
     JDBC_PARAMS: pim.keycloak.JDBC_PARAMS,
-    KC_HTTP_ENABLED: pim.keycloak.KC_HTTP_ENABLED,
-    // KC_HEALTH_ENABLED: "true",
-    // KC_METRICS_ENABLED: "true",
-    
+    KC_HTTP_ENABLED: pim.keycloak.KC_HTTP_ENABLED,    
 };
 
 {

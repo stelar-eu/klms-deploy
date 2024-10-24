@@ -28,8 +28,8 @@ local secret = k.core.v1.secret;
         base_container(name):: container.new(name, psm.images.ONTOP_IMAGE)
             + container.withEnvMap({
                 ONTOP_DB_USER: pim.db.CKAN_DB_USER,
-                ONTOP_DB_PASSWORD: pim.db.CKAN_DB_PASSWORD,
-                ONTOP_DB_URL: "jdbc:postgresql://"+pim.db.POSTGRES_HOST+"/"+pim.db.CKAN_DB,
+                ONTOP_DB_PASSWORD: psm.db.CKAN_DB_PASSWORD,
+                ONTOP_DB_URL: "jdbc:postgresql://"+pim.db.POSTGRES_HOST+"/"+pim.db.STELAR_DB,
             })
             + container.withImagePullPolicy('Always')
         ,
@@ -38,7 +38,7 @@ local secret = k.core.v1.secret;
             user: pim.db.CKAN_DB_USER,
             password: psm.db.CKAN_DB_PASSWORD,
             host: pim.db.POSTGRES_HOST,
-            db: pim.db.CKAN_DB
+            db: pim.db.STELAR_DB
         },
         local ckan_url = "http://ckan:%s/api/3/action/status_show" % pim.ports.CKAN,
 

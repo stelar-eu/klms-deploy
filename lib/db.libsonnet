@@ -37,7 +37,7 @@ local DB_CONFIG(pim, psm) = {
     ########################################  
     CKAN_DB_USER: pim.db.CKAN_DB_USER, # 'ckan'
     CKAN_DB_PASSWORD: psm.db.CKAN_DB_PASSWORD, # 'ckan'
-    CKAN_DB: pim.db.CKAN_DB, #'stelar'
+    CKAN_DB: pim.db.STELAR_DB, #'stelar'
 
 
     ########################################
@@ -45,7 +45,7 @@ local DB_CONFIG(pim, psm) = {
     ########################################  
     KEYCLOAK_DB_USER: pim.db.KEYCLOAK_DB_USER, # 'keycloak'
     KEYCLOAK_DB_PASSWORD: psm.db.KEYCLOAK_DB_PASSWORD, # 'keycloak'
-    KEYCLOAK_DB: pim.db.CKAN_DB, # 'stelar'
+    KEYCLOAK_DB: pim.db.STELAR_DB, # 'stelar'
     KEYCLOAK_DB_SCHEMA: pim.db.KEYCLOAK_DB_SCHEMA, # 'keycloak'
 
 
@@ -53,7 +53,7 @@ local DB_CONFIG(pim, psm) = {
     DATASTORE_READONLY_USER: 'datastore_ro',
     DATASTORE_READONLY_PASSWORD: 'datastore',
     DATASTORE_DB: 'datastore',
-}
+};
 
 
 {
@@ -104,6 +104,5 @@ local DB_CONFIG(pim, psm) = {
         postgis_svc: svcs.headlessService.new("db", "postgis", pim.ports.PG)
         
     }
-
 
 }
