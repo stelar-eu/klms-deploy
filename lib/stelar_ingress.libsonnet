@@ -9,7 +9,7 @@ local ingrule = k.networking.v1.ingressRule;
 local ingpath = k.networking.v1.httpIngressPath;
 
 {
-    manifest(psm): {
+    manifest(pim, psm): {
 
         ingress_kc: ing.new("kc")
             + ing.metadata.withAnnotations({
