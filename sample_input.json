@@ -58,13 +58,18 @@
             "root_pass_secret": "root-pass-secret"
         },        
         "images": {
-            "CKAN_IMAGE": "petrou/stelar-tuc:ckan",
+            "CKAN_IMAGE": "petroud/stelar-tuc:ckan",
             "API_IMAGE":"petroud/stelar-tuc:data-api-prod",
             "POSTGIS_IMAGE":"petroud/stelar-tuc:postgres",
             "MINIO_IMAGE":"quay.io/minio/minio:latest",
             "ONTOP_IMAGE": "vsam/stelar-okeanos:ontop",
             "KEYCLOAK_IMAGE":"quay.io/keycloak/keycloak:latest",
             "REDIS_IMAGE":"redis:7"
+        },
+        "api":{
+            "SMTP_SERVER": "stelar.gr",
+            "SMTP_PORT": "465",
+            "SMTP_USERNAME": "info@stelar.gr"
         }
     }
 }
