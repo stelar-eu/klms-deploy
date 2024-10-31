@@ -14,7 +14,7 @@ local k = import "k.libsonnet";
 local container = k.core.v1.container;
 local envSource = k.core.v1.envVarSource;
 
-local PODINIT_IMAGE = 'vsam/stelar-okeanos:podinit';
+local PODINIT_IMAGE = 'petroud/stelar-tuc:podinit';
 
 /************
     Describe option syntax and translation

@@ -1,0 +1,25 @@
+{
+  "apiVersion": "tanka.dev/v1alpha1",
+  "kind": "Environment",
+  "metadata": {
+    "name": "environments/test_env",
+    "namespace": "environmnets/test_env/main.jsonnet"
+  },
+  "spec": {
+    "contextNames": [
+      "minikube"
+    ],
+    "namespace": "default",
+    "resourceDefaults": {
+      "annotations": {
+        "stelar.eu/author": "vsamoladas@tuc.gr"
+      },
+      "labels": {
+        "app.kubernetes.io/managed-by": "tanka",
+        "app.kubernetes.io/part-of": "stelar",
+        "stelar.deployment": "main"
+      }
+    },
+    "expectVersions": {}
+  }
+}
