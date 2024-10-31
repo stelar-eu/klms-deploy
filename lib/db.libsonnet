@@ -52,7 +52,6 @@ local DB_CONFIG(pim) = {
 
     //CKAN modules schemata and databases ??????????? what about this
     DATASTORE_READONLY_USER: 'datastore_ro',
-    DATASTORE_READONLY_PASSWORD: 'datastore',
     DATASTORE_DB: 'datastore',
 };
 
@@ -79,9 +78,10 @@ local DB_CONFIG(pim) = {
             })
             // Pass secrets to the container by referencing their names
             + container.withEnvMap({
-                CKAN_DB_PASSWORD: envSource.secretKeyRef.withName(config.secrets.ckan_db_password_secret).withKey("password"),          
-                POSTGRES_DB_PASSWORD: envSource.secretKeyRef.withName(config.secrets.postgres_db_password_secret).withKey("password"),          
-                KEYCLOAK_DB_PASSWORD: envSource.secretKeyRef.withName(config.keycloak_db_passowrd_secret).withKey("password"),
+                CKAN_DB_PASSWORD: envSource.secretKeyRef.withName(config.secrets.db.ckan_db_password_secret)+envSource.secretKeyRef.withKey("password"),          
+                POSTGRES_PASSWORD: envSource.secretKeyRef.withName(config.secrets.db.postgres_db_password_secret)+envSource.secretKeyRef.withKey("password"),          
+                KEYCLOAK_DB_PASSWORD: envSource.secretKeyRef.withName(config.secrets.db.keycloak_db_passowrd_secret)+envSource.secretKeyRef.withKey("password"),
+                DATASTORE_READONLY_PASSWORD: envSource.secretKeyRef.withName(config.secrets.db.datastore_db_password_secret)+envSource.secretKeyRef.withKey("password"),
             })
             // Expose port 
             + container.withPorts([
