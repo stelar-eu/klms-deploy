@@ -4,8 +4,8 @@
  */
 
 {
-    transform_pim_psm(pim, psm, components): [
-        component.manifest(pim, psm),
+    transform_pim(pim, config, components): [
+        component.manifest(pim, config),
         for component in components
     ],
 }
