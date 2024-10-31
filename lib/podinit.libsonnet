@@ -12,7 +12,7 @@
 
 local k = import "k.libsonnet";
 local container = k.core.v1.container;
-local pod = k.core.v1.pod;
+local envSource = k.core.v1.envVarSource;
 
 local PODINIT_IMAGE = 'vsam/stelar-okeanos:podinit';
 
@@ -80,9 +80,15 @@ local global_default_flags = {
         + container.withArgs(['http', url]+flags_map_to_array(flags, global_default_flags)),
 
     // Postgresql databases
-    wait4_postgresql(name, url, flags={}):
+    wait4_postgresql(name, pim, config, flags={}):
         self._base_container(name)
-        + container.withArgs(['postgresql', url]+flags_map_to_array(flags, global_default_flags)),
+        + container.withArgs(['postgresql']+flags_map_to_array(flags, global_default_flags))
+        + container.withEnvMap({
+            POSTGRES_HOST: pim.db.POSTGRES_HOST,
+            POSTGRES_USER: pim.db.CKAN_DB_USER,
+            POSTGRES_DB: pim.db.STELAR_DB,
+            POSTGRES_PASSWORD: envSource.secretKeyRef.withName(config.secrets.ckan_db_password_secret).withKey("password"),
+        }),
 
     // redis
     wait4_redis(name, url, flags={}):

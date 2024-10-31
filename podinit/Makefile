@@ -1,13 +1,17 @@
 
+DOCKER=docker
+IMGTAG=petroud/stelar-tuc:podinit
+IMGPATH=.
+DOCKERFILE=$(IMGPATH)/Dockerfile
+
 .PHONY: all build push
 
-CTRNAME = vsam/stelar-okeanos:podinit
 
-all:
-	@docker build . -t $(CTRNAME) --push
+all: build push
 
 build:
-	@docker build . -t $(CTRNAME)
+	$(DOCKER) build -f $(DOCKERFILE) $(IMGPATH) -t $(IMGTAG)
 
 push:
-	@docker push $(CTRNAME)
+	$(DOCKER) push $(IMGTAG)
+
