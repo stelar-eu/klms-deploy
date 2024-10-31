@@ -36,10 +36,10 @@ local secret = k.core.v1.secret;
     (c) the deployment itself
  */
 
-local redis_deployment(pim, psm) = deploy.new(
+local redis_deployment(pim) = deploy.new(
    name="redis",
     containers = [
-        container.new('redis', psm.images.REDIS_IMAGE)
+        container.new('redis', pim.images.REDIS_IMAGE)
 
         + container.livenessProbe.exec.withCommand(
             ["/usr/local/bin/redis-cli", "-e", "QUIT"]
@@ -69,8 +69,8 @@ local redis_deployment(pim, psm) = deploy.new(
 
 
 {
-    manifest(pim, psm): {
-        local redis_dep = redis_deployment(pim, psm),
+    manifest(pim, config): {
+        local redis_dep = redis_deployment(pim),
         redis: [
             redis_dep,
             svcs.serviceFor(redis_dep)

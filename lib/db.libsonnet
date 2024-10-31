@@ -17,16 +17,17 @@ local pod = k.core.v1.pod;
 local vol = k.core.v1.volume;
 local service = k.core.v1.service;
 local cm = k.core.v1.configMap;
-local secret = k.core.v1.secret;
+local envVar = k.core.v1.envVar;
+local envSource = k.core.v1.envVarSource;
 
 
-local DB_CONFIG(pim, psm) = {
+local DB_CONFIG(pim) = {
 
     ########################################
     ##  DEFAULT DATABASE & SERVER ##########
     ########################################  
     POSTGRES_USER: pim.db.POSTGRES_USER, # 'postgres'
-    POSTGRES_PASSWORD: psm.db.POSTGRES_USER_PASSWORD, # 'postgres'
+    #POSTGRES_PASSWORD: config.db.POSTGRES_USER_PASSWORD, # 'postgres'
     POSTGRES_DB: pim.db.POSTGRES_DEFAULT_DB, # 'postgres'
     POSTGRES_HOST: pim.db.POSTGRES_HOST,
     POSTGRES_PORT: std.toString(pim.ports.PG),
@@ -36,7 +37,7 @@ local DB_CONFIG(pim, psm) = {
     ##  STELAR DATABASE W/ LOT OF SCHEMAS  #
     ########################################  
     CKAN_DB_USER: pim.db.CKAN_DB_USER, # 'ckan'
-    CKAN_DB_PASSWORD: psm.db.CKAN_DB_PASSWORD, # 'ckan'
+    #CKAN_DB_PASSWORD: config.db.CKAN_DB_PASSWORD, # 'ckan'
     CKAN_DB: pim.db.STELAR_DB, #'stelar'
 
 
@@ -44,7 +45,7 @@ local DB_CONFIG(pim, psm) = {
     ##  KEYCLOAK SCHEMA AND USER ###########
     ########################################  
     KEYCLOAK_DB_USER: pim.db.KEYCLOAK_DB_USER, # 'keycloak'
-    KEYCLOAK_DB_PASSWORD: psm.db.KEYCLOAK_DB_PASSWORD, # 'keycloak'
+    #KEYCLOAK_DB_PASSWORD: config.db.KEYCLOAK_DB_PASSWORD, # 'keycloak'
     KEYCLOAK_DB: pim.db.STELAR_DB, # 'stelar'
     KEYCLOAK_DB_SCHEMA: pim.db.KEYCLOAK_DB_SCHEMA, # 'keycloak'
 
@@ -58,29 +59,34 @@ local DB_CONFIG(pim, psm) = {
 
 {
 
-    manifest(pim, psm): {
+    manifest(pim, config): {
 
         pvc_db_storage: pvol.pvcWithDynamicStorage(
             "postgis-storage", 
             "5Gi", 
-            psm.dynamic_volume_storage_class),
+            pim.dynamic_volume_storage_class),
 
         postgis_deployment: stateful.new(name="db", containers=[
-            container.new("postgis", psm.images.POSTGIS_IMAGE)
+            container.new("postgis", pim.images.POSTGIS_IMAGE)
             + container.withImagePullPolicy("Always")
 
-            + container.withEnvMap(DB_CONFIG(pim,psm))
+            + container.withEnvMap(DB_CONFIG(pim))
             + container.withEnvMap({
                 /* We are using /var/lib/postgresql/data as mountpoint, and initdb does not like it,
                 so we just use a subdirectory...
                 */
                 PGDATA: "/var/lib/postgresql/data/pgdata",
             })
-
+            // Pass secrets to the container by referencing their names
+            + container.withEnvMap({
+                CKAN_DB_PASSWORD: envSource.secretKeyRef.withName(config.secrets.ckan_db_password_secret).withKey("password"),          
+                POSTGRES_DB_PASSWORD: envSource.secretKeyRef.withName(config.secrets.postgres_db_password_secret).withKey("password"),          
+                KEYCLOAK_DB_PASSWORD: envSource.secretKeyRef.withName(config.keycloak_db_passowrd_secret).withKey("password"),
+            })
             // Expose port 
             + container.withPorts([
                 containerPort.newNamed(pim.ports.PG, "psql")      
-                ])
+            ])
 
             // liveness check
             + container.livenessProbe.exec.withCommand([

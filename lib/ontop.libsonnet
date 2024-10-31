@@ -21,25 +21,27 @@ local vol = k.core.v1.volume;
 local service = k.core.v1.service;
 local cm = k.core.v1.configMap;
 local secret = k.core.v1.secret;
+local envSource = k.core.v1.envVarSource;
 
 {
-    manifest(pim, psm): {
+    manifest(pim, config): {
 
-        base_container(name):: container.new(name, psm.images.ONTOP_IMAGE)
+        base_container(name):: container.new(name, pim.images.ONTOP_IMAGE)
             + container.withEnvMap({
                 ONTOP_DB_USER: pim.db.CKAN_DB_USER,
-                ONTOP_DB_PASSWORD: psm.db.CKAN_DB_PASSWORD,
+                ONTOP_DB_PASSWORD: envSource.secretKeyRef.withName(config.secrets.ckan_db_password_secret).withKey("password"),
+                //ONTOP_DB_PASSWORD: psm.db.CKAN_DB_PASSWORD,
                 ONTOP_DB_URL: "jdbc:postgresql://"+pim.db.POSTGRES_HOST+"/"+pim.db.STELAR_DB,
             })
             + container.withImagePullPolicy('Always')
         ,
 
-        local db_url = "postgresql://%(user)s:%(password)s@%(host)s/%(db)s?sslmode=disable" % {
-            user: pim.db.CKAN_DB_USER,
-            password: psm.db.CKAN_DB_PASSWORD,
-            host: pim.db.POSTGRES_HOST,
-            db: pim.db.STELAR_DB
-        },
+        // local db_url = "postgresql://%(user)s:%(password)s@%(host)s/%(db)s?sslmode=disable" % {
+        //     user: pim.db.CKAN_DB_USER,
+        //     password: psm.db.CKAN_DB_PASSWORD,
+        //     host: pim.db.POSTGRES_HOST,
+        //     db: pim.db.STELAR_DB
+        // },
         local ckan_url = "http://ckan:%s/api/3/action/status_show" % pim.ports.CKAN,
 
         deployment: deploy.new(
@@ -60,7 +62,7 @@ local secret = k.core.v1.secret;
 
             /* We need to wait for ckan to be ready */
             //podinit.wait4_postgresql("wait4-db", ENV.CKAN_SQLALCHEMY_URL + "?sslmode=disable"),
-            podinit.wait4_postgresql("wait4-db", db_url),
+            podinit.wait4_postgresql("wait4-db", pim, config),
             podinit.wait4_http("wait4-ckan", ckan_url),
         ])
         ,

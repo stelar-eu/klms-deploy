@@ -6,39 +6,25 @@
 
 */
 local k = import "k.libsonnet";
-//local util = import "github.com/grafana/jsonnet-libs/ksonnet-util/util.libsonnet";
-local urllib = "urllib.libsonnet";
-
 local podinit = import "podinit.libsonnet";
 local pvol = import "pvolumes.libsonnet";
 local svcs = import "services.libsonnet";
-
 
 /* K8S API MODEL */
 local deploy = k.apps.v1.deployment;
 local stateful = k.apps.v1.statefulSet;
 local container = k.core.v1.container;
 local containerPort = k.core.v1.containerPort;
-local servicePort = k.core.v1.servicePort;
 local volumeMount = k.core.v1.volumeMount;
-local pod = k.core.v1.pod;
 local vol = k.core.v1.volume;
-local service = k.core.v1.service;
-local cm = k.core.v1.configMap;
-local secret = k.core.v1.secret;
 
-local psqlURI = "postgresql://%(user)s:%(password)s@%(host)s/%(db)s";
-
+local envSource = k.core.v1.envVarSource;
 
 /*****************************
 
     Environment/configuration values
     
  */
-
-
-local DBENV = import "dbenv.jsonnet";
-
 
 # These should be initialized randomly
 # However, it is possible to let the ckan setup code to do it.
@@ -56,53 +42,44 @@ local SESSION_SECRETS = {
 };
 
 
+// local KEYCLOAK_CONFIG(pim,config) = {
+//     local ckan_endp = config.cluster.endpoint { path: '/dc/user/sso_login' },
+//     local ckan_endp_url1 =  "https://%(PRIMARY_SUBDOMAIN)s%.%(ROOT_DOMAIN)s%(path)s" %  ckan_endp,
+//     // local ckan_endp_url2 = urllib.url_from(ckan_endp),
 
-local KEYCLOAK_CONFIG(pim,psm) = {
-    local ckan_endp = psm.cluster.endpoint { path: '/dc/user/sso_login' },
-    local ckan_endp_url1 =  "https://%(PRIMARY_SUBDOMAIN)s%.%(ROOT_DOMAIN)s%(path)s" %  ckan_endp,
-    // local ckan_endp_url2 = urllib.url_from(ckan_endp),
-
-    CKANEXT__KEYCLOAK__SERVER_URL: 'https://'+psm.cluster.endpoint.KEYCLOAK_SUBDOMAIN+'.'+psm.cluster.endpoint.ROOT_DOMAIN, #"https://kc.stelar.gr/",
-    CKANEXT__KEYCLOAK__CLIENT_ID: pim.ckan.CKANEXT__KEYCLOAK__CLIENT_ID, #"ckan",
-    CKANEXT__KEYCLOAK__REALM_NAME:  pim.keycloak.REALM, #"master",
-    CKANEXT__KEYCLOAK__REDIRECT_URI:  ckan_endp_url1,
-    CKANEXT__KEYCLOAK__CLIENT_SECRET_KEY:  psm.ckan.CKANEXT__KEYCLOAK__CLIENT_SECRET_KEY, #"fga1Ffy0XQDxrnFjIivdjz0q1zaa2hC2",
-    CKANEXT__KEYCLOAK__BUTTON_STYLE:  "",
-    CKANEXT__KEYCLOAK__ENABLE_CKAN_INTERNAL_LOGIN: "True",
-};
+//     CKANEXT__KEYCLOAK__SERVER_URL: 'https://'+psm.cluster.endpoint.KEYCLOAK_SUBDOMAIN+'.'+psm.cluster.endpoint.ROOT_DOMAIN, #"https://kc.stelar.gr/",
+//     CKANEXT__KEYCLOAK__CLIENT_ID: pim.ckan.CKANEXT__KEYCLOAK__CLIENT_ID, #"ckan",
+//     CKANEXT__KEYCLOAK__REALM_NAME:  pim.keycloak.REALM, #"master",
+//     CKANEXT__KEYCLOAK__REDIRECT_URI:  ckan_endp_url1,
+//     CKANEXT__KEYCLOAK__CLIENT_SECRET_KEY:  psm.ckan.CKANEXT__KEYCLOAK__CLIENT_SECRET_KEY, #"fga1Ffy0XQDxrnFjIivdjz0q1zaa2hC2",
+//     CKANEXT__KEYCLOAK__BUTTON_STYLE:  "",
+//     CKANEXT__KEYCLOAK__ENABLE_CKAN_INTERNAL_LOGIN: "True",
+// };
 
 
 local ENV = 
-    DBENV 
-    + SESSION_SECRETS 
+    SESSION_SECRETS 
     + {
     # CKAN core
     CKAN_VERSION: '2.10.0',
     CKAN_PORT: "5000",
     CKAN_PORT_HOST: "5000",
-    CKAN_SITE_URL: "<from psm>",
     CKAN__ROOT_PATH: "/dc",
     CKAN_SITE_ID: "default",
 
-
-    # TODO: Move these in a secret!
     CKAN_SYSADMIN_NAME: "ckan_admin",
-    CKAN_SYSADMIN_PASSWORD: "stelar1234",
     CKAN_SYSADMIN_EMAIL: "vsam@softnet.tuc.gr",
 
-    local _DB_HOST = {host: DBENV.POSTGRES_HOST},
-    local _CKAN_U = _DB_HOST+{user: DBENV.CKAN_DB_USER, password: DBENV.CKAN_DB_PASSWORD},
-    local _DS_U = _DB_HOST+{user: DBENV.DATASTORE_READONLY_USER, password: DBENV.DATASTORE_READONLY_PASSWORD},
-
-
-    CKAN_SQLALCHEMY_URL: psqlURI % (_CKAN_U + {db: DBENV.CKAN_DB}),
-    CKAN_DATASTORE_WRITE_URL: psqlURI % (_CKAN_U + {db: DBENV.DATASTORE_DB}),
-    CKAN_DATASTORE_READ_URL: psqlURI  % (_DS_U + {db: DBENV.DATASTORE_DB}),
-
-    # Test database connections
-    TEST_CKAN_SQLALCHEMY_URL: self.CKAN_SQLALCHEMY_URL+"_test",
-    TEST_CKAN_DATASTORE_WRITE_URL: self.CKAN_DATASTORE_WRITE_URL+"_test",
-    TEST_CKAN_DATASTORE_READ_URL: self.CKAN_DATASTORE_READ_URL+"_test",
+    // local _DB_HOST = {host: DBENV.POSTGRES_HOST},
+    // local _CKAN_U = _DB_HOST+{user: DBENV.CKAN_DB_USER, password: DBENV.CKAN_DB_PASSWORD},
+    // local _DS_U = _DB_HOST+{user: DBENV.DATASTORE_READONLY_USER, password: DBENV.DATASTORE_READONLY_PASSWORD},
+    // CKAN_SQLALCHEMY_URL: psqlURI % (_CKAN_U + {db: DBENV.CKAN_DB}),
+    // CKAN_DATASTORE_WRITE_URL: psqlURI % (_CKAN_U + {db: DBENV.DATASTORE_DB}),
+    // CKAN_DATASTORE_READ_URL: psqlURI  % (_DS_U + {db: DBENV.DATASTORE_DB}),
+    // # Test database connections
+    // TEST_CKAN_SQLALCHEMY_URL: self.CKAN_SQLALCHEMY_URL+"_test",
+    // TEST_CKAN_DATASTORE_WRITE_URL: self.CKAN_DATASTORE_WRITE_URL+"_test",
+    // TEST_CKAN_DATASTORE_READ_URL: self.CKAN_DATASTORE_READ_URL+"_test",
 
     # Must match the volumeMount below
     CKAN_STORAGE_PATH: "/var/lib/ckan",
@@ -140,6 +117,7 @@ local ENV =
     # timezone!
     TZ: "UTC",
 
+    ##### TO-DO: Should this below be fetched from PIM??????????????????????????????????????????????
     DATAPUSHER_VERSION: "0.0.20",
     CKAN_DATAPUSHER_URL: "http://datapusher:8800",
     CKAN__DATAPUSHER__CALLBACK_URL_BASE: "http://ckan:5000",
@@ -175,27 +153,45 @@ local DATAPUSHER_IMAGE_NAME = "ckan/ckan-base-datapusher:%s" % ENV.DATAPUSHER_VE
  */
 
 
-local pvc_ckan_storage(psm) = 
+local pvc_ckan_storage(pim) = 
     pvol.pvcWithDynamicStorage(
         "ckan-storage", "5Gi", 
-        psm.dynamic_volume_storage_class);
+        pim.dynamic_volume_storage_class);
 
-local ckan_deployment(psm) = 
-    local MYENV = ENV {
-        CKAN_SITE_URL: "https://klms."+psm.endpoint.host
-    }
-    + KEYCLOAK_CONFIG(psm)
-    ;
-    stateful.new(
-    name="ckan",
-    containers = [
-        container.new('ckan', psm.images.CKAN_IMAGE)
+local ckan_deployment(pim, config) = 
+    // local MYENV = ENV {
+    //     CKAN_SITE_URL: "https://klms."+psm.endpoint.host
+    // };
+    //+ KEYCLOAK_CONFIG(psm);
+    stateful.new(name="ckan", containers = [
+        container.new('ckan', pim.images.CKAN_IMAGE)
         + container.withImagePullPolicy("Always")
-        + container.withEnvMap(MYENV)
-        
+        + container.withEnvMap(ENV + {
+            CKAN_SITE_URL: config.cluster.endpoint.SCHEME+"://"+config.cluster.endpoint.PRIMARY_SUBDOMAIN+"."+config.cluster.endpoint.ROOT_DOMAIN,
+            CKAN_ADMIN_PASSWORD: envSource.secretKeyRef.withName(config.secrets.ckan.ckan_admin_password_secret).withKey("password"),
+
+            # Create secret env vars in order to access it and construct required URLs.
+            CKAN_DB_PASSWORD: envSource.secretKeyRef.withName(config.secrets.db.ckan_db_password_secret).withKey("password"),
+            DATASTORE_DB_PASSWORD: envSource.secretKeyRef.withName(config.secrets.db.datastore_db_password_secret).withKey("password"),
+
+            # Construct db connection URLs.
+            local _DB_HOST = {host: pim.db.POSTGRES_HOST},
+            local _CKAN_U = _DB_HOST+{user: pim.db.CKAN_DB_USER, password: "$(CKAN_DB_PASSWORD)"},
+            local _DS_U = _DB_HOST+{user: pim.db.DATASTORE_READONLY_USER, password: "$(DATASTORE_DB_PASSWORD)"},
+            local psqlURI = "postgresql://%(user)s:%(password)s@%(host)s/%(db)s",
+
+            CKAN_SQLALCHEMY_URL: psqlURI % (_CKAN_U + {db: pim.db.STELAR_DB}),
+            CKAN_DATASTORE_WRITE_URL: psqlURI % (_CKAN_U + {db: pim.db.DATASTORE_DB}),
+            CKAN_DATASTORE_READ_URL: psqlURI  % (_DS_U + {db: pim.db.DATASTORE_DB}),
+
+            # Test database connections
+            TEST_CKAN_SQLALCHEMY_URL: self.CKAN_SQLALCHEMY_URL+"_test",
+            TEST_CKAN_DATASTORE_WRITE_URL: self.CKAN_DATASTORE_WRITE_URL+"_test",
+            TEST_CKAN_DATASTORE_READ_URL: self.CKAN_DATASTORE_READ_URL+"_test",
+        })
         + (
         container.livenessProbe.exec.withCommand(
-            ["/usr/bin/curl", "--fail", "http://localhost:%s/api/3/action/status_show" % ENV.CKAN_PORT_HOST]
+            ["/usr/bin/curl", "--fail", "http://localhost:%s/api/3/action/status_show" % pim.ports.CKAN]
             )
         + container.livenessProbe.withInitialDelaySeconds(30)
         + container.livenessProbe.withPeriodSeconds(60)
@@ -205,7 +201,7 @@ local ckan_deployment(psm) =
 
         // Expose 5000
         + container.withPorts([
-            containerPort.newNamed(PORT.CKAN, "api"),
+            containerPort.newNamed(pim.ports.CKAN, "api"),
         ])
 
         + container.withVolumeMounts([
@@ -222,8 +218,8 @@ local ckan_deployment(psm) =
 )
 + stateful.spec.template.spec.withInitContainers([
     podinit.wait4_redis("wait4-redis", ENV.CKAN_REDIS_URL),
-    podinit.wait4_postgresql("wait4-db", ENV.CKAN_SQLALCHEMY_URL + "?sslmode=disable"),
-    podinit.wait4_http("wait4-solr", "http://solr:8983/solr/"),
+    podinit.wait4_postgresql("wait4-db", pim, config),
+    podinit.wait4_http("wait4-solr", "http://solr:"+pim.ports.SOLR+"/solr/"),
 ])
 + stateful.spec.template.spec.withVolumes([
     vol.fromPersistentVolumeClaim("ckan-storage-vol", "ckan-storage")
@@ -244,13 +240,13 @@ local ckan_deployment(psm) =
 
 
 
-local pvc_solr_data(psm) = 
+local pvc_solr_data(pim) = 
     pvol.pvcWithDynamicStorage("solr-data", 
-        "5Gi", psm.dynamic_volume_storage_class);
+        "5Gi", pim.dynamic_volume_storage_class);
 
-local solr_deployment(psm) = stateful.new(
-   name="solr",
-    containers = [
+
+
+local solr_deployment(pim) = stateful.new(name="solr", containers = [
         container.new('solr', SOLR_IMAGE_NAME)
 
         + container.livenessProbe.exec.withCommand(
@@ -275,7 +271,7 @@ local solr_deployment(psm) = stateful.new(
 
         // Expose 8983
         + container.withPorts([
-            containerPort.newNamed(PORT.SOLR, "solr"),
+            containerPort.newNamed(pim.ports.SOLR, "solr"),
         ])
 
         + container.withVolumeMounts([
@@ -304,7 +300,7 @@ local solr_deployment(psm) = stateful.new(
     (c) the deployment itself
  */
 
-local datapusher_deployment(psm) = deploy.new(
+local datapusher_deployment(pim) = deploy.new(
     name="datapusher",
     containers = [
         container.new('datapusher', DATAPUSHER_IMAGE_NAME)
@@ -366,21 +362,21 @@ local datapusher_deployment(psm) = deploy.new(
     */
 
 
-    manifest(psm): {
+    manifest(pim, config): {
         ckan: [
-            pvc_ckan_storage(psm),
-            ckan_deployment(psm),
-            svcs.headlessService.new("ckan", "ckan", PORT.CKAN, "api")
+            pvc_ckan_storage(pim),
+            ckan_deployment(pim, config),
+            svcs.headlessService.new("ckan", "ckan", pim.ports.CKAN, "api")
         ],
 
 
         solr: [
-            pvc_solr_data(psm), 
-            solr_deployment(psm),
-            svcs.headlessService.new("solr", "solr", PORT.SOLR, "solr")
+            pvc_solr_data(pim), 
+            solr_deployment(pim),
+            svcs.headlessService.new("solr", "solr", pim.ports.SOLR, "solr")
         ],
 
-        local datapusher_dep = datapusher_deployment(psm),
+        local datapusher_dep = datapusher_deployment(pim),
         datapusher: [
             datapusher_dep,
             svcs.serviceFor(datapusher_dep)

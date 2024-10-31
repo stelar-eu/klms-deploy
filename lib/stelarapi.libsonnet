@@ -25,14 +25,16 @@ local envVar = k.core.v1.envVar;
 local envVarSource = k.core.v1.envVarSource;
 local policyRule = k.rbac.v1.policyRule;
 local configMap = k.core.v1.configMap;
+local envSource = k.core.v1.envVarSource;
+local secretSelector = k.core.v1.secretKeySelectors;
 
 
 #Liveness probe urls used by wait4x during init container(s) runtime.
 local CKAN_URL(pim) = "http://ckan:%s/api/3/action/status_show" % pim.ports.CKAN;
 
-local DB_URL(pim, psm) = "postgresql://%(user)s:%(password)s@%(host)s/%(db)s?sslmode=disable" % { user: pim.db.CKAN_DB_USER, password: psm.db.CKAN_DB_PASSWORD, host: pim.db.POSTGRES_HOST, db: pim.db.STELAR_DB };
+#local DB_URL(pim, config) = "postgresql://%(user)s:%(password)s@%(host)s/%(db)s?sslmode=disable" % { user: pim.db.CKAN_DB_USER, password: secretSelector.withName(config.secrets.db.ckan_db_password_secret).withKey("password"), host: pim.db.POSTGRES_HOST, db: pim.db.STELAR_DB };
 
-local API_CONFIG(pim, psm) = {
+local API_CONFIG(pim, config) = {
 
     ########################################
     ##  DATABASE  ##########################
@@ -40,8 +42,8 @@ local API_CONFIG(pim, psm) = {
     POSTGRES_HOST: pim.db.POSTGRES_HOST,
     POSTGRES_PORT: std.toString(pim.ports.PG),
     POSTGRES_USER: pim.db.CKAN_DB_USER,
-    POSTGRES_PASSWORD: psm.db.CKAN_DB_PASSWORD,
-    POSTGRES_DB: psm.db.STELAR_DB,
+    #POSTGRES_PASSWORD: config.db.CKAN_DB_PASSWORD,
+    POSTGRES_DB: pim.db.STELAR_DB,
 
 
     ########################################
@@ -63,10 +65,10 @@ local API_CONFIG(pim, psm) = {
     ##  DOMAINS  ###########################
     ########################################
     # Note: Plain domains name without protocol!!!
-    KLMS_DOMAIN_NAME: psm.cluster.ROOT_DOMAIN, # eg "stelar.gr"
-    MAIN_INGRESS_SUBDOMAIN: psm.cluster.endpoint.PRIMARY_SUBDOMAIN, # eg "klms"
-    KEYCLOAK_SUBDOMAIN: psm.cluster.endpoint.KEYCLOAK_SUBDOMAIN, # eg "kc"
-    MINIO_API_SUBDOMAIN: psm.cluster.endpoint.MINIO_API_SUBDOMAIN, # eg "minio"
+    KLMS_DOMAIN_NAME: config.cluster.endpoint.ROOT_DOMAIN, # eg "stelar.gr"
+    MAIN_INGRESS_SUBDOMAIN: config.cluster.endpoint.PRIMARY_SUBDOMAIN, # eg "klms"
+    KEYCLOAK_SUBDOMAIN: config.cluster.endpoint.KEYCLOAK_SUBDOMAIN, # eg "kc"
+    MINIO_API_SUBDOMAIN: config.cluster.endpoint.MINIO_API_SUBDOMAIN, # eg "minio"
 
 
     ########################################
@@ -80,24 +82,24 @@ local API_CONFIG(pim, psm) = {
     ########################################
     ##  SMTP  ##############################
     ########################################
-    SMTP_USERNAME: psm.api.SMTP_USERNAME,
-    SMTP_PASSWORD: psm.api.SMTP_PASSWORD, # 'C2g9mh$551!4'
-    SMTP_SERVER: psm.api.SMTP_PASSWORD,
-    SMTP_PORT: psm.api.SMTP_PORT,
+    SMTP_USERNAME: config.api.SMTP_USERNAME,
+    #SMTP_PASSWORD: config.api.SMTP_PASSWORD, # 'C2g9mh$551!4'
+    SMTP_SERVER: config.api.SMTP_PASSWORD,
+    SMTP_PORT: config.api.SMTP_PORT,
 
     EXECUTION_ENGINE: pim.api.EXEC_ENGINE, # "kubernetes"
 };
 
 { 
-    manifest(pim, psm): {
+    manifest(pim, config): {
 
         cmap: configMap.new("api-config-map") + 
-              configMap.withData(API_CONFIG(pim, psm)),
+              configMap.withData(API_CONFIG(pim, config)),
 
         deployment: deploy.new(
             name="stelarapi",
             containers=[
-                container.new("apiserver", psm.images.API_IMAGE)
+                container.new("apiserver", pim.images.API_IMAGE)
                 + container.withImagePullPolicy("Always")
                 + container.withEnvFrom([{
                     configMapRef: {
@@ -108,6 +110,10 @@ local API_CONFIG(pim, psm) = {
                     // Needed to configure exec engine!
                     envVar.fromFieldPath('API_NAMESPACE', 'metadata.namespace')
                 ])
+                + container.withEnvMap({
+                    SMTP_PASSWORD: envSource.secretKeyRef.withName(config.secrets.api.smtp_password_secret).withKey("password"),
+                    POSTGRES_PASSWORD: envSource.secretKeyRef.withName(config.secrets.db.ckan_db_password_secret).withKey("password"),
+                })
                 + container.withPorts([
                     containerPort.newNamed(pim.ports.STELARAPI, "api")
                 ])
@@ -121,7 +127,7 @@ local API_CONFIG(pim, psm) = {
 
         + deploy.spec.template.spec.withInitContainers([
             /* We need to wait for ckan to be ready */
-            podinit.wait4_postgresql("wait4-db", DB_URL(pim, psm)),
+            podinit.wait4_postgresql("wait4-db", pim, config),
             podinit.wait4_http("wait4-ckan", CKAN_URL(pim)),
         ])
         + deploy.spec.template.spec.withServiceAccountName("stelarapi")

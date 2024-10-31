@@ -16,49 +16,56 @@ local cmap = k.core.v1.configMap;
 local service = k.core.v1.service;
 local secret = k.core.v1.secret;
 local podinit = import "podinit.libsonnet";
+local envSource = k.core.v1.envVarSource;
+
+local HOSTNAME(config) = config.cluster.endpoint.SCHEME+"://"+config.cluster.endpoint.KEYCLOAK_SUBDOMAIN+"."+config.cluster.endpoint.ROOT_DOMAIN;
 
 // local db_url
 // local KEYCLOAK_CONFIG = import "keycloakconfig.jsonnet";
-local KEYCLOAK_CONFIG(pim,psm) = {
+local KEYCLOAK_CONFIG(pim,config) = {
     local db_url = "jdbc:postgresql://%(host)s:%(port)s/stelar" % { 
                                                             host: pim.db.POSTGRES_HOST, 
                                                             port: pim.db.POSTGRES_PORT
                                                           },
-    DB_URL_PROBE : "postgresql://%(user)s:%(password)s@%(host)s/%(db)s?sslmode=disable" % {
-                    user: pim.db.CKAN_DB_USER,
-                    password: psm.db.CKAN_DB_PASSWORD,
-                    host: pim.db.POSTGRES_HOST,
-                    db: pim.db.STELAR_DB,
-                },
+    // DB_URL_PROBE : "postgresql://%(user)s:%(password)s@%(host)s/%(db)s?sslmode=disable" % {
+    //                 user: pim.db.CKAN_DB_USER,
+    //                 password: psm.db.CKAN_DB_PASSWORD,
+    //                 host: pim.db.POSTGRES_HOST,
+    //                 db: pim.db.STELAR_DB,
+    //             },
     KC_DB: pim.keycloak.DB_TYPE,
     KC_DB_URL: db_url,
     KC_DB_USERNAME: pim.db.KEYCLOAK_DB_USER,
-    KC_DB_PASSWORD: psm.keycloak.KC_DB_PASSWORD,
+    //KC_DB_PASSWORD: psm.keycloak.KC_DB_PASSWORD,
     KC_DB_SCHEMA: pim.db.KEYCLOAK_DB_SCHEMA,
     KEYCLOAK_ADMIN: pim.keycloak.KEYCLOAK_ADMIN,
-    KEYCLOAK_ADMIN_PASSWORD: psm.keycloak.KEYCLOAK_ADMIN_PASSWORD,
-    KC_HOSTNAME: psm.keycloak.KC_HOSTNAME,
-    KC_HOSTNAME_ADMIN: psm.keycloak.KC_HOSTNAME_ADMIN,
+    //KEYCLOAK_ADMIN_PASSWORD: psm.keycloak.KEYCLOAK_ADMIN_PASSWORD,    
+    KC_HOSTNAME: HOSTNAME(config),
+    KC_HOSTNAME_ADMIN: HOSTNAME(config),
     JDBC_PARAMS: pim.keycloak.JDBC_PARAMS,
     KC_HTTP_ENABLED: pim.keycloak.KC_HTTP_ENABLED,    
 };
 
 {
-    manifest(pim,psm): {
+    manifest(pim,config): {
 
-        local keycloak_config = KEYCLOAK_CONFIG(pim, psm),
+        local keycloak_config = KEYCLOAK_CONFIG(pim, config),
 
         kc_cmap: cmap.new("kc-cmap")
                 // +cmap.withData(KEYCLOAK_CONFIG.ENV),
                    +cmap.withData(keycloak_config),
 
         deployment: deploy.new(name="keycloak", containers=[
-            container.new("keycloak", psm.images.KEYCLOAK_IMAGE)
+            container.new("keycloak", pim.images.KEYCLOAK_IMAGE)
             + container.withEnvFrom([{
                 configMapRef:{
                     name: "kc-cmap",
                 },
             }])
+            + container.withnEnvMap({
+                KC_DB_PASSWORD: envSource.secretKeyRef.withName(config.secrets.db.keycloak_db_passowrd_secret).withKey("password"),
+                KEYCLOAK_ADMIN_PASSWORD: envSource.secretKeyRef.withName(config.secrets.keycloak.root_password_secret).withKey("password"),
+            })
             + container.withCommand(['/opt/keycloak/bin/kc.sh','start','--features=token-exchange,admin-fine-grained-authz'])
             + container.withPorts([
                 // containerPort.newNamed(PORT.KEYCLOAK, "kc")
@@ -72,7 +79,7 @@ local KEYCLOAK_CONFIG(pim,psm) = {
         + deploy.spec.template.spec.withInitContainers([
             /* We need to wait for ckan to be ready */
             // podinit.wait4_postgresql("wait4-db", KEYCLOAK_CONFIG.DB_URL_PROBE),
-            podinit.wait4_postgresql("wait4-db", keycloak_config.DB_URL_PROBE),
+            podinit.wait4_postgresql("wait4-db", pim, config),
         ]),
 
         kc_svc: svcs.serviceFor(self.deployment),
