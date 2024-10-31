@@ -48,6 +48,8 @@
     POSTGRES_USER: 'postgres',
     CKAN_DB_USER: 'ckan',
     STELAR_DB: 'stelar',
+    DATASTORE_DB: 'datastore',
+    DATASTORE_READONLY_USER: 'datastore_ro',
     KEYCLOAK_DB_USER: 'keycloak',
     KEYCLOAK_DB_SCHEMA: 'keycloak',
   },

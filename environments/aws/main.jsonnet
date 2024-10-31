@@ -1,9 +1,7 @@
 local tk_env = import 'spec.json';
-
 local urllib = import "urllib.libsonnet";
 local t = import 'transform.libsonnet';
-local IMAGE_CONFIG = import 'images.jsonnet';
-local PORTS = import 'stdports.libsonnet';
+local defaults = import 'pim.libsonnet';
 
 {
   _tk_env:: tk_env.spec,
@@ -13,6 +11,12 @@ local PORTS = import 'stdports.libsonnet';
     dynamicStorageClass: 'ebs-sc',
   },
 
+  provisioning:: {
+    namespace: $._config.namespace,
+    dynamic_volume_storage_class: 'ebs-sc',
+  },
+
+
   access:: {
     // Root Domain Name to the host of the STELAR deployment
     endpoint: {
@@ -20,8 +24,6 @@ local PORTS = import 'stdports.libsonnet';
       host: 'stelar.gr',
       port: null,
     },
-
-    // certificates, passwords etc
   },
 
   cluster::{
@@ -48,6 +50,7 @@ local PORTS = import 'stdports.libsonnet';
                     (Note: MinIO CONSOLE is served by the
                     PRIMARY subdomain. )
       */
+      SCHEME: "https",
       ROOT_DOMAIN: "stelar.gr",
       PRIMARY_SUBDOMAIN: "klms", # klms.stelar.gr
       KEYCLOAK_SUBDOMAIN: "kc", # kc.stelar.gr
@@ -55,48 +58,60 @@ local PORTS = import 'stdports.libsonnet';
     }
   },
 
-  provisioning:: {
-    namespace: $._config.namespace,
-    dynamic_volume_storage_class: 'ebs-sc',
-  },
 
 
-  ##########################################
-  ## The Platform Specific Model ###########
-  ##########################################
-  # This structure contains parameters     #
-  # that WILL change when deploying the    #
-  # cluster among  different platforms.    #
-  ##########################################
-  psm::
-    self.access {
-      endpoint+: { 
-        url: urllib.url_from(self),
+  configuration::
+    {
+      cluster: self.cluster,
+    }
+    + {
+      api: {
+        SMTP_SERVER: "",
+        SMTP_PORT: "",
+        SMTP_USERNAME: "",
       }
-    } 
-    + self.provisioning
-    + {
-        images: IMAGE_CONFIG {
-          API_IMAGE: 'petroud/stelar-tuc:data-api-prod',
-          CKAN_IMAGE: 'petroud/stelar-tuc:ckan',
+    }
+    + { 
+      secrets:{
+        db: {
+          postgres_db_password_secret: "secret-name",
+          ckan_db_password_secret: "secret-name",
+          keycloak_db_passowrd_secret: "secret-name",
+          datastore_db_password_secret: "secret-name",
         },
-    } 
-    + {
-        cluster: self.cluster
-      },
+        keycloak: {
+          root_password_secret: "secret-name",
+        },
+        api: {
+          smtp_password_secret: "secret-name",
+        },
+        ckan: {
+          ckan_admin_password_secret: "secret-name",
+        },
+        minio: {
+          minio_root_passowrd_secret: "secret-name",
+        }
+      }
+    },
 
 
   ##########################################
   ## The Platform Independent Model ########
   ##########################################
-  # This structure contains parameters     #
-  # that wont change when deploying the    #
-  # cluster among different platforms.     #
-  ##########################################
-  pim:: {
-    ports: PORTS, //TCP ports for all services. See stdports.libsonnet for more
-  },
-
+  pim::
+    self.provisioning
+    + {
+        images: {
+          API_IMAGE: 'petroud/stelar-tuc:data-api-prod',
+          CKAN_IMAGE: 'petroud/stelar-tuc:ckan',
+          POSTGIS_IMAGE:"petroud/stelar-tuc:postgres",
+          MINIO_IMAGE:"quay.io/minio/minio:latest",
+          ONTOP_IMAGE: "vsam/stelar-okeanos:ontop",
+          KEYCLOAK_IMAGE:"quay.io/keycloak/keycloak:latest",
+          REDIS_IMAGE:"redis:7",
+        },
+    } 
+    + defaults,
 
   /*
     Here the library for each component is 
@@ -120,12 +135,12 @@ local PORTS = import 'stdports.libsonnet';
   /*
       Translate to manifests. This will call the 
       manifest function of each component above,
-      passing the PIM and PSM as arguments. This
+      passing the PIM and Config as arguments. This
       will generate the manifests for all services 
-      of the cluster. PIM and PSM are commonly passed
+      of the cluster. PIM and config are commonly passed
       between the service manifests to achieve 
-      integrity and universality for the parameters.
+      integrity and universality for all parameters.
   */
-  manifests: t.transform_pim_psm($.pim, $.psm, $.components)
+  manifests: t.transform_pim($.pim, $.configuration, $.components)
 
 }
