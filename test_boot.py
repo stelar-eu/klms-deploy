@@ -208,7 +208,7 @@ def main():
             ckan_admin_password_secret: "{secrets_list[6]["secret_name"]}",
             }},
             minio: {{
-            minio_root_passowrd_secret: "{secrets_list[7]["secret_name"]}",
+            minio_root_password_secret: "{secrets_list[7]["secret_name"]}",
             }}
         }}
         }},
