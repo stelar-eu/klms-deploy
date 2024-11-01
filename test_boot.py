@@ -180,9 +180,9 @@ def main():
         }}
     }},
     configuration::
-        {{
-        cluster: self.cluster,
-        }}
+        
+        self.cluster,
+        
         + {{
         api: {{
             SMTP_SERVER: "{yaml_data["config"][0]["smtp_server"]}",
