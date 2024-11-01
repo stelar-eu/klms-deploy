@@ -42,7 +42,6 @@ local API_CONFIG(pim, config) = {
     POSTGRES_HOST: pim.db.POSTGRES_HOST,
     POSTGRES_PORT: std.toString(pim.ports.PG),
     POSTGRES_USER: pim.db.CKAN_DB_USER,
-    #POSTGRES_PASSWORD: config.db.CKAN_DB_PASSWORD,
     POSTGRES_DB: pim.db.STELAR_DB,
 
 
@@ -65,10 +64,10 @@ local API_CONFIG(pim, config) = {
     ##  DOMAINS  ###########################
     ########################################
     # Note: Plain domains name without protocol!!!
-    KLMS_DOMAIN_NAME: config.cluster.endpoint.ROOT_DOMAIN, # eg "stelar.gr"
-    MAIN_INGRESS_SUBDOMAIN: config.cluster.endpoint.PRIMARY_SUBDOMAIN, # eg "klms"
-    KEYCLOAK_SUBDOMAIN: config.cluster.endpoint.KEYCLOAK_SUBDOMAIN, # eg "kc"
-    MINIO_API_SUBDOMAIN: config.cluster.endpoint.MINIO_API_SUBDOMAIN, # eg "minio"
+    KLMS_DOMAIN_NAME: config.endpoint.ROOT_DOMAIN, # eg "stelar.gr"
+    MAIN_INGRESS_SUBDOMAIN: config.endpoint.PRIMARY_SUBDOMAIN, # eg "klms"
+    KEYCLOAK_SUBDOMAIN: config.endpoint.KEYCLOAK_SUBDOMAIN, # eg "kc"
+    MINIO_API_SUBDOMAIN: config.endpoint.MINIO_API_SUBDOMAIN, # eg "minio"
 
 
     ########################################
@@ -83,8 +82,7 @@ local API_CONFIG(pim, config) = {
     ##  SMTP  ##############################
     ########################################
     SMTP_USERNAME: config.api.SMTP_USERNAME,
-    #SMTP_PASSWORD: config.api.SMTP_PASSWORD, # 'C2g9mh$551!4'
-    SMTP_SERVER: config.api.SMTP_PASSWORD,
+    SMTP_SERVER: config.api.SMTP_SERVER,
     SMTP_PORT: config.api.SMTP_PORT,
 
     EXECUTION_ENGINE: pim.api.EXEC_ENGINE, # "kubernetes"
@@ -111,8 +109,8 @@ local API_CONFIG(pim, config) = {
                     envVar.fromFieldPath('API_NAMESPACE', 'metadata.namespace')
                 ])
                 + container.withEnvMap({
-                    SMTP_PASSWORD: envSource.secretKeyRef.withName(config.secrets.api.smtp_password_secret).withKey("password"),
-                    POSTGRES_PASSWORD: envSource.secretKeyRef.withName(config.secrets.db.ckan_db_password_secret).withKey("password"),
+                    SMTP_PASSWORD: envSource.secretKeyRef.withName(config.secrets.api.smtp_password_secret)+envSource.secretKeyRef.withKey("password"),
+                    POSTGRES_PASSWORD: envSource.secretKeyRef.withName(config.secrets.db.ckan_db_password_secret)+envSource.secretKeyRef.withKey("password"),
                 })
                 + container.withPorts([
                     containerPort.newNamed(pim.ports.STELARAPI, "api")

@@ -33,7 +33,7 @@
     DB_TYPE: 'postgres',
     KEYCLOAK_ADMIN: 'admin',
     JDBC_PARAMS: 'useSsl=false',
-    KC_HTTP_ENABLED: true,
+    KC_HTTP_ENABLED: "true",
     REALM: 'master',
   },
   
@@ -43,7 +43,7 @@
   ###########################
   db:{
     POSTGRES_HOST: 'db',
-    POSTGRES_PORT: self.ports.PG,
+    POSTGRES_PORT: 5432,
     POSTGRES_DEFAULT_DB: 'postgres',
     POSTGRES_USER: 'postgres',
     CKAN_DB_USER: 'ckan',
@@ -71,6 +71,6 @@
   ###########################
   minio: {
     MINIO_ROOT_USER: 'root',
-    MINIO_BROWSER_REDIRECT: "true",
+    MINIO_BROWSER_REDIRECT: 'true',
   },
 }

@@ -43,7 +43,7 @@ local SESSION_SECRETS = {
 
 
 // local KEYCLOAK_CONFIG(pim,config) = {
-//     local ckan_endp = config.cluster.endpoint { path: '/dc/user/sso_login' },
+//     local ckan_endp = config.endpoint { path: '/dc/user/sso_login' },
 //     local ckan_endp_url1 =  "https://%(PRIMARY_SUBDOMAIN)s%.%(ROOT_DOMAIN)s%(path)s" %  ckan_endp,
 //     // local ckan_endp_url2 = urllib.url_from(ckan_endp),
 
@@ -167,12 +167,12 @@ local ckan_deployment(pim, config) =
         container.new('ckan', pim.images.CKAN_IMAGE)
         + container.withImagePullPolicy("Always")
         + container.withEnvMap(ENV + {
-            CKAN_SITE_URL: config.cluster.endpoint.SCHEME+"://"+config.cluster.endpoint.PRIMARY_SUBDOMAIN+"."+config.cluster.endpoint.ROOT_DOMAIN,
-            CKAN_ADMIN_PASSWORD: envSource.secretKeyRef.withName(config.secrets.ckan.ckan_admin_password_secret).withKey("password"),
+            CKAN_SITE_URL: config.endpoint.SCHEME+"://"+config.endpoint.PRIMARY_SUBDOMAIN+"."+config.endpoint.ROOT_DOMAIN,
+            CKAN_ADMIN_PASSWORD: envSource.secretKeyRef.withName(config.secrets.ckan.ckan_admin_password_secret)+envSource.secretKeyRef.withKey("password"),
 
             # Create secret env vars in order to access it and construct required URLs.
-            CKAN_DB_PASSWORD: envSource.secretKeyRef.withName(config.secrets.db.ckan_db_password_secret).withKey("password"),
-            DATASTORE_DB_PASSWORD: envSource.secretKeyRef.withName(config.secrets.db.datastore_db_password_secret).withKey("password"),
+            CKAN_DB_PASSWORD: envSource.secretKeyRef.withName(config.secrets.db.ckan_db_password_secret)+envSource.secretKeyRef.withKey("password"),
+            DATASTORE_DB_PASSWORD: envSource.secretKeyRef.withName(config.secrets.db.datastore_db_password_secret)+envSource.secretKeyRef.withKey("password"),
 
             # Construct db connection URLs.
             local _DB_HOST = {host: pim.db.POSTGRES_HOST},

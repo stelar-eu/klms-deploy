@@ -17,7 +17,7 @@
         // Root Domain Name to the host of the STELAR deployment
         endpoint: {
         scheme: 'https',
-        host: 'minikube',
+        host: 'petrounetwork.gr',
         port: null,
         },
     },
@@ -43,45 +43,43 @@
                         PRIMARY subdomain. )
         */
         SCHEME: "https",
-        ROOT_DOMAIN: "minikube",
+        ROOT_DOMAIN: "petrounetwork.gr",
         PRIMARY_SUBDOMAIN: "klms",
         KEYCLOAK_SUBDOMAIN: "kc", 
         MINIO_API_SUBDOMAIN: "minio", 
         }
     },
     configuration::
-        {
-        cluster: self.cluster,
-        }
-        + {
+    self.cluster
+    + {
         api: {
             SMTP_SERVER: "stelar.gr",
             SMTP_PORT: "465",
             SMTP_USERNAME: "info@stelar.gr",
         }
-        }
-        + {
+    }
+    + {
         secrets:{
             db: {
-            postgres_db_password_secret: "postgresdb-secret",
-            ckan_db_password_secret: "ckandb-secret",
-            keycloak_db_passowrd_secret: "keycloakdb-secret",
-            datastore_db_password_secret: "datastoredb-secret",
+                postgres_db_password_secret: "postgresdb-secret",
+                ckan_db_password_secret: "ckandb-secret",
+                keycloak_db_passowrd_secret: "keycloakdb-secret",
+                datastore_db_password_secret: "datastoredb-secret",
             },
             keycloak: {
-            root_password_secret: "keycloakroot-secret",
+                root_password_secret: "keycloakroot-secret",
             },
             api: {
-            smtp_password_secret: "smtpapi-secret",
+                smtp_password_secret: "smtpapi-secret",
             },
             ckan: {
-            ckan_admin_password_secret: "ckanadmin-secret",
+                ckan_admin_password_secret: "ckanadmin-secret",
             },
             minio: {
-            minio_root_passowrd_secret: "minioroot-secret",
+                minio_root_password_secret: "minioroot-secret",
             }
         }
-        },
+    },
     ##########################################
     ## The Platform Independent Model ########
     ##########################################
@@ -109,12 +107,12 @@
     components:: [
         import 'db.libsonnet',
         import 'redis.libsonnet',
-        import 'ckan.libsonnet',
-        import 'stelarapi.libsonnet',
         import 'ontop.libsonnet',
         import 'minio.libsonnet',
         import 'keycloak.libsonnet',
+        import 'stelarapi.libsonnet',
         import 'stelar_ingress.libsonnet',
+        import 'ckan.libsonnet',
     ],
     /*
         Translate to manifests. This will call the

@@ -18,14 +18,14 @@ local secret = k.core.v1.secret;
 local podinit = import "podinit.libsonnet";
 local envSource = k.core.v1.envVarSource;
 
-local HOSTNAME(config) = config.cluster.endpoint.SCHEME+"://"+config.cluster.endpoint.KEYCLOAK_SUBDOMAIN+"."+config.cluster.endpoint.ROOT_DOMAIN;
+local HOSTNAME(config) = config.endpoint.SCHEME+"://"+config.endpoint.KEYCLOAK_SUBDOMAIN+"."+config.endpoint.ROOT_DOMAIN;
 
 // local db_url
 // local KEYCLOAK_CONFIG = import "keycloakconfig.jsonnet";
 local KEYCLOAK_CONFIG(pim,config) = {
     local db_url = "jdbc:postgresql://%(host)s:%(port)s/stelar" % { 
                                                             host: pim.db.POSTGRES_HOST, 
-                                                            port: pim.db.POSTGRES_PORT
+                                                            port: pim.ports.PG
                                                           },
     // DB_URL_PROBE : "postgresql://%(user)s:%(password)s@%(host)s/%(db)s?sslmode=disable" % {
     //                 user: pim.db.CKAN_DB_USER,
@@ -62,9 +62,9 @@ local KEYCLOAK_CONFIG(pim,config) = {
                     name: "kc-cmap",
                 },
             }])
-            + container.withnEnvMap({
-                KC_DB_PASSWORD: envSource.secretKeyRef.withName(config.secrets.db.keycloak_db_passowrd_secret).withKey("password"),
-                KEYCLOAK_ADMIN_PASSWORD: envSource.secretKeyRef.withName(config.secrets.keycloak.root_password_secret).withKey("password"),
+            + container.withEnvMap({
+                KC_DB_PASSWORD: envSource.secretKeyRef.withName(config.secrets.db.keycloak_db_passowrd_secret)+envSource.secretKeyRef.withKey("password"),
+                KEYCLOAK_ADMIN_PASSWORD: envSource.secretKeyRef.withName(config.secrets.keycloak.root_password_secret)+envSource.secretKeyRef.withKey("password"),
             })
             + container.withCommand(['/opt/keycloak/bin/kc.sh','start','--features=token-exchange,admin-fine-grained-authz'])
             + container.withPorts([

@@ -72,7 +72,8 @@ local global_default_flags = {
 
 {
     _base_container(name)::
-        container.new(name, PODINIT_IMAGE),
+        container.new(name, PODINIT_IMAGE)
+        + container.withImagePullPolicy("Always"),
 
     // Http endpoints
     wait4_http(name, url, flags={}):
@@ -87,7 +88,7 @@ local global_default_flags = {
             POSTGRES_HOST: pim.db.POSTGRES_HOST,
             POSTGRES_USER: pim.db.CKAN_DB_USER,
             POSTGRES_DB: pim.db.STELAR_DB,
-            POSTGRES_PASSWORD: envSource.secretKeyRef.withName(config.secrets.ckan_db_password_secret).withKey("password"),
+            POSTGRES_PASSWORD: envSource.secretKeyRef.withName(config.secrets.db.ckan_db_password_secret)+envSource.secretKeyRef.withKey("password"),
         }),
 
     // redis

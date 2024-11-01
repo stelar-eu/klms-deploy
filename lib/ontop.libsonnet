@@ -29,8 +29,7 @@ local envSource = k.core.v1.envVarSource;
         base_container(name):: container.new(name, pim.images.ONTOP_IMAGE)
             + container.withEnvMap({
                 ONTOP_DB_USER: pim.db.CKAN_DB_USER,
-                ONTOP_DB_PASSWORD: envSource.secretKeyRef.withName(config.secrets.ckan_db_password_secret).withKey("password"),
-                //ONTOP_DB_PASSWORD: psm.db.CKAN_DB_PASSWORD,
+                ONTOP_DB_PASSWORD: envSource.secretKeyRef.withName(config.secrets.db.ckan_db_password_secret)+envSource.secretKeyRef.withKey("password"),
                 ONTOP_DB_URL: "jdbc:postgresql://"+pim.db.POSTGRES_HOST+"/"+pim.db.STELAR_DB,
             })
             + container.withImagePullPolicy('Always')
