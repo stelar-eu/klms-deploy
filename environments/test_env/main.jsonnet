@@ -94,6 +94,7 @@
                 ONTOP_IMAGE: "vsam/stelar-okeanos:ontop",
                 KEYCLOAK_IMAGE:"quay.io/keycloak/keycloak:latest",
                 REDIS_IMAGE:"redis:7",
+                SYSTEM_INIT:"petroud/stelar-tuc:system-init"
             },
         }
         + defaults,
