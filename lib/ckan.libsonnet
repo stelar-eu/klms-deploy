@@ -28,17 +28,11 @@ local envSource = k.core.v1.envVarSource;
 
 # These should be initialized randomly
 # However, it is possible to let the ckan setup code to do it.
-# Note: if we do it here, the values override the ones in ckan.ini (from setup)
+# Note: if we do it here, the values override the onelss in ckan.ini (from setup)
 local SESSION_SECRETS = {
-  #
-  # CKAN___BEAKER__SESSION__SECRET: 'string:2UXr0cQqC3ryE',
-  # CKAN___API_TOKEN__JWT__ENCODE__SECRET: 'string:I5VCpxaM20tbV0okIfaYpqiVXF',
-  # CKAN___API_TOKEN__JWT__DECODE__SECRET: 'string:I5VCpxaM20tbV0okIfaYpqiVXF',
-  
   CKAN___BEAKER__SESSION__SECRET: 'qD-fHjSOa6xTMsAJDkfLKY-eRaYZnlI-5YBkkponncA',
   CKAN___API_TOKEN__JWT__ENCODE__SECRET: 'string:ixORfkMa1CYT2yj1LApKM1S6GW7CUHlTjObiA5DgfXM',
   CKAN___API_TOKEN__JWT__DECODE__SECRET: 'string:ixORfkMa1CYT2yj1LApKM1S6GW7CUHlTjObiA5DgfXM',
-  
 };
 
 
@@ -57,7 +51,7 @@ local SESSION_SECRETS = {
 // };
 
 
-local ENV = 
+local ENV= 
     SESSION_SECRETS 
     + {
     # CKAN core
@@ -69,17 +63,6 @@ local ENV =
 
     CKAN_SYSADMIN_NAME: "ckan_admin",
     CKAN_SYSADMIN_EMAIL: "vsam@softnet.tuc.gr",
-
-    // local _DB_HOST = {host: DBENV.POSTGRES_HOST},
-    // local _CKAN_U = _DB_HOST+{user: DBENV.CKAN_DB_USER, password: DBENV.CKAN_DB_PASSWORD},
-    // local _DS_U = _DB_HOST+{user: DBENV.DATASTORE_READONLY_USER, password: DBENV.DATASTORE_READONLY_PASSWORD},
-    // CKAN_SQLALCHEMY_URL: psqlURI % (_CKAN_U + {db: DBENV.CKAN_DB}),
-    // CKAN_DATASTORE_WRITE_URL: psqlURI % (_CKAN_U + {db: DBENV.DATASTORE_DB}),
-    // CKAN_DATASTORE_READ_URL: psqlURI  % (_DS_U + {db: DBENV.DATASTORE_DB}),
-    // # Test database connections
-    // TEST_CKAN_SQLALCHEMY_URL: self.CKAN_SQLALCHEMY_URL+"_test",
-    // TEST_CKAN_DATASTORE_WRITE_URL: self.CKAN_DATASTORE_WRITE_URL+"_test",
-    // TEST_CKAN_DATASTORE_READ_URL: self.CKAN_DATASTORE_READ_URL+"_test",
 
     # Must match the volumeMount below
     CKAN_STORAGE_PATH: "/var/lib/ckan",
@@ -168,16 +151,16 @@ local ckan_deployment(pim, config) =
         + container.withImagePullPolicy("Always")
         + container.withEnvMap(ENV + {
             CKAN_SITE_URL: config.endpoint.SCHEME+"://"+config.endpoint.PRIMARY_SUBDOMAIN+"."+config.endpoint.ROOT_DOMAIN,
-            CKAN_ADMIN_PASSWORD: envSource.secretKeyRef.withName(config.secrets.ckan.ckan_admin_password_secret)+envSource.secretKeyRef.withKey("password"),
-
+            CKAN_SYSADMIN_PASSWORD: envSource.secretKeyRef.withName(config.secrets.ckan.ckan_admin_password_secret)+envSource.secretKeyRef.withKey("password"),
+        
             # Create secret env vars in order to access it and construct required URLs.
-            CKAN_DB_PASSWORD: envSource.secretKeyRef.withName(config.secrets.db.ckan_db_password_secret)+envSource.secretKeyRef.withKey("password"),
-            DATASTORE_DB_PASSWORD: envSource.secretKeyRef.withName(config.secrets.db.datastore_db_password_secret)+envSource.secretKeyRef.withKey("password"),
+            A_CKAN_DB_PASSWORD: envSource.secretKeyRef.withName(config.secrets.db.ckan_db_password_secret)+envSource.secretKeyRef.withKey("password"),
+            A_DATASTORE_DB_PASSWORD: envSource.secretKeyRef.withName(config.secrets.db.datastore_db_password_secret)+envSource.secretKeyRef.withKey("password"),
 
             # Construct db connection URLs.
             local _DB_HOST = {host: pim.db.POSTGRES_HOST},
-            local _CKAN_U = _DB_HOST+{user: pim.db.CKAN_DB_USER, password: "$(CKAN_DB_PASSWORD)"},
-            local _DS_U = _DB_HOST+{user: pim.db.DATASTORE_READONLY_USER, password: "$(DATASTORE_DB_PASSWORD)"},
+            local _CKAN_U = _DB_HOST+{user: pim.db.CKAN_DB_USER, password: "$(A_CKAN_DB_PASSWORD)"},
+            local _DS_U = _DB_HOST+{user: pim.db.DATASTORE_READONLY_USER, password: "$(A_DATASTORE_DB_PASSWORD)"},
             local psqlURI = "postgresql://%(user)s:%(password)s@%(host)s/%(db)s",
 
             CKAN_SQLALCHEMY_URL: psqlURI % (_CKAN_U + {db: pim.db.STELAR_DB}),
