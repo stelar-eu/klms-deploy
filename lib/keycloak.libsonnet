@@ -44,6 +44,7 @@ local KEYCLOAK_CONFIG(pim,config) = {
     KC_HOSTNAME_ADMIN: HOSTNAME(config),
     JDBC_PARAMS: pim.keycloak.JDBC_PARAMS,
     KC_HTTP_ENABLED: pim.keycloak.KC_HTTP_ENABLED,    
+    KC_HEALTH_ENABLED: pim.keycloak.KC_HEALTH_ENABLED,
 };
 
 {
@@ -69,7 +70,8 @@ local KEYCLOAK_CONFIG(pim,config) = {
             + container.withCommand(['/opt/keycloak/bin/kc.sh','start','--features=token-exchange,admin-fine-grained-authz'])
             + container.withPorts([
                 // containerPort.newNamed(PORT.KEYCLOAK, "kc")
-                containerPort.newNamed(pim.ports.KEYCLOAK, "kc")
+                containerPort.newNamed(pim.ports.KEYCLOAK, "kc"),
+                containerPort.newNamed(9000, "kchealth")
             ])            
         ],
         podLabels={

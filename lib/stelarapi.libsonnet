@@ -127,6 +127,7 @@ local API_CONFIG(pim, config) = {
             /* We need to wait for ckan to be ready */
             podinit.wait4_postgresql("wait4-db", pim, config),
             podinit.wait4_http("wait4-ckan", CKAN_URL(pim)),
+            podinit.wait4_http("wait4-keycloak", "http://keycloak:9000/health/ready"),
         ])
         + deploy.spec.template.spec.withServiceAccountName("stelarapi")
         ,

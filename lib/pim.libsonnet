@@ -34,6 +34,7 @@
     KEYCLOAK_ADMIN: 'admin',
     JDBC_PARAMS: 'useSsl=false',
     KC_HTTP_ENABLED: "true",
+    KC_HEALTH_ENABLED: "true",
     REALM: 'master',
   },
   
