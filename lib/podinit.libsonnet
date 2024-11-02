@@ -72,8 +72,7 @@ local global_default_flags = {
 
 {
     _base_container(name)::
-        container.new(name, PODINIT_IMAGE)
-        + container.withImagePullPolicy("Always"),
+        container.new(name, PODINIT_IMAGE),
 
     // Http endpoints
     wait4_http(name, url, flags={}):
