@@ -1,5 +1,6 @@
 local k = import "k.libsonnet";
 local podinit = import "podinit.libsonnet";
+local rbac = import "rbac.libsonnet";
 
 local deploy = k.apps.v1.deployment;
 local job = k.batch.v1.job;
@@ -44,6 +45,15 @@ local envSource = k.core.v1.envVarSource;
                 podinit.wait4_postgresql("wait4-db", pim, config),
                 podinit.wait4_http("wait4-keycloak", "http://keycloak:9000/health/ready"),
             ])
+            + job.spec.template.spec.withServiceAccountName("sysinit")
+            + job.spec.template.spec.withRestartPolicy("never"),
+
+        initrbac: rbac.namespacedRBAC("sysinit", [
+            rbac.resourceRule(
+                ["create","get","list","update","delete"],
+                [""],
+                ["secrets","configmaps"])
+        ]),
     }
 
 }
