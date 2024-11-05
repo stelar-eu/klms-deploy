@@ -26,12 +26,13 @@ local envSource = k.core.v1.envVarSource;
                 'app.kubernetes.io/component': 'kcinit',
             })
             + job.spec.template.spec.withContainers(containers=[
-                container.new("kcinitContainer", pim.images.KC_INIT)
+                container.new("kcinit-container", pim.images.KC_INIT)
+                + container.withImagePullPolicy("Always")
                 + container.withEnvMap({
                     KEYCLOAK_ADMIN : pim.keycloak.KEYCLOAK_ADMIN,
                     KEYCLOAK_ADMIN_PASSWORD : envSource.secretKeyRef.withName(config.secrets.keycloak.root_password_secret)+envSource.secretKeyRef.withKey("password"),
                     KEYCLOAK_REALM: pim.keycloak.REALM,
-                    KEYCLOAK_PORT: pim.ports.KEYCLOAK,
+                    KEYCLOAK_PORT: std.toString(pim.ports.KEYCLOAK),
                     KC_API_CLIENT_NAME: pim.keycloak.KC_API_CLIENT_NAME,
                     KC_MINIO_CLIENT_NAME: pim.keycloak.KC_MINIO_CLIENT_NAME,
                     KC_CKAN_CLIENT_NAME: pim.keycloak.KC_CKAN_CLIENT_NAME,
@@ -51,10 +52,10 @@ local envSource = k.core.v1.envVarSource;
                 podinit.wait4_postgresql("wait4-db", pim, config),
                 podinit.wait4_http("wait4-keycloak", "http://keycloak:9000/health/ready"),
             ])
-            + job.spec.template.spec.withServiceAccountName("kcinit")
-            + job.spec.template.spec.withRestartPolicy("never"),
+            + job.spec.template.spec.withServiceAccountName("sysinit")
+            + job.spec.template.spec.withRestartPolicy("Never"),
 
-        kcinitrbac: rbac.namespacedRBAC("kcinit", [
+        initrbac: rbac.namespacedRBAC("sysinit", [
             rbac.resourceRule(
                 ["create","get","list","update","delete"],
                 [""],
@@ -63,23 +64,23 @@ local envSource = k.core.v1.envVarSource;
 
 
 
-        ckaninitjob:job.new("ckaninit")
-            + job.metadata.withLabels({
-                'app.kubernetes.io/name': 'ckan-init',
-                'app.kubernetes.io/component': 'ckaninit',
-            })
-            + job.spec.template.spec.withContainers(containers=[
-                container.new("ckaninitContainer", pim.images.KC_INIT)
-                + container.withEnvMap({
+        // ckaninitjob:job.new("ckaninit")
+        //     + job.metadata.withLabels({
+        //         'app.kubernetes.io/name': 'ckan-init',
+        //         'app.kubernetes.io/component': 'ckaninit',
+        //     })
+        //     + job.spec.template.spec.withContainers(containers=[
+        //         container.new("ckaninitContainer", pim.images.KC_INIT)
+        //         + container.withEnvMap({
                     
-                })
-            ])
-            + job.spec.template.spec.withInitContainers([
-                podinit.wait4_postgresql("wait4-db", pim, config),
-                // podinit.wait4_http("wait4-keycloak", "http://keycloak:9000/health/ready"),
-            ])
-            + job.spec.template.spec.withServiceAccountName("ckaninit")
-            + job.spec.template.spec.withRestartPolicy("never"),
+        //         })
+        //     ])
+        //     + job.spec.template.spec.withInitContainers([
+        //         podinit.wait4_postgresql("wait4-db", pim, config),
+        //         // podinit.wait4_http("wait4-keycloak", "http://keycloak:9000/health/ready"),
+        //     ])
+        //     + job.spec.template.spec.withServiceAccountName("ckaninit")
+        //     + job.spec.template.spec.withRestartPolicy("never"),
 
         
     }
