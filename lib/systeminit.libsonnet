@@ -15,6 +15,7 @@ local cmap = k.core.v1.configMap;
 local service = k.core.v1.service;
 local secret = k.core.v1.secret;
 local envSource = k.core.v1.envVarSource;
+local volumeMount = k.core.v1.volumeMount;
 
 
 {
@@ -54,6 +55,67 @@ local envSource = k.core.v1.envVarSource;
             ])
             + job.spec.template.spec.withServiceAccountName("sysinit")
             + job.spec.template.spec.withRestartPolicy("Never"),
+
+
+
+
+
+         apiinitjob: job.new("apiinit")
+            + job.metadata.withLabels({
+                'app.kubernetes.io/name': 'api-init',
+                'app.kubernetes.io/component': 'apiinit',
+            })
+            + job.spec.template.spec.withContainers(containers=[
+                container.new("apiinit-container", pim.images.API_IMAGE)
+                + container.withImagePullPolicy("Always")
+                + container.withArgs(["setup-db"]) // Set how the image should be executed
+                + container.withEnvMap({
+                    POSTGRES_HOST: pim.db.POSTGRES_HOST,
+                    POSTGRES_DB: pim.db.STELAR_DB,
+                    POSTGRES_USER: pim.db.CKAN_DB_USER,
+                    POSTGRES_PASSWORD: envSource.secretKeyRef.withName(config.secrets.db.ckan_db_password_secret)+envSource.secretKeyRef.withKey("password"),
+                })
+                + container.withVolumeMounts([
+                    volumeMount.new("ckan-ini","/srv/stelar/config", false),
+                ])
+            ])
+            + job.spec.template.spec.withInitContainers([
+                podinit.wait4_postgresql("wait4-db", pim, config),
+            ])
+            + job.spec.template.spec.withVolumes([
+                vol.fromConfigMap("ckan-ini","ckan-config", [{key:"ckan.ini", path:"ckan.ini"}])
+            ])
+            + job.spec.template.spec.withRestartPolicy("Never"),
+
+
+        ontopinitjob: job.new("ontopinit")
+            + job.metadata.withLabels({
+                'app.kubernetes.io/name': 'ontop-init',
+                'app.kubernetes.io/component': 'ontopinit',
+            })
+            + job.spec.template.spec.withContainers(containers=[
+                container.new("ontopinit-container", pim.images.ONTOP_IMAGE)
+                + container.withImagePullPolicy("Always")
+                + container.withArgs(["setup-db"]) // Set how the image should be executed
+                + container.withEnvMap({
+                   ONTOP_DB_USER: pim.db.CKAN_DB_USER,
+                   ONTOP_DB_PASSWORD: envSource.secretKeyRef.withName(config.secrets.db.ckan_db_password_secret)+envSource.secretKeyRef.withKey("password"),
+                   ONTOP_DB_HOST: pim.db.POSTGRES_HOST,
+                   ONTOP_DB: pim.db.STELAR_DB,
+                })
+                + container.withVolumeMounts([
+                    volumeMount.new("ckan-ini","/srv/stelar/config", false),
+                ])
+            ])
+            + job.spec.template.spec.withInitContainers([
+                podinit.wait4_postgresql("wait4-db", pim, config),
+            ])
+            + job.spec.template.spec.withVolumes([
+                vol.fromConfigMap("ckan-ini","ckan-config", [{key:"ckan.ini", path:"ckan.ini"}])
+            ])
+            + job.spec.template.spec.withRestartPolicy("Never"),
+
+
 
         initrbac: rbac.namespacedRBAC("sysinit", [
             rbac.resourceRule(
