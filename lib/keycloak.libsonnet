@@ -20,26 +20,16 @@ local envSource = k.core.v1.envVarSource;
 
 local HOSTNAME(config) = config.endpoint.SCHEME+"://"+config.endpoint.KEYCLOAK_SUBDOMAIN+"."+config.endpoint.ROOT_DOMAIN;
 
-// local db_url
-// local KEYCLOAK_CONFIG = import "keycloakconfig.jsonnet";
 local KEYCLOAK_CONFIG(pim,config) = {
     local db_url = "jdbc:postgresql://%(host)s:%(port)s/stelar" % { 
                                                             host: pim.db.POSTGRES_HOST, 
                                                             port: pim.ports.PG
                                                           },
-    // DB_URL_PROBE : "postgresql://%(user)s:%(password)s@%(host)s/%(db)s?sslmode=disable" % {
-    //                 user: pim.db.CKAN_DB_USER,
-    //                 password: psm.db.CKAN_DB_PASSWORD,
-    //                 host: pim.db.POSTGRES_HOST,
-    //                 db: pim.db.STELAR_DB,
-    //             },
     KC_DB: pim.keycloak.DB_TYPE,
     KC_DB_URL: db_url,
     KC_DB_USERNAME: pim.db.KEYCLOAK_DB_USER,
-    //KC_DB_PASSWORD: psm.keycloak.KC_DB_PASSWORD,
     KC_DB_SCHEMA: pim.db.KEYCLOAK_DB_SCHEMA,
     KEYCLOAK_ADMIN: pim.keycloak.KEYCLOAK_ADMIN,
-    //KEYCLOAK_ADMIN_PASSWORD: psm.keycloak.KEYCLOAK_ADMIN_PASSWORD,    
     KC_HOSTNAME: HOSTNAME(config),
     KC_HOSTNAME_ADMIN: HOSTNAME(config),
     JDBC_PARAMS: pim.keycloak.JDBC_PARAMS,
@@ -53,7 +43,6 @@ local KEYCLOAK_CONFIG(pim,config) = {
         local keycloak_config = KEYCLOAK_CONFIG(pim, config),
 
         kc_cmap: cmap.new("kc-cmap")
-                // +cmap.withData(KEYCLOAK_CONFIG.ENV),
                    +cmap.withData(keycloak_config),
 
         deployment: deploy.new(name="keycloak", containers=[
@@ -69,7 +58,6 @@ local KEYCLOAK_CONFIG(pim,config) = {
             })
             + container.withCommand(['/opt/keycloak/bin/kc.sh','start','--features=token-exchange,admin-fine-grained-authz'])
             + container.withPorts([
-                // containerPort.newNamed(PORT.KEYCLOAK, "kc")
                 containerPort.newNamed(pim.ports.KEYCLOAK, "kc"),
                 containerPort.newNamed(9000, "kchealth")
             ])            
@@ -79,8 +67,6 @@ local KEYCLOAK_CONFIG(pim,config) = {
         'app.kubernetes.io/component': 'keycloak',
         })
         + deploy.spec.template.spec.withInitContainers([
-            /* We need to wait for ckan to be ready */
-            // podinit.wait4_postgresql("wait4-db", KEYCLOAK_CONFIG.DB_URL_PROBE),
             podinit.wait4_postgresql("wait4-db", pim, config),
         ]),
 
