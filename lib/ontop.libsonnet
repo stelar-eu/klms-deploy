@@ -50,6 +50,7 @@ local envSource = k.core.v1.envVarSource;
                 + container.withPorts([
                     containerPort.newNamed(pim.ports.ONTOP, "ontop")                    
                 ])
+                + container.withArgs(["start-ontop"])
             ],
             podLabels = {
                 'app.kubernetes.io/name': 'knowledge-graph',
