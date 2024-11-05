@@ -56,7 +56,7 @@ local API_CONFIG(pim, config) = {
     ##  KEYCLOAK  ##########################
     ########################################
     KEYCLOAK_URL: "http://keycloak:"+std.toString(pim.ports.KEYCLOAK), #Note: Keycloak URL should contain protocol like "http://keycloak:8080"
-    KEYCLOAK_CLIENT_ID: pim.api.KEYCLOAK_CLIENT_ID,
+    KEYCLOAK_CLIENT_ID: pim.keycloak.KC_API_CLIENT_NAME,
     REALM_NAME: pim.keycloak.REALM,
 
 
@@ -111,6 +111,7 @@ local API_CONFIG(pim, config) = {
                 + container.withEnvMap({
                     SMTP_PASSWORD: envSource.secretKeyRef.withName(config.secrets.api.smtp_password_secret)+envSource.secretKeyRef.withKey("password"),
                     POSTGRES_PASSWORD: envSource.secretKeyRef.withName(config.secrets.db.ckan_db_password_secret)+envSource.secretKeyRef.withKey("password"),
+                    KEYCLOAK_CLIENT_SECRET: envSource.secretKeyRef.withName(pim.keycloak.KC_API_CLIENT_NAME+"-client-secret")+envSource.secretKeyRef.withKey("secret"),
                 })
                 + container.withPorts([
                     containerPort.newNamed(pim.ports.STELARAPI, "api")

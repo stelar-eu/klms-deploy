@@ -17,43 +17,71 @@ local secret = k.core.v1.secret;
 local envSource = k.core.v1.envVarSource;
 
 
-
-
 {
     manifest(pim,config): {
 
-        initjob: job.new("sysinit")
+        kcinitjob: job.new("kcinit")
             + job.metadata.withLabels({
-                'app.kubernetes.io/name': 'stelar-init',
-                'app.kubernetes.io/component': 'stelarinit',
+                'app.kubernetes.io/name': 'kc-init',
+                'app.kubernetes.io/component': 'kcinit',
             })
             + job.spec.template.spec.withContainers(containers=[
-                container.new("stelarinitContainer", pim.images.SYSTEM_INIT)
+                container.new("kcinitContainer", pim.images.KC_INIT)
                 + container.withEnvMap({
-                    A_CKAN_DB_PASSWORD: envSource.secretKeyRef.withName(config.secrets.db.ckan_db_password_secret)+envSource.secretKeyRef.withKey("password"),
-                    KEYCLOAK_ADMIN_PASSWORD: envSource.secretKeyRef.withName(config.secrets.keycloak.root_password_secret)+envSource.secretKeyRef.withKey("password"),
-                    CKAN_SYSADMIN_PASSWORD: envSource.secretKeyRef.withName(config.secrets.ckan.ckan_admin_password_secret)+envSource.secretKeyRef.withKey("password"),
-                    
-                    CKAN_SYSADMIN_EMAIL: "",
-                    CKAN_SYSADMIN_NAME: "",
-                    CKAN_SITE_URL: config.endpoint.SCHEME+"://"+config.endpoint.PRIMARY_SUBDOMAIN+"."+config.endpoint.ROOT_DOMAIN,
-                    CKAN_SQLALCHEMY_URL: "",
-                    KEYCLOAK_ADMIN_USER: "", 
+                    KEYCLOAK_ADMIN : pim.keycloak.KEYCLOAK_ADMIN,
+                    KEYCLOAK_ADMIN_PASSWORD : envSource.secretKeyRef.withName(config.secrets.keycloak.root_password_secret)+envSource.secretKeyRef.withKey("password"),
+                    KEYCLOAK_REALM: pim.keycloak.REALM,
+                    KEYCLOAK_PORT: pim.ports.KEYCLOAK,
+                    KC_API_CLIENT_NAME: pim.keycloak.KC_API_CLIENT_NAME,
+                    KC_MINIO_CLIENT_NAME: pim.keycloak.KC_MINIO_CLIENT_NAME,
+                    KC_CKAN_CLIENT_NAME: pim.keycloak.KC_CKAN_CLIENT_NAME,
+                    KUBE_NAMESPACE: pim.namespace,
+                    KC_API_CLIENT_REDIRECT: config.endpoint.SCHEME+"://"+config.endpoint.PRIMARY_SUBDOMAIN+"."+config.endpoint.ROOT_DOMAIN+"/*",
+                    KC_MINIO_CLIENT_REDIRECT: config.endpoint.SCHEME+"://"+config.endpoint.PRIMARY_SUBDOMAIN+"."+config.endpoint.ROOT_DOMAIN+"/*",
+                    KC_CKAN_CLIENT_REDIRECT: config.endpoint.SCHEME+"://"+config.endpoint.PRIMARY_SUBDOMAIN+"."+config.endpoint.ROOT_DOMAIN+"/*",
+                    KC_API_CLIENT_HOME_URL: config.endpoint.SCHEME+"://"+config.endpoint.PRIMARY_SUBDOMAIN+"."+config.endpoint.ROOT_DOMAIN+"/stelar",
+                    KC_MINIO_CLIENT_HOME_URL:config.endpoint.SCHEME+"://"+config.endpoint.PRIMARY_SUBDOMAIN+"."+config.endpoint.ROOT_DOMAIN+"/s3/console",
+                    KC_CKAN_CLIENT_HOME_URL: config.endpoint.SCHEME+"://"+config.endpoint.PRIMARY_SUBDOMAIN+"."+config.endpoint.ROOT_DOMAIN+"/dc",
+                    KC_API_CLIENT_ROOT_URL: config.endpoint.SCHEME+"://"+config.endpoint.PRIMARY_SUBDOMAIN+"."+config.endpoint.ROOT_DOMAIN+"/stelar",
+                    KC_MINIO_CLIENT_ROOT_URL: config.endpoint.SCHEME+"://"+config.endpoint.PRIMARY_SUBDOMAIN+"."+config.endpoint.ROOT_DOMAIN+"/s3/console",
+                    KC_CKAN_CLIENT_ROOT_URL: config.endpoint.SCHEME+"://"+config.endpoint.PRIMARY_SUBDOMAIN+"."+config.endpoint.ROOT_DOMAIN+"/dc",
                 })
             ])
             + job.spec.template.spec.withInitContainers([
                 podinit.wait4_postgresql("wait4-db", pim, config),
                 podinit.wait4_http("wait4-keycloak", "http://keycloak:9000/health/ready"),
             ])
-            + job.spec.template.spec.withServiceAccountName("sysinit")
+            + job.spec.template.spec.withServiceAccountName("kcinit")
             + job.spec.template.spec.withRestartPolicy("never"),
 
-        initrbac: rbac.namespacedRBAC("sysinit", [
+        kcinitrbac: rbac.namespacedRBAC("kcinit", [
             rbac.resourceRule(
                 ["create","get","list","update","delete"],
                 [""],
                 ["secrets","configmaps"])
         ]),
+
+
+
+        ckaninitjob:job.new("ckaninit")
+            + job.metadata.withLabels({
+                'app.kubernetes.io/name': 'ckan-init',
+                'app.kubernetes.io/component': 'ckaninit',
+            })
+            + job.spec.template.spec.withContainers(containers=[
+                container.new("ckaninitContainer", pim.images.KC_INIT)
+                + container.withEnvMap({
+                    
+                })
+            ])
+            + job.spec.template.spec.withInitContainers([
+                podinit.wait4_postgresql("wait4-db", pim, config),
+                // podinit.wait4_http("wait4-keycloak", "http://keycloak:9000/health/ready"),
+            ])
+            + job.spec.template.spec.withServiceAccountName("ckaninit")
+            + job.spec.template.spec.withRestartPolicy("never"),
+
+        
     }
 
 }

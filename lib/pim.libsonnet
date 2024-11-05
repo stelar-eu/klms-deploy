@@ -36,6 +36,9 @@
     KC_HTTP_ENABLED: "true",
     KC_HEALTH_ENABLED: "true",
     REALM: 'master',
+    KC_API_CLIENT_NAME: "stelar-api",
+    KC_MINIO_CLIENT_NAME: "minio",
+    KC_CKAN_CLIENT_NAME: "ckan"
   },
   
   
