@@ -179,16 +179,18 @@ local ckan_deployment(pim, config) =
         + container.livenessProbe.withInitialDelaySeconds(30)
         + container.livenessProbe.withPeriodSeconds(60)
         + container.livenessProbe.withTimeoutSeconds(5)
-        + container.livenessProbe.withFailureThreshold(5)
+        + container.livenessProbe.withFailureThreshold(10)
         )
 
         // Expose 5000
         + container.withPorts([
             containerPort.newNamed(pim.ports.CKAN, "api"),
+            
         ])
-
+        + container.withArgs(["start-server"])
         + container.withVolumeMounts([
-            volumeMount.new("ckan-storage-vol", ENV.CKAN_STORAGE_PATH, false)
+            volumeMount.new("ckan-storage-vol", ENV.CKAN_STORAGE_PATH, false),
+            volumeMount.new("ckan-ini","/srv/stelar/config", false),
             ])
 
         + container.securityContext.withAllowPrivilegeEscalation(false)
@@ -197,20 +199,19 @@ local ckan_deployment(pim, config) =
     podLabels = {
         'app.kubernetes.io/name': 'data-catalog',
         'app.kubernetes.io/component': 'ckan',
-    }
-)
-+ stateful.spec.template.spec.withInitContainers([
-    podinit.wait4_redis("wait4-redis", ENV.CKAN_REDIS_URL),
-    podinit.wait4_postgresql("wait4-db", pim, config),
-    podinit.wait4_http("wait4-solr", "http://solr:"+pim.ports.SOLR+"/solr/"),
-])
-+ stateful.spec.template.spec.withVolumes([
-    vol.fromPersistentVolumeClaim("ckan-storage-vol", "ckan-storage")
-])
-+ stateful.spec.template.spec.securityContext.withRunAsUser(92)
-+ stateful.spec.template.spec.securityContext.withRunAsGroup(92)
-+ stateful.spec.template.spec.securityContext.withFsGroup(92)
-;
+    })
+    + stateful.spec.template.spec.withInitContainers([
+        podinit.wait4_redis("wait4-redis", ENV.CKAN_REDIS_URL),
+        podinit.wait4_postgresql("wait4-db", pim, config),
+        podinit.wait4_http("wait4-solr", "http://solr:"+pim.ports.SOLR+"/solr/"),
+    ])
+    + stateful.spec.template.spec.withVolumes([
+        vol.fromPersistentVolumeClaim("ckan-storage-vol", "ckan-storage"),
+        vol.fromConfigMap("ckan-ini","ckan-config", [{key:"ckan.ini", path:"ckan.ini"}])
+    ])
+    + stateful.spec.template.spec.securityContext.withRunAsUser(92)
+    + stateful.spec.template.spec.securityContext.withRunAsGroup(92)
+    + stateful.spec.template.spec.securityContext.withFsGroup(92);
 
 
 /*********************
@@ -358,6 +359,7 @@ local datapusher_deployment(pim) = deploy.new(
             solr_deployment(pim),
             svcs.headlessService.new("solr", "solr", pim.ports.SOLR, "solr")
         ],
+
 
         local datapusher_dep = datapusher_deployment(pim),
         datapusher: [
