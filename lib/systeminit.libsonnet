@@ -18,6 +18,16 @@ local envSource = k.core.v1.envVarSource;
 local volumeMount = k.core.v1.volumeMount;
 
 
+
+local KEYCLOAK_CONFIG(pim,config) = {
+    CKANEXT__KEYCLOAK__SERVER_URL: config.endpoint.SCHEME+"://"+config.endpoint.KEYCLOAK_SUBDOMAIN+'.'+config.endpoint.ROOT_DOMAIN, 
+    CKANEXT__KEYCLOAK__CLIENT_ID: pim.keycloak.KC_CKAN_CLIENT_NAME,
+    CKANEXT__KEYCLOAK__REALM_NAME:  pim.keycloak.REALM, 
+    CKANEXT__KEYCLOAK__REDIRECT_URI:  config.endpoint.SCHEME+"://"+config.endpoint.PRIMARY_SUBDOMAIN + "." + config.endpoint.ROOT_DOMAIN + "/dc/user/sso_login",
+    CKANEXT__KEYCLOAK__BUTTON_STYLE:  "",
+    CKANEXT__KEYCLOAK__ENABLE_CKAN_INTERNAL_LOGIN: "True",
+};
+
 {
     manifest(pim,config): {
 
@@ -134,10 +144,12 @@ local volumeMount = k.core.v1.volumeMount;
                 container.new("ckaninit-container", pim.images.CKAN_IMAGE)
                 + container.withImagePullPolicy("Always")
                 + container.withArgs(["setup"]) // Set how the image should be executed
-                + container.withEnvMap({
+                + container.withEnvMap( KEYCLOAK_CONFIG(pim, config) + {
                     CKAN___BEAKER__SESSION__SECRET: 'qD-fHjSOa6xTMsAJDkfLKY-eRaYZnlI-5YBkkponncA',
                     CKAN___API_TOKEN__JWT__ENCODE__SECRET: 'string:ixORfkMa1CYT2yj1LApKM1S6GW7CUHlTjObiA5DgfXM',
                     CKAN___API_TOKEN__JWT__DECODE__SECRET: 'string:ixORfkMa1CYT2yj1LApKM1S6GW7CUHlTjObiA5DgfXM',
+                    CKANEXT__KEYCLOAK__CLIENT_SECRET_KEY: envSource.secretKeyRef.withName(pim.keycloak.KC_CKAN_CLIENT_NAME+"-client-secret")+envSource.secretKeyRef.withKey("secret"),
+
                     CKAN_VERSION: '2.10.0',
                     CKAN_SYSADMIN_NAME: "ckan_admin",
                     CKAN_SYSADMIN_EMAIL: "vsam@softnet.tuc.gr",

@@ -13,8 +13,7 @@ local envSource = k.core.v1.envVarSource;
 
 
 local MINIO_CONFIG(pim, config) = {
-    MINIO_ROOT_USER : pim.minio.MINIO_ROOT_USER,# 'root'
-    //MINIO_ROOT_PASSWORD: psm.minio.MINIO_ROOT_PASSWORD,# "stelartuc"
+    MINIO_ROOT_USER : pim.minio.MINIO_ROOT_USER,
     MINIO_BROWSER_REDIRECT: pim.minio.MINIO_BROWSER_REDIRECT,
     MINIO_BROWSER_REDIRECT_URL: config.endpoint.SCHEME+'://'+config.endpoint.PRIMARY_SUBDOMAIN+'.'+config.endpoint.ROOT_DOMAIN+'/s3',
     MINIO_IDENTITY_OPENID_REDIRECT_URI: config.endpoint.SCHEME+'://'+config.endpoint.PRIMARY_SUBDOMAIN+'.'+config.endpoint.ROOT_DOMAIN+'/s3',

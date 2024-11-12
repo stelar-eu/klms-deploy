@@ -36,19 +36,14 @@ local SESSION_SECRETS = {
 };
 
 
-// local KEYCLOAK_CONFIG(pim,config) = {
-//     local ckan_endp = config.endpoint { path: '/dc/user/sso_login' },
-//     local ckan_endp_url1 =  "https://%(PRIMARY_SUBDOMAIN)s%.%(ROOT_DOMAIN)s%(path)s" %  ckan_endp,
-//     // local ckan_endp_url2 = urllib.url_from(ckan_endp),
-
-//     CKANEXT__KEYCLOAK__SERVER_URL: 'https://'+psm.cluster.endpoint.KEYCLOAK_SUBDOMAIN+'.'+psm.cluster.endpoint.ROOT_DOMAIN, #"https://kc.stelar.gr/",
-//     CKANEXT__KEYCLOAK__CLIENT_ID: pim.ckan.CKANEXT__KEYCLOAK__CLIENT_ID, #"ckan",
-//     CKANEXT__KEYCLOAK__REALM_NAME:  pim.keycloak.REALM, #"master",
-//     CKANEXT__KEYCLOAK__REDIRECT_URI:  ckan_endp_url1,
-//     CKANEXT__KEYCLOAK__CLIENT_SECRET_KEY:  psm.ckan.CKANEXT__KEYCLOAK__CLIENT_SECRET_KEY, #"fga1Ffy0XQDxrnFjIivdjz0q1zaa2hC2",
-//     CKANEXT__KEYCLOAK__BUTTON_STYLE:  "",
-//     CKANEXT__KEYCLOAK__ENABLE_CKAN_INTERNAL_LOGIN: "True",
-// };
+local KEYCLOAK_CONFIG(pim,config) = {
+    CKANEXT__KEYCLOAK__SERVER_URL: config.endpoint.SCHEME+"://"+config.endpoint.KEYCLOAK_SUBDOMAIN+'.'+config.endpoint.ROOT_DOMAIN, 
+    CKANEXT__KEYCLOAK__CLIENT_ID: pim.keycloak.KC_CKAN_CLIENT_NAME,
+    CKANEXT__KEYCLOAK__REALM_NAME:  pim.keycloak.REALM, 
+    CKANEXT__KEYCLOAK__REDIRECT_URI:  config.endpoint.SCHEME+"://"+config.endpoint.PRIMARY_SUBDOMAIN + "." + config.endpoint.ROOT_DOMAIN + "/dc/user/sso_login",
+    CKANEXT__KEYCLOAK__BUTTON_STYLE:  "",
+    CKANEXT__KEYCLOAK__ENABLE_CKAN_INTERNAL_LOGIN: "True",
+};
 
 
 local ENV= 
@@ -149,10 +144,12 @@ local ckan_deployment(pim, config) =
     stateful.new(name="ckan", containers = [
         container.new('ckan', pim.images.CKAN_IMAGE)
         + container.withImagePullPolicy("Always")
-        + container.withEnvMap(ENV + {
+        + container.withEnvMap(ENV +
+                               KEYCLOAK_CONFIG(pim, config) + {
             CKAN_SITE_URL: config.endpoint.SCHEME+"://"+config.endpoint.PRIMARY_SUBDOMAIN+"."+config.endpoint.ROOT_DOMAIN,
             CKAN_SYSADMIN_PASSWORD: envSource.secretKeyRef.withName(config.secrets.ckan.ckan_admin_password_secret)+envSource.secretKeyRef.withKey("password"),
-        
+            CKANEXT__KEYCLOAK__CLIENT_SECRET_KEY: envSource.secretKeyRef.withName(pim.keycloak.KC_CKAN_CLIENT_NAME+"-client-secret")+envSource.secretKeyRef.withKey("secret"),
+
             # Create secret env vars in order to access it and construct required URLs.
             A_CKAN_DB_PASSWORD: envSource.secretKeyRef.withName(config.secrets.db.ckan_db_password_secret)+envSource.secretKeyRef.withKey("password"),
             A_DATASTORE_DB_PASSWORD: envSource.secretKeyRef.withName(config.secrets.db.datastore_db_password_secret)+envSource.secretKeyRef.withKey("password"),
