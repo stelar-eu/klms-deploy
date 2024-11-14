@@ -40,16 +40,21 @@ local KEYCLOAK_CONFIG(pim,config) = {
                 container.new("kcinit-container", pim.images.KC_INIT)
                 + container.withImagePullPolicy("Always")
                 + container.withEnvMap({
+                    MINIO_ROOT_USER: pim.minio.MINIO_ROOT_USER,
+                    MINIO_ROOT_PASSWORD: envSource.secretKeyRef.withName(config.secrets.minio.minio_root_password_secret)+envSource.secretKeyRef.withKey("password"),
+                    MINIO_API_DOMAIN: config.minio.API_DOMAIN,
+                    MINIO_CONSOLE_DOMAIN: config.minio.CONSOLE_DOMAIN,
                     KEYCLOAK_ADMIN : pim.keycloak.KEYCLOAK_ADMIN,
                     KEYCLOAK_ADMIN_PASSWORD : envSource.secretKeyRef.withName(config.secrets.keycloak.root_password_secret)+envSource.secretKeyRef.withKey("password"),
                     KEYCLOAK_REALM: pim.keycloak.REALM,
+                    KEYCLOAK_DOMAIN_NAME: config.endpoint.SCHEME+"://"+config.endpoint.KEYCLOAK_SUBDOMAIN+"."+config.endpoint.ROOT_DOMAIN,
                     KEYCLOAK_PORT: std.toString(pim.ports.KEYCLOAK),
                     KC_API_CLIENT_NAME: pim.keycloak.KC_API_CLIENT_NAME,
                     KC_MINIO_CLIENT_NAME: pim.keycloak.KC_MINIO_CLIENT_NAME,
                     KC_CKAN_CLIENT_NAME: pim.keycloak.KC_CKAN_CLIENT_NAME,
                     KUBE_NAMESPACE: pim.namespace,
                     KC_API_CLIENT_REDIRECT: config.endpoint.SCHEME+"://"+config.endpoint.PRIMARY_SUBDOMAIN+"."+config.endpoint.ROOT_DOMAIN+"/*",
-                    KC_MINIO_CLIENT_REDIRECT: config.endpoint.SCHEME+"://"+config.endpoint.PRIMARY_SUBDOMAIN+"."+config.endpoint.ROOT_DOMAIN+"/*",
+                    KC_MINIO_CLIENT_REDIRECT: config.endpoint.SCHEME+"://"+config.endpoint.PRIMARY_SUBDOMAIN+"."+config.endpoint.ROOT_DOMAIN+"/s3/oauth_callback",
                     KC_CKAN_CLIENT_REDIRECT: config.endpoint.SCHEME+"://"+config.endpoint.PRIMARY_SUBDOMAIN+"."+config.endpoint.ROOT_DOMAIN+"/*",
                     KC_API_CLIENT_HOME_URL: config.endpoint.SCHEME+"://"+config.endpoint.PRIMARY_SUBDOMAIN+"."+config.endpoint.ROOT_DOMAIN+"/stelar",
                     KC_MINIO_CLIENT_HOME_URL:config.endpoint.SCHEME+"://"+config.endpoint.PRIMARY_SUBDOMAIN+"."+config.endpoint.ROOT_DOMAIN+"/s3/console",
