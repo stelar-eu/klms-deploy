@@ -11,23 +11,19 @@ local ingpath = k.networking.v1.httpIngressPath;
 {
     manifest(pim, config): {
 
-        ingress_kc: ing.new("kc")
+        ingress_s3:  ing.new("s3")
             + ing.metadata.withAnnotations({
                 "cert-manager.io/cluster-issuer": "letsencrypt-production",
                 "nginx.ingress.kubernetes.io/proxy-connect-timeout": "60s",
                 "nginx.ingress.kubernetes.io/ssl-redirect": "true",
                 "nginx.ingress.kubernetes.io/proxy-body-size": "5120m",
+                "nginx.ingress.kubernetes.io/proxy-http-version": "1.1",
+                "nginx.ingress.kubernetes.io/proxy-chunked-transfer-encoding": "off",
+                "nginx.ingress.kubernetes.io/proxy-set-header": "Host $http_host; X-Real-IP $remote_addr; X-Forwarded-For $proxy_add_x_forwarded_for; X-Forwarded-Proto $scheme;",
+                "nginx.ingress.kubernetes.io/proxy-set-headers": "Connection '';",
             })
             + ing.spec.withIngressClassName("nginx")
             + ing.spec.withRules([
-                ingrule.withHost(config.endpoint.KEYCLOAK_SUBDOMAIN+'.'+config.endpoint.ROOT_DOMAIN)
-                + ingrule.http.withPaths([                
-                    ingpath.withPath("/")
-                    + ingpath.withPathType("Prefix")
-                    + ingpath.backend.service.withName("keycloak")
-                    + ingpath.backend.service.port.withName("keycloak-kc"),
-                ]),
-
                 ingrule.withHost(config.endpoint.MINIO_API_SUBDOMAIN+'.'+config.endpoint.ROOT_DOMAIN)
                 + ingrule.http.withPaths([
 
@@ -42,12 +38,30 @@ local ingpath = k.networking.v1.httpIngressPath;
             ])
 
             + ing.spec.withTls([
-                k.networking.v1.ingressTLS.withHosts([config.endpoint.KEYCLOAK_SUBDOMAIN+'.'+config.endpoint.ROOT_DOMAIN])
-                + k.networking.v1.ingressTLS.withSecretName(pim.namespace+"-tls"),
-
                 k.networking.v1.ingressTLS.withHosts([config.endpoint.MINIO_API_SUBDOMAIN+'.'+config.endpoint.ROOT_DOMAIN])
                 + k.networking.v1.ingressTLS.withSecretName(pim.namespace+"-tls"),
+            ]),
 
+        ingress_kc: ing.new("kc")
+            + ing.metadata.withAnnotations({
+                "cert-manager.io/cluster-issuer": "letsencrypt-production",
+                "nginx.ingress.kubernetes.io/proxy-connect-timeout": "60s",
+                "nginx.ingress.kubernetes.io/ssl-redirect": "true",
+            })
+            + ing.spec.withIngressClassName("nginx")
+            + ing.spec.withRules([
+                ingrule.withHost(config.endpoint.KEYCLOAK_SUBDOMAIN+'.'+config.endpoint.ROOT_DOMAIN)
+                + ingrule.http.withPaths([                
+                    ingpath.withPath("/")
+                    + ingpath.withPathType("Prefix")
+                    + ingpath.backend.service.withName("keycloak")
+                    + ingpath.backend.service.port.withName("keycloak-kc"),
+                ]),
+            ])
+
+            + ing.spec.withTls([
+                k.networking.v1.ingressTLS.withHosts([config.endpoint.KEYCLOAK_SUBDOMAIN+'.'+config.endpoint.ROOT_DOMAIN])
+                + k.networking.v1.ingressTLS.withSecretName(pim.namespace+"-tls"),
             ]),
 
         ingress: ing.new("stelar")

@@ -50,7 +50,7 @@ local API_CONFIG(pim, config) = {
     ########################################
     CKAN_SITE_URL: "http://ckan:%d" % pim.ports.CKAN,
     SPARQL_ENDPOINT: "http://ontop:%d/sparql" % pim.ports.ONTOP,
-
+    CKAN_ADMIN_TOKEN: "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJqdGkiOiJqZll1bWZsZDVlTkszdEs0T0Mtbk9DMUQzZGZFZk4wd2tyNlJDOEtXNEJvIiwiaWF0IjoxNzMxNTc4MjA0fQ.D9Y1v8vFYvY_6XDMJ8uNRMMyJ7NBJE9lll9glMziG0w",
 
     ########################################
     ##  KEYCLOAK  ##########################
