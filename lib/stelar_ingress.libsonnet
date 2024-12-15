@@ -78,7 +78,13 @@ local ingpath = k.networking.v1.httpIngressPath;
 
                 ingrule.withHost(config.endpoint.PRIMARY_SUBDOMAIN+'.'+config.endpoint.ROOT_DOMAIN)
                 + ingrule.http.withPaths([
-
+                    /*
+                        Root of the Ingress leads to / of STELAR API
+                    */
+                    ingpath.withPath("/")
+                    + ingpath.withPathType("Prefix")
+                    + ingpath.backend.service.withName("stelarapi")
+                    + ingpath.backend.service.port.withName("apiserver-api"),
                     /*
                         CKAN
                     */

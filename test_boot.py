@@ -149,6 +149,13 @@ def generate_jsonnet_content(yaml_data, secrets_list):
             SMTP_SERVER: "{yaml_data["config"][0]["smtp_server"]}",
             SMTP_PORT: "{yaml_data["config"][0]["smtp_port"]}",
             SMTP_USERNAME: "{yaml_data["config"][0]["smtp_username"]}",
+            S3_CONSOLE_URL: "{yaml_data["config"][0]["s3_console_url"]}",
+          }}
+        }}
+        + {{
+          minio:{{
+            API_DOMAIN: '{yaml_data["dns"][0]["scheme"]}://{yaml_data["dns"][0]["subdomains"][1]["minio"]}.{yaml_data["dns"][0]["name"]}',
+            CONSOLE_DOMAIN: "{yaml_data["dns"][0]["scheme"]}://{yaml_data["dns"][0]["subdomains"][2]["primary"]}.{yaml_data["dns"][0]["name"]}/s3",
           }}
         }}
         + {{
@@ -178,6 +185,18 @@ def generate_jsonnet_content(yaml_data, secrets_list):
       ##########################################
       pim::
         self.provisioning
+        + {{
+            images: {{
+              API_IMAGE: 'petroud/stelar-tuc:data-api-prod',
+              CKAN_IMAGE: 'petroud/stelar-tuc:ckan',
+              POSTGIS_IMAGE:"petroud/stelar-tuc:postgres",
+              MINIO_IMAGE:"quay.io/minio/minio:latest",
+              ONTOP_IMAGE: "petroud/stelar-tuc:ontop",
+              KEYCLOAK_IMAGE:"quay.io/keycloak/keycloak:25.0",
+              REDIS_IMAGE:"redis:7",
+              KC_INIT:"petroud/stelar-tuc:kcinit"
+            }},
+        }}
         + defaults,
 
       /*

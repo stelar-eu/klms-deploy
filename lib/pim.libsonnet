@@ -78,15 +78,4 @@
     MINIO_BROWSER_REDIRECT: 'true',
   },
 
-  images: {
-    API_IMAGE: 'petroud/stelar-tuc:data-api-prod',
-    CKAN_IMAGE: 'petroud/stelar-tuc:ckan',
-    POSTGIS_IMAGE:"petroud/stelar-tuc:postgres",
-    MINIO_IMAGE:"quay.io/minio/minio:latest",
-    ONTOP_IMAGE: "petroud/stelar-tuc:ontop",
-    KEYCLOAK_IMAGE:"quay.io/keycloak/keycloak:25.0",
-    REDIS_IMAGE:"redis:7",
-    KC_INIT:"petroud/stelar-tuc:kcinit",   
-  }
-
 }

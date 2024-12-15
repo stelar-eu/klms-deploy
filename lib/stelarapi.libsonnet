@@ -45,12 +45,12 @@ local API_CONFIG(pim, config) = {
     POSTGRES_DB: pim.db.STELAR_DB,
 
 
-    ########################################
+    ###############################k#########
     ##  CKAN ###############################
     ########################################
     CKAN_SITE_URL: "http://ckan:%d" % pim.ports.CKAN,
     SPARQL_ENDPOINT: "http://ontop:%d/sparql" % pim.ports.ONTOP,
-    CKAN_ADMIN_TOKEN: "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJqdGkiOiJqZll1bWZsZDVlTkszdEs0T0Mtbk9DMUQzZGZFZk4wd2tyNlJDOEtXNEJvIiwiaWF0IjoxNzMxNTc4MjA0fQ.D9Y1v8vFYvY_6XDMJ8uNRMMyJ7NBJE9lll9glMziG0w",
+    CKAN_ADMIN_TOKEN: "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJqdGkiOiJPOHNvY3ZZQzdFX1J1N29Ic1JnNU1Obi1YN1FvUXlGc1hZQ2oxaWZtQkRVIiwiaWF0IjoxNzMzMzUyODA1fQ.Ct2snIDDdvLElFcf_wcudGhn8mH1yywEvyVR68guoP0",
 
     ########################################
     ##  KEYCLOAK  ##########################
@@ -69,6 +69,13 @@ local API_CONFIG(pim, config) = {
     KEYCLOAK_SUBDOMAIN: config.endpoint.KEYCLOAK_SUBDOMAIN, # eg "kc"
     MINIO_API_SUBDOMAIN: config.endpoint.MINIO_API_SUBDOMAIN, # eg "minio"
 
+
+    ########################################
+    ##  MINIO  #############################
+    ########################################
+    MINIO_DOMAIN: config.minio.API_DOMAIN,
+    MINIO_ROOT_USER: pim.minio.MINIO_ROOT_USER,
+    MINIO_CONSOLE_URL: config.api.S3_CONSOLE_URL,
 
     ########################################
     ##  API CORE  ##########################
@@ -112,6 +119,7 @@ local API_CONFIG(pim, config) = {
                     SMTP_PASSWORD: envSource.secretKeyRef.withName(config.secrets.api.smtp_password_secret)+envSource.secretKeyRef.withKey("password"),
                     POSTGRES_PASSWORD: envSource.secretKeyRef.withName(config.secrets.db.ckan_db_password_secret)+envSource.secretKeyRef.withKey("password"),
                     KEYCLOAK_CLIENT_SECRET: envSource.secretKeyRef.withName(pim.keycloak.KC_API_CLIENT_NAME+"-client-secret")+envSource.secretKeyRef.withKey("secret"),
+                    MINIO_ROOT_PASSWORD: envSource.secretKeyRef.withName(config.secrets.minio.minio_root_password_secret)+envSource.secretKeyRef.withKey("password"),
                 })
                 + container.withPorts([
                     containerPort.newNamed(pim.ports.STELARAPI, "api")
