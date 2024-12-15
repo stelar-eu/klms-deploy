@@ -1,0 +1,26 @@
+{
+  "apiVersion": "tanka.dev/v1alpha1",
+  "kind": "Environment",
+  "metadata": {
+    "name": "environments/aws.dev",
+    "namespace": "environmnets/aws.dev/main.jsonnet"
+  },
+  "spec": {
+    "contextNames": [
+      "arn:aws:eks:eu-central-1:864823669523:cluster/klms_test"
+    ],
+    "namespace": "stelar-dev",
+    "resourceDefaults": {
+      "annotations": {
+        "stelar.eu/author": "dpetrou@tuc.gr"
+      },
+      "labels": {
+        "app.kubernetes.io/managed-by": "tanka",
+        "app.kubernetes.io/part-of": "stelar",
+        "stelar.deployment": "main"
+      }
+    },
+    "expectVersions": {},
+    "injectLabels": true
+  }
+}
