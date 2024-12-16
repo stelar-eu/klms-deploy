@@ -41,7 +41,7 @@ foo bar
     })
 
 
-    storage: pvol.pvcWithLonghornStorage("registry-claim", "60Gi"),
+    storage: pvol.pvcWithDynamicStorage("registry-claim", "60Gi"),
 
     regpod: pod.new("registry")
         + pod.metadata.withLabels({
