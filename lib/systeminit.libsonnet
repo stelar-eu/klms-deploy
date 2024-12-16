@@ -44,6 +44,7 @@ local KEYCLOAK_CONFIG(pim,config) = {
                     MINIO_ROOT_PASSWORD: envSource.secretKeyRef.withName(config.secrets.minio.minio_root_password_secret)+envSource.secretKeyRef.withKey("password"),
                     MINIO_API_DOMAIN: config.minio.API_DOMAIN,
                     MINIO_CONSOLE_DOMAIN: config.minio.CONSOLE_DOMAIN,
+                    MINIO_INSECURE_MC: config.minio.INSECURE_MC_CLIENT,
                     KEYCLOAK_ADMIN : pim.keycloak.KEYCLOAK_ADMIN,
                     KEYCLOAK_ADMIN_PASSWORD : envSource.secretKeyRef.withName(config.secrets.keycloak.root_password_secret)+envSource.secretKeyRef.withKey("password"),
                     KEYCLOAK_REALM: pim.keycloak.REALM,

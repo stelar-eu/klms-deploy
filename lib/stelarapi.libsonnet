@@ -75,6 +75,7 @@ local API_CONFIG(pim, config) = {
     MINIO_DOMAIN: config.minio.API_DOMAIN,
     MINIO_ROOT_USER: pim.minio.MINIO_ROOT_USER,
     MINIO_CONSOLE_URL: config.api.S3_CONSOLE_URL,
+    MINIO_INSECURE_MC: config.minio.INSECURE_MC_CLIENT,
 
     ########################################
     ##  API CORE  ##########################

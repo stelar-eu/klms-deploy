@@ -88,6 +88,16 @@ def create_tls_secret(namespace, cert_path, key_path):
 
 def generate_jsonnet_content(yaml_data, secrets_list):
     print("📝 Generating JSONNet main file content...")
+
+    # Determine storage classes based on platform
+    if yaml_data["platform"] == "minikube":
+        insecure_minio = True
+        dynamic_storage_class = "longhorn"
+        provisioning_storage_class = "csi-hostpath-sc"
+    else:  # Default to Amazon's storage class
+        insecure_minio = False
+        dynamic_storage_class = "ebs-sc"
+        provisioning_storage_class = "ebs-sc"
     
     jsonnet_content = textwrap.dedent(f"""
     local tk_env = import 'spec.json';
@@ -100,11 +110,11 @@ def generate_jsonnet_content(yaml_data, secrets_list):
       _tk_env:: tk_env.spec,
       _config+:: {{
         namespace: tk_env.spec.namespace,
-        dynamicStorageClass: 'ebs-sc',
+        dynamicStorageClass: '{dynamic_storage_class}',
       }},
       provisioning:: {{
         namespace: $._config.namespace,
-        dynamic_volume_storage_class: 'ebs-sc',
+        dynamic_volume_storage_class: '{provisioning_storage_class}',
       }},
       access:: {{
         // Root Domain Name to the host of the STELAR deployment
@@ -156,6 +166,7 @@ def generate_jsonnet_content(yaml_data, secrets_list):
           minio:{{
             API_DOMAIN: '{yaml_data["dns"][0]["scheme"]}://{yaml_data["dns"][0]["subdomains"][1]["minio"]}.{yaml_data["dns"][0]["name"]}',
             CONSOLE_DOMAIN: "{yaml_data["dns"][0]["scheme"]}://{yaml_data["dns"][0]["subdomains"][2]["primary"]}.{yaml_data["dns"][0]["name"]}/s3",
+            INSECURE_MC_CLIENT: '{insecure_minio}',
           }}
         }}
         + {{

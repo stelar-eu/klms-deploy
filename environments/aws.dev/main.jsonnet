@@ -65,6 +65,7 @@ local secrets = import 'secrets.libsonnet';
       minio:{
         API_DOMAIN: 'https://minio.stelar.gr',
         CONSOLE_DOMAIN: "https://klms.stelar.gr/s3",
+        INSECURE_MC_CLIENT: "false",
       }
     }
     + {
