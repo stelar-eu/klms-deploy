@@ -91,11 +91,11 @@ def generate_jsonnet_content(yaml_data, secrets_list):
 
     # Determine storage classes based on platform
     if yaml_data["platform"] == "minikube":
-        insecure_minio = True
+        insecure_minio = "true"
         dynamic_storage_class = "longhorn"
         provisioning_storage_class = "csi-hostpath-sc"
     else:  # Default to Amazon's storage class
-        insecure_minio = False
+        insecure_minio = "false"
         dynamic_storage_class = "ebs-sc"
         provisioning_storage_class = "ebs-sc"
     
