@@ -90,6 +90,7 @@ local KEYCLOAK_CONFIG(pim,config) = {
                     POSTGRES_DB: pim.db.STELAR_DB,
                     POSTGRES_USER: pim.db.CKAN_DB_USER,
                     POSTGRES_PASSWORD: envSource.secretKeyRef.withName(config.secrets.db.ckan_db_password_secret)+envSource.secretKeyRef.withKey("password"),
+                    CKAN_ADMIN_TOKEN: envSource.secretKeyRef.withName("ckan-admin-token-secret")+envSource.secretKeyRef.withKey("token"),
                 })
                 + container.withVolumeMounts([
                     volumeMount.new("ckan-ini","/srv/stelar/config", false),
