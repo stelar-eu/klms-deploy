@@ -50,7 +50,6 @@ local API_CONFIG(pim, config) = {
     ########################################
     CKAN_SITE_URL: "http://ckan:%d" % pim.ports.CKAN,
     SPARQL_ENDPOINT: "http://ontop:%d/sparql" % pim.ports.ONTOP,
-    CKAN_ADMIN_TOKEN: "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJqdGkiOiJPOHNvY3ZZQzdFX1J1N29Ic1JnNU1Obi1YN1FvUXlGc1hZQ2oxaWZtQkRVIiwiaWF0IjoxNzMzMzUyODA1fQ.Ct2snIDDdvLElFcf_wcudGhn8mH1yywEvyVR68guoP0",
 
     ########################################
     ##  KEYCLOAK  ##########################
@@ -120,6 +119,7 @@ local API_CONFIG(pim, config) = {
                     POSTGRES_PASSWORD: envSource.secretKeyRef.withName(config.secrets.db.ckan_db_password_secret)+envSource.secretKeyRef.withKey("password"),
                     KEYCLOAK_CLIENT_SECRET: envSource.secretKeyRef.withName(pim.keycloak.KC_API_CLIENT_NAME+"-client-secret")+envSource.secretKeyRef.withKey("secret"),
                     MINIO_ROOT_PASSWORD: envSource.secretKeyRef.withName(config.secrets.minio.minio_root_password_secret)+envSource.secretKeyRef.withKey("password"),
+                    CKAN_ADMIN_TOKEN: envSource.secretKeyRef.withName("ckan-admin-token-secret")+envSource.secretKeyRef.withKey("token")
                 })
                 + container.withPorts([
                     containerPort.newNamed(pim.ports.STELARAPI, "api")
