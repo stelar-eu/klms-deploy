@@ -175,10 +175,10 @@ secrets:
       - password: "datastore"
   - name: "keycloakroot-secret"
     data:
-      - password: "stelartuc"
+      - password: "stelar1234"
   - name: "smtpapi-secret"
     data:
-      - password: "t&0gc8Y04!@"
+      - password: "smtp_pass"
   - name: "ckanadmin-secret"
     data:
       - password: "stelar1234"
