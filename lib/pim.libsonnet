@@ -38,7 +38,8 @@
     REALM: 'master',
     KC_API_CLIENT_NAME: "stelar-api",
     KC_MINIO_CLIENT_NAME: "minio",
-    KC_CKAN_CLIENT_NAME: "ckan"
+    KC_CKAN_CLIENT_NAME: "ckan",
+    KC_HOSTNAME_BACKCHANNEL_DYNAMIC: "true",
   },
   
   

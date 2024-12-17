@@ -35,6 +35,7 @@ local KEYCLOAK_CONFIG(pim,config) = {
     JDBC_PARAMS: pim.keycloak.JDBC_PARAMS,
     KC_HTTP_ENABLED: pim.keycloak.KC_HTTP_ENABLED,    
     KC_HEALTH_ENABLED: pim.keycloak.KC_HEALTH_ENABLED,
+    KC_HOSTNAME_BACKCHANNEL_DYNAMIC: pim.keycloak.KC_HOSTNAME_BACKCHANNEL_DYNAMIC,
 };
 
 {
