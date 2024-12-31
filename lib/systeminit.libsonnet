@@ -31,6 +31,8 @@ local KEYCLOAK_CONFIG(pim,config) = {
 {
     manifest(pim,config): {
 
+        local keycloak_external_url = config.endpoint.SCHEME+"://"+config.endpoint.KEYCLOAK_SUBDOMAIN+"."+config.endpoint.ROOT_DOMAIN,
+
         kcinitjob: job.new("kcinit")
             + job.metadata.withLabels({
                 'app.kubernetes.io/name': 'kc-init',
@@ -48,7 +50,7 @@ local KEYCLOAK_CONFIG(pim,config) = {
                     KEYCLOAK_ADMIN : pim.keycloak.KEYCLOAK_ADMIN,
                     KEYCLOAK_ADMIN_PASSWORD : envSource.secretKeyRef.withName(config.secrets.keycloak.root_password_secret)+envSource.secretKeyRef.withKey("password"),
                     KEYCLOAK_REALM: pim.keycloak.REALM,
-                    KEYCLOAK_DOMAIN_NAME: config.endpoint.SCHEME+"://"+config.endpoint.KEYCLOAK_SUBDOMAIN+"."+config.endpoint.ROOT_DOMAIN,
+                    KEYCLOAK_DOMAIN_NAME: keycloak_external_url,
                     KEYCLOAK_PORT: std.toString(pim.ports.KEYCLOAK),
                     KC_API_CLIENT_NAME: pim.keycloak.KC_API_CLIENT_NAME,
                     KC_MINIO_CLIENT_NAME: pim.keycloak.KC_MINIO_CLIENT_NAME,
