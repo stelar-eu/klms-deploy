@@ -7,123 +7,109 @@ local k = import "k.libsonnet";
 local ing = k.networking.v1.ingress;
 local ingrule = k.networking.v1.ingressRule;
 local ingpath = k.networking.v1.httpIngressPath;
+local ingtls = k.networking.v1.ingressTLS;
+
+
+local standard_annotations =  {
+    "nginx.ingress.kubernetes.io/proxy-connect-timeout": "60s",
+};
+
+/* N.B. This will eventually be moved to the PSM !! */
+local letsencrypt_annotations = {
+    "cert-manager.io/cluster-issuer": "letsencrypt-production",
+    "nginx.ingress.kubernetes.io/ssl-redirect": "true",
+};
+
+
+local http_ingress(name, annotations, host, paths) = 
+    ing.new(name)
+    + ing.metadata.withAnnotations(standard_annotations + annotations)
+    + ing.spec.withIngressClassName("nginx")
+    + ing.spec.withRules(
+        ingrule.withHost(host)
+        + ingrule.http.withPaths(paths)
+    )
+;
+
+
+local https_ingress_lets_encrypt(name, annotations, host, paths, tls_name) = 
+    ing.new(name)
+    + ing.metadata.withAnnotations(standard_annotations + letsencrypt_annotations + annotations)
+    + ing.spec.withIngressClassName("nginx")
+    + ing.spec.withRules(
+        ingrule.withHost(host)
+        + ingrule.http.withPaths(paths)
+    )
+    + ing.spec.withTls([
+        ingtls.withHosts([host])
+        + ingtls.withSecretName(tls_name),
+    ])
+;
+
+local pim_tls_secret_name(pim) =  pim.namespace+'-tls';
+
+local transform_paths(paths) = [
+    ingpath.withPath(p[0])
+    + ingpath.withPathType(p[1])
+    + ingpath.backend.service.withName(p[2])
+    + ingpath.backend.service.port.withName(p[3])
+
+    for p in paths
+];
+
+
+local ingress(pim, config, name, annotations, host, paths) = 
+    if (config.endpoint.SCHEME == 'http')
+    then http_ingress(name, annotations, host, transform_paths(paths))
+    else https_ingress_lets_encrypt(name, annotations, host, transform_paths(paths), 
+        pim_tls_secret_name(pim))
+;
+
+
 
 {
     manifest(pim, config): {
 
-        ingress_s3:  ing.new("s3")
-            + ing.metadata.withAnnotations({
-                "cert-manager.io/cluster-issuer": "letsencrypt-production",
-                "nginx.ingress.kubernetes.io/proxy-connect-timeout": "60s",
-                "nginx.ingress.kubernetes.io/ssl-redirect": "true",
+        ingress_s3: ingress(pim, config, 
+            "s3", 
+            annotations = {
                 "nginx.ingress.kubernetes.io/proxy-body-size": "5120m",
                 "nginx.ingress.kubernetes.io/proxy-http-version": "1.1",
                 "nginx.ingress.kubernetes.io/proxy-chunked-transfer-encoding": "off",
                 "nginx.ingress.kubernetes.io/proxy-set-header": "Host $http_host; X-Real-IP $remote_addr; X-Forwarded-For $proxy_add_x_forwarded_for; X-Forwarded-Proto $scheme;",
                 "nginx.ingress.kubernetes.io/proxy-set-headers": "Connection '';",
-            })
-            + ing.spec.withIngressClassName("nginx")
-            + ing.spec.withRules([
-                ingrule.withHost(config.endpoint.MINIO_API_SUBDOMAIN+'.'+config.endpoint.ROOT_DOMAIN)
-                + ingrule.http.withPaths([
+            },
+            host = config.endpoint.MINIO_API_SUBDOMAIN+'.'+config.endpoint.ROOT_DOMAIN,
+            paths = [
+                ["/", "Prefix", "minio", "minio-minapi"]
+            ]
+        ),
 
-                    /*
-                        MinIO API - Root Path "/"
-                    */
-                    ingpath.withPath("/")
-                    + ingpath.withPathType("Prefix")
-                    + ingpath.backend.service.withName("minio")
-                    + ingpath.backend.service.port.withName("minio-minapi"),
-                ]),
-            ])
+        ingress_kc: ingress(pim, config,
+            "kc",
+            annotations = {},
+            host = config.endpoint.KEYCLOAK_SUBDOMAIN+'.'+config.endpoint.ROOT_DOMAIN,
+            paths = [
+                ["/", "Prefix", "keycloak", "keycloak-kc"]
+            ]
+        ),
 
-            + ing.spec.withTls([
-                k.networking.v1.ingressTLS.withHosts([config.endpoint.MINIO_API_SUBDOMAIN+'.'+config.endpoint.ROOT_DOMAIN])
-                + k.networking.v1.ingressTLS.withSecretName(pim.namespace+"-tls"),
-            ]),
-
-        ingress_kc: ing.new("kc")
-            + ing.metadata.withAnnotations({
-                "cert-manager.io/cluster-issuer": "letsencrypt-production",
-                "nginx.ingress.kubernetes.io/proxy-connect-timeout": "60s",
-                "nginx.ingress.kubernetes.io/ssl-redirect": "true",
-            })
-            + ing.spec.withIngressClassName("nginx")
-            + ing.spec.withRules([
-                ingrule.withHost(config.endpoint.KEYCLOAK_SUBDOMAIN+'.'+config.endpoint.ROOT_DOMAIN)
-                + ingrule.http.withPaths([                
-                    ingpath.withPath("/")
-                    + ingpath.withPathType("Prefix")
-                    + ingpath.backend.service.withName("keycloak")
-                    + ingpath.backend.service.port.withName("keycloak-kc"),
-                ]),
-            ])
-
-            + ing.spec.withTls([
-                k.networking.v1.ingressTLS.withHosts([config.endpoint.KEYCLOAK_SUBDOMAIN+'.'+config.endpoint.ROOT_DOMAIN])
-                + k.networking.v1.ingressTLS.withSecretName(pim.namespace+"-tls"),
-            ]),
-
-        ingress: ing.new("stelar")
-            + ing.metadata.withAnnotations({
-                "cert-manager.io/cluster-issuer": "letsencrypt-production",
-                "nginx.ingress.kubernetes.io/proxy-connect-timeout": "60s",
-                "nginx.ingress.kubernetes.io/ssl-redirect": "true",
+        ingress: ingress(pim, config, 
+            "stelar",
+            annotations = {
+                "nginx.ingress.kubernetes.io/proxy-body-size": "5120m",
                 "nginx.ingress.kubernetes.io/x-forwarded-prefix": "/$1",
                 "nginx.ingress.kubernetes.io/rewrite-target": "/$3",
-                "nginx.ingress.kubernetes.io/proxy-body-size": "5120m",
-            })
-            + ing.spec.withIngressClassName("nginx")
-            + ing.spec.withRules([
-
-                ingrule.withHost(config.endpoint.PRIMARY_SUBDOMAIN+'.'+config.endpoint.ROOT_DOMAIN)
-                + ingrule.http.withPaths([
-                    /*
-                        Root of the Ingress leads to / of STELAR API
-                    */
-                    ingpath.withPath("/")
-                    + ingpath.withPathType("Prefix")
-                    + ingpath.backend.service.withName("stelarapi")
-                    + ingpath.backend.service.port.withName("apiserver-api"),
-                    /*
-                        CKAN
-                    */
-                    ingpath.withPath("/(dc)(/|$)(.*)")
-                    + ingpath.withPathType("Prefix")
-                    + ingpath.backend.service.withName("ckan")
-                    + ingpath.backend.service.port.withName("api"),
-
-                    /*
-                        STELARAPI
-                    */
-                    ingpath.withPath("/(stelar)(/|$)(.*)")
-                    + ingpath.withPathType("Prefix")
-                    + ingpath.backend.service.withName("stelarapi")
-                    + ingpath.backend.service.port.withName("apiserver-api"),
-
-                    /*
-                        MinIO Console
-                     */
-                    ingpath.withPath("/(s3)(/|$)(.*)")
-                    + ingpath.withPathType("Prefix")
-                    + ingpath.backend.service.withName("minio")
-                    + ingpath.backend.service.port.withName("minio-minio"),
-
-                    /*
-                        ONTOP
-                    */
-                    ingpath.withPath("/(kg)(/|$)(.*)")
-                    + ingpath.withPathType("Prefix")
-                    + ingpath.backend.service.withName("ontop")
-                    + ingpath.backend.service.port.withName("ontop-ontop"),
-
-                ]),
-            ])
-
-            + ing.spec.withTls([
-                k.networking.v1.ingressTLS.withHosts([config.endpoint.PRIMARY_SUBDOMAIN+'.'+config.endpoint.ROOT_DOMAIN])
-                + k.networking.v1.ingressTLS.withSecretName(pim.namespace+"-tls"),
-            ])
-
-    }
+            },
+            host = config.endpoint.PRIMARY_SUBDOMAIN+'.'+config.endpoint.ROOT_DOMAIN, 
+            paths = [
+                ["/", "Prefix", "stelarapi", "apiserver-api"],
+                ["/(dc)(/|$)(.*)", "ImplementationSpecific", "ckan", "api"],
+                ["/(stelar)(/|$)(.*)", "ImplementationSpecific", "stelarapi", "apiserver-api"],
+                ["/(s3)(/|$)(.*)", "ImplementationSpecific", "minio", "minio-minio"],
+                ["/(kg)(/|$)(.*)", "ImplementationSpecific", "ontop", "ontop-ontop"],
+            ]
+        ),
+    }    
 }
+
