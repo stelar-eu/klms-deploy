@@ -1,6 +1,8 @@
 local k = import "k.libsonnet";
 local podinit = import "podinit.libsonnet";
 local rbac = import "rbac.libsonnet";
+local images = import "images.libsonnet";
+
 
 local deploy = k.apps.v1.deployment;
 local job = k.batch.v1.job;
@@ -75,7 +77,8 @@ local KEYCLOAK_CONFIG(pim,config) = {
             + job.spec.template.spec.withRestartPolicy("Never"),
 
 
-
+        local apiserver_image = images.image_name(pim.images.API_IMAGE),
+        local apiserver_pull_policy = images.pull_policy(pim.images.API_IMAGE),
 
 
          apiinitjob: job.new("apiinit")
@@ -84,8 +87,12 @@ local KEYCLOAK_CONFIG(pim,config) = {
                 'app.kubernetes.io/component': 'apiinit',
             })
             + job.spec.template.spec.withContainers(containers=[
-                container.new("apiinit-container", pim.images.API_IMAGE)
-                + container.withImagePullPolicy("Always")
+                
+                local image = images.image_name(pim.images.API_IMAGE);
+                local pull_policy = images.pull_policy(pim.images.API_IMAGE);
+
+                container.new("apiinit-container", image)
+                + container.withImagePullPolicy(pull_policy)
                 + container.withArgs(["setup-db"]) // Set how the image should be executed
                 + container.withEnvMap({
                     POSTGRES_HOST: pim.db.POSTGRES_HOST,

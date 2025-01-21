@@ -6,6 +6,7 @@ local podinit = import "podinit.libsonnet";
 local pvol = import "pvolumes.libsonnet";
 local svcs = import "services.libsonnet";
 local rbac = import "rbac.libsonnet";
+local images = import "images.libsonnet";
 
 /* K8S API MODEL */
 local k = import "k.libsonnet";
@@ -27,6 +28,7 @@ local policyRule = k.rbac.v1.policyRule;
 local configMap = k.core.v1.configMap;
 local envSource = k.core.v1.envVarSource;
 local secretSelector = k.core.v1.secretKeySelectors;
+
 
 
 #Liveness probe urls used by wait4x during init container(s) runtime.
@@ -68,6 +70,11 @@ local API_CONFIG(pim, config) = {
     KEYCLOAK_SUBDOMAIN: config.endpoint.KEYCLOAK_SUBDOMAIN, # eg "kc"
     MINIO_API_SUBDOMAIN: config.endpoint.MINIO_API_SUBDOMAIN, # eg "minio"
 
+    MINIO_API_EXT_URL: "%(SCHEME)s://%(MINIO_API_SUBDOMAIN)s.%(ROOT_DOMAIN)s" % config.endpoint,
+    KEYCLOAK_EXT_URL: "%(SCHEME)s://%(KEYCLOAK_SUBDOMAIN)s.%(ROOT_DOMAIN)s" % config.endpoint,
+    KEYCLOAK_ISSUER_URL: self.KEYCLOAK_EXT_URL + "/realms/" + pim.keycloak.REALM,
+    MAIN_EXT_URL: "%(SCHEME)s://%(PRIMARY_SUBDOMAIN)s.%(ROOT_DOMAIN)s" % config.endpoint,
+
 
     ########################################
     ##  MINIO  #############################
@@ -104,8 +111,12 @@ local API_CONFIG(pim, config) = {
         deployment: deploy.new(
             name="stelarapi",
             containers=[
-                container.new("apiserver", pim.images.API_IMAGE)
-                + container.withImagePullPolicy("Always")
+
+                local image = images.image_name(pim.images.API_IMAGE);
+                local pull_policy = images.pull_policy(pim.images.API_IMAGE);
+
+                container.new("apiserver", image )
+                + container.withImagePullPolicy(pull_policy)
                 + container.withEnvFrom([{
                     configMapRef: {
                         name: "api-config-map",
