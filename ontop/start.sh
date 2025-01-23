@@ -19,7 +19,7 @@ elif [ "$1" = 'setup-db' ]; then
     fi
 
     # Loop over all .sql files in /schemas and execute them
-    for sql_file in /stelarschemas/*.sql; do
+    for sql_file in /opt/ontop/stelar_schemas/*.sql; do
         if [ -f "$sql_file" ]; then  # Check if the file exists
             echo "Executing $sql_file..."
             psql "$URL" "-v" "ON_ERROR_STOP=on" "-f" "$sql_file"
