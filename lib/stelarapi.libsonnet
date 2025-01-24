@@ -131,7 +131,8 @@ local API_CONFIG(pim, config) = {
                     POSTGRES_PASSWORD: envSource.secretKeyRef.withName(config.secrets.db.ckan_db_password_secret)+envSource.secretKeyRef.withKey("password"),
                     KEYCLOAK_CLIENT_SECRET: envSource.secretKeyRef.withName(pim.keycloak.KC_API_CLIENT_NAME+"-client-secret")+envSource.secretKeyRef.withKey("secret"),
                     MINIO_ROOT_PASSWORD: envSource.secretKeyRef.withName(config.secrets.minio.minio_root_password_secret)+envSource.secretKeyRef.withKey("password"),
-                    CKAN_ADMIN_TOKEN: envSource.secretKeyRef.withName("ckan-admin-token-secret")+envSource.secretKeyRef.withKey("token")
+                    CKAN_ADMIN_TOKEN: envSource.secretKeyRef.withName("ckan-admin-token-secret")+envSource.secretKeyRef.withKey("token"),
+                    SESSION_SECRET_KEY: envSource.secretKeyRef.withName(config.secrets.api.session_secret_key)+envSource.secretKeyRef.withKey("key"),
                 })
                 + container.withPorts([
                     containerPort.newNamed(pim.ports.STELARAPI, "api")
