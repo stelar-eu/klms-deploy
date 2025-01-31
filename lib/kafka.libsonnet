@@ -18,9 +18,31 @@ local secret = k.core.v1.secret;
 local podinit = import "podinit.libsonnet";
 local envSource = k.core.v1.envVarSource;
 
+
+
+local KAFKA_CONFIG(pim, brokerorder) = {
+    ########################################
+    ##  Kafka Node Configuration  ##########
+    ##  - pim: The PIM from transform_pim ##
+    ##  - brokerorder: The order of the   ##
+    ##    broker in the cluster. (1,2,..) ##
+    ########################################
+    KAFKA_ZOOKEEPER_CONNECT: "localhost:"+pim.ports.ZOOKEEPER,
+    KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: "INTERNAL:PLAINTEXT,EXTERNAL:PLAINTEXT",
+    KAFKA_INTER_BROKER_LISTENER_NAME: "INTERNAL",
+    KAFKA_LISTENERS: "INTERNAL://0.0.0.0:"+std.toString(pim.ports.KAFKA_INTERNAL+brokerorder-1)+",EXTERNAL://0.0.0.0:"+std.toString(brokerorder)+std.toString(pim.ports.KAFKA_INTERNAL),
+    KAFKA_ADVERTISED_LISTENERS: "INTERNAL://localhost:"+std.toString(pim.ports.KAFKA_INTERNAL+brokerorder-1)+",EXTERNAL://kafka-cluster:"+std.toString(brokerorder)+std.toString(pim.ports.KAFKA_INTERNAL),
+    KAFKA_BROKER_ID: std.toString(brokerorder),  
+    KAFKA_MIN_INSYNC_REPLICAS: "1",
+    KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: "2",  
+};
+
 {
     manifest(pim,config): {
-
+        
+        ########################################
+        ##  KAFBAT UI  #########################
+        ########################################
         deployment: deploy.new(name="kafbat", containers=[
             container.new("kafbat", pim.images.KAFBAT_IMAGE)
             + container.withEnvMap({
@@ -33,6 +55,8 @@ local envSource = k.core.v1.envVarSource;
                 'AUTH_OAUTH2_CLIENT_KEYCLOAK_USER-NAME-ATTRIBUTE': 'preferred_username',
                 'AUTH_OAUTH2_CLIENT_KEYCLOAK_CLIENT-NAME': 'STELAR SSO',
                 AUTH_OAUTH2_CLIENT_KEYCLOAK_PROVIDER: 'keycloak',
+                KAFKA_CLUSTERS_0_NAME: 'STELAR SDE Kafka Cluster',
+                KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: pim.kafka.KAFKA_BROKER_1_URL+","+pim.kafka.KAFKA_BROKER_2_URL,
                 'AUTH_OAUTH2_CLIENT_KEYCLOAK_CUSTOM-PARAMS_TYPE': 'oauth',
                 'AUTH_OAUTH2_CLIENT_KEYCLOAK_CUSTOM-PARAMS_LOGOUTURL': config.endpoint.SCHEME+"://" + config.endpoint.KEYCLOAK_SUBDOMAIN + "." + config.endpoint.ROOT_DOMAIN + "/realms/" + pim.keycloak.REALM + '/protocol/openid-connect/logout',
                 'AUTH_OAUTH2_CLIENT_KEYCLOAK_CUSTOM-PARAMS_ROLES-FIELD': 'realm_roles',
@@ -47,5 +71,46 @@ local envSource = k.core.v1.envVarSource;
         }),
 
         kfb_svc: svcs.serviceFor(self.deployment),
+
+
+        ###########################################
+        ##  KAFKA CLUSTER POD   ###################
+        ###########################################
+        ##  Kafka Cluster with 2 Brokers  1 ZK ####
+        ###########################################
+        kafka_cluster: deploy.new(name="kafka-cluster", containers=[
+            
+             container.new("kafka1", pim.images.KAFKA_IMAGE)
+           + container.withImagePullPolicy("IfNotPresent")
+           + container.withEnvMap(KAFKA_CONFIG(pim, 1))
+           + container.withPorts([
+                containerPort.newNamed(19092, "kf"),
+           ]),
+
+             container.new("kafka2", pim.images.KAFKA_IMAGE)
+           + container.withImagePullPolicy("IfNotPresent")
+           + container.withEnvMap(KAFKA_CONFIG(pim, 2))
+           + container.withPorts([
+                containerPort.newNamed(29092, "kf"),
+           ]),
+             
+             container.new("zookeeper", pim.images.ZOOKEEPER_IMAGE)
+           + container.withImagePullPolicy("IfNotPresent")
+           + container.withEnvMap({
+                ZOOKEEPER_CLIENT_PORT: std.toString(pim.ports.ZOOKEEPER),
+                ZOOKEEPER_TICK_TIME: '2000',
+                        
+           })
+           + container.withPorts([
+                containerPort.newNamed(pim.ports.ZOOKEEPER, "zk"),
+           ])
+        ],
+        podLabels={
+            'app.kubernetes.io/name': 'kafka-cluster',
+            'app.kubernetes.io/component': 'kafka',
+        }),
+
+
+        kafka_cluster_svc: svcs.serviceFor(self.kafka_cluster),
     }
 }
