@@ -211,7 +211,8 @@ def generate_jsonnet_content(yaml_data, secrets_list):
               ONTOP_IMAGE: "petroud/stelar-tuc:ontop",
               KEYCLOAK_IMAGE:"quay.io/keycloak/keycloak:25.0",
               REDIS_IMAGE:"redis:7",
-              KC_INIT:"petroud/stelar-tuc:kcinit"
+              KC_INIT:"petroud/stelar-tuc:kcinit",
+              KAFBAT_IMAGE: "ghcr.io/kafbat/kafka-ui:v1.1.0",
             }},
         }}
         + defaults,
@@ -229,6 +230,7 @@ def generate_jsonnet_content(yaml_data, secrets_list):
         import 'ontop.libsonnet',
         import 'minio.libsonnet',
         import 'keycloak.libsonnet',
+        import 'kafka.libsonnet',
         import 'stelarapi.libsonnet',
         import 'stelar_ingress.libsonnet',
         import 'ckan.libsonnet',

@@ -23,6 +23,7 @@
     SUPERSET: 8088,
     MINIO:9001,
     MINIOAPI:9000,
+    KAFBAT: 8080
   },
   
 
