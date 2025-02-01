@@ -209,7 +209,7 @@ def generate_jsonnet_content(yaml_data, secrets_list):
               POSTGIS_IMAGE:"petroud/stelar-tuc:postgres",
               MINIO_IMAGE:"quay.io/minio/minio:latest",
               ONTOP_IMAGE: "petroud/stelar-tuc:ontop",
-              KEYCLOAK_IMAGE:"quay.io/keycloak/keycloak:25.0",
+              KEYCLOAK_IMAGE:"petroud/stelar-tuc:keycloak",
               REDIS_IMAGE:"redis:7",
               KC_INIT:"petroud/stelar-tuc:kcinit",
               KAFBAT_IMAGE: "ghcr.io/kafbat/kafka-ui:v1.1.0",
