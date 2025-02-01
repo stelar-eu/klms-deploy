@@ -68,7 +68,11 @@ local KAFKA_CONFIG(pim, brokerorder) = {
         podLabels={
             'app.kubernetes.io/name': 'kfb',
             'app.kubernetes.io/component': 'kafbat',
-        }),
+        })
+        + deploy.spec.template.spec.withInitContainers([
+            /* We need to wait for Keycloak to be ready */
+            podinit.wait4_http("wait4-keycloak", "http://keycloak:9000/health/ready"),
+        ]),
 
         kfb_svc: svcs.serviceFor(self.deployment),
 
