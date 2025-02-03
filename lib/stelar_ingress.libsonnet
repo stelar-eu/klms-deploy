@@ -100,6 +100,7 @@ local ingress(pim, config, name, annotations, host, paths) =
                 "nginx.ingress.kubernetes.io/proxy-body-size": "5120m",
                 "nginx.ingress.kubernetes.io/x-forwarded-prefix": "/$1",
                 "nginx.ingress.kubernetes.io/rewrite-target": "/$3",
+                "nginx.ingress.kubernetes.io/app-root": "/stelar",
             },
             host = config.endpoint.PRIMARY_SUBDOMAIN+'.'+config.endpoint.ROOT_DOMAIN, 
             paths = [
