@@ -47,6 +47,11 @@ local KEYCLOAK_CONFIG(pim,config) = {
                    +cmap.withData(keycloak_config),
 
         deployment: deploy.new(name="keycloak", containers=[
+            ########################################
+            ## KEYCLOAK CONTAINER ##################
+            ## Listens on: 8080/9000 of the pod ####
+            ########################################
+            ## dpetrou: Maybe we should rename the pod #####
             container.new("keycloak", pim.images.KEYCLOAK_IMAGE)
             + container.withEnvFrom([{
                 configMapRef:{
@@ -61,7 +66,17 @@ local KEYCLOAK_CONFIG(pim,config) = {
             + container.withPorts([
                 containerPort.newNamed(pim.ports.KEYCLOAK, "kc"),
                 containerPort.newNamed(9000, "kchealth")
-            ])            
+            ]),
+            ########################################
+            ## OPA CONTAINER #######################
+            ## Listens on: 8181 of the pod #########
+            ########################################
+            container.new("opaserver", pim.images.OPA_IMAGE)
+            + container.withImagePullPolicy("IfNotPresent")
+            + container.withCommand(['/opa', 'run', '--server', '--log-level=debug', '--addr=0.0.0.0:'+std.toString(pim.ports.OPA)])
+            + container.withPorts([
+                containerPort.newNamed(pim.ports.OPA, "opa")
+            ])
         ],
         podLabels={
         'app.kubernetes.io/name': 'kc',

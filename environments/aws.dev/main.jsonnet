@@ -65,7 +65,7 @@ local secrets = import 'secrets.libsonnet';
       minio:{
         API_DOMAIN: 'https://minio.stelar.gr',
         CONSOLE_DOMAIN: "https://klms.stelar.gr/s3",
-        INSECURE_MC_CLIENT: "false",
+        INSECURE_MC_CLIENT: 'false',
       }
     }
     + {
@@ -81,6 +81,7 @@ local secrets = import 'secrets.libsonnet';
         },
         api: {
           smtp_password_secret: "smtpapi-secret",
+          session_secret_key: "session-secret-key",
         },
         ckan: {
           ckan_admin_password_secret: "ckanadmin-secret",
@@ -102,9 +103,13 @@ local secrets = import 'secrets.libsonnet';
           POSTGIS_IMAGE:"petroud/stelar-tuc:postgres",
           MINIO_IMAGE:"quay.io/minio/minio:latest",
           ONTOP_IMAGE: "petroud/stelar-tuc:ontop",
-          KEYCLOAK_IMAGE:"quay.io/keycloak/keycloak:25.0",
+          KEYCLOAK_IMAGE:"petroud/stelar-tuc:keycloak",
           REDIS_IMAGE:"redis:7",
-          KC_INIT:"petroud/stelar-tuc:kcinit"
+          KC_INIT:"petroud/stelar-tuc:kcinit",
+          KAFBAT_IMAGE: "ghcr.io/kafbat/kafka-ui:v1.1.0",
+          KAFKA_IMAGE: 'confluentinc/cp-kafka:7.8.0',
+          ZOOKEEPER_IMAGE: 'confluentinc/cp-zookeeper:7.8.0',
+          OPA_IMAGE:'openpolicyagent/opa:1.1.0',
         },
     }
     + defaults,
@@ -122,6 +127,7 @@ local secrets = import 'secrets.libsonnet';
     import 'ontop.libsonnet',
     import 'minio.libsonnet',
     import 'keycloak.libsonnet',
+    import 'kafka.libsonnet',
     import 'stelarapi.libsonnet',
     import 'stelar_ingress.libsonnet',
     import 'ckan.libsonnet',

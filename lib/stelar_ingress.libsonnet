@@ -17,7 +17,7 @@ local standard_annotations =  {
 /* N.B. This will eventually be moved to the PSM !! */
 local letsencrypt_annotations = {
     "cert-manager.io/cluster-issuer": "letsencrypt-production",
-    "nginx.ingress.kubernetes.io/ssl-redirect": "true",
+    "nginx.ingress.kubernetes.io/ssl-redirect": "false",
 };
 
 
@@ -109,6 +109,8 @@ local ingress(pim, config, name, annotations, host, paths) =
                 ["/(stelar)(/|$)(.*)", "ImplementationSpecific", "stelarapi", "apiserver-api"],
                 ["/(s3)(/|$)(.*)", "ImplementationSpecific", "minio", "minio-minio"],
                 ["/(kg)(/|$)(.*)", "ImplementationSpecific", "ontop", "ontop-ontop"],
+                ["/(kafka)(/|$)(.*)", "ImplementationSpecific", "kafbat", "kafbat-kfb"],
+                ["/(opa)(/|$)(.*)", "ImplementationSpecific", "keycloak", "opaserver-opa"],
             ]
         ),
     }    

@@ -175,6 +175,8 @@ local KEYCLOAK_CONFIG(pim,config) = {
                     +" keycloak"
                     +" resource_proxy geo_view"
                     +" spatial_metadata spatial_query"
+                    +" scheming_datasets scheming_groups"
+                    +" scheming_organizations"
                     ,
                     CKAN__HARVEST__MQ__TYPE: "redis",
                     CKAN__HARVEST__MQ__HOSTNAME: "redis",

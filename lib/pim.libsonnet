@@ -23,6 +23,10 @@
     SUPERSET: 8088,
     MINIO:9001,
     MINIOAPI:9000,
+    KAFBAT: 8080,
+    KAFKA_INTERNAL: 9092,
+    ZOOKEEPER: 2181,
+    OPA: 8181,
   },
   
 
@@ -40,6 +44,12 @@
     KC_MINIO_CLIENT_NAME: "minio",
     KC_CKAN_CLIENT_NAME: "ckan",
     KC_HOSTNAME_BACKCHANNEL_DYNAMIC: "true",
+  },
+
+
+  kafka: {
+    KAFKA_BROKER_1_URL: "kafka-cluster:19092",
+    KAFKA_BROKER_2_URL: "kafka-cluster:29092",
   },
   
   
