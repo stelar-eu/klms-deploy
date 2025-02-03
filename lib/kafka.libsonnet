@@ -45,6 +45,7 @@ local KAFKA_CONFIG(pim, brokerorder) = {
         ########################################
         deployment: deploy.new(name="kafbat", containers=[
             container.new("kafbat", pim.images.KAFBAT_IMAGE)
+            + container.withImagePullPolicy("Always")
             + container.withEnvMap({
                 AUTH_TYPE: 'OAUTH2',
                 AUTH_OAUTH2_CLIENT_KEYCLOAK_CLIENTID: pim.keycloak.KC_API_CLIENT_NAME,
@@ -55,11 +56,10 @@ local KAFKA_CONFIG(pim, brokerorder) = {
                 'AUTH_OAUTH2_CLIENT_KEYCLOAK_USER-NAME-ATTRIBUTE': 'preferred_username',
                 'AUTH_OAUTH2_CLIENT_KEYCLOAK_CLIENT-NAME': 'STELAR SSO',
                 AUTH_OAUTH2_CLIENT_KEYCLOAK_PROVIDER: 'keycloak',
+                'AUTH_OAUTH2_CLIENT_KEYCLOAK_CUSTOM-PARAMS_TYPE': 'oauth',
                 KAFKA_CLUSTERS_0_NAME: 'STELAR SDE Kafka Cluster',
                 KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: pim.kafka.KAFKA_BROKER_1_URL+","+pim.kafka.KAFKA_BROKER_2_URL,
-                'AUTH_OAUTH2_CLIENT_KEYCLOAK_CUSTOM-PARAMS_TYPE': 'oauth',
-                'AUTH_OAUTH2_CLIENT_KEYCLOAK_CUSTOM-PARAMS_LOGOUTURL': config.endpoint.SCHEME+"://" + config.endpoint.KEYCLOAK_SUBDOMAIN + "." + config.endpoint.ROOT_DOMAIN + "/realms/" + pim.keycloak.REALM + '/protocol/openid-connect/logout',
-                'AUTH_OAUTH2_CLIENT_KEYCLOAK_CUSTOM-PARAMS_ROLES-FIELD': 'realm_roles',
+                'AUTH_OAUTH2_CLIENT_KEYCLOAK_CUSTOM-PARAMS_LOGOUTURL': config.endpoint.SCHEME+"://" + config.endpoint.KEYCLOAK_SUBDOMAIN + "." + config.endpoint.ROOT_DOMAIN + "/realms/" + pim.keycloak.REALM + '/protocol/openid-connect/logout'
             })        
             + container.withPorts([
                 containerPort.newNamed(pim.ports.KAFBAT, "kfb"),

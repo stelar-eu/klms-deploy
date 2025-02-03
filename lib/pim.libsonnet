@@ -26,6 +26,7 @@
     KAFBAT: 8080,
     KAFKA_INTERNAL: 9092,
     ZOOKEEPER: 2181,
+    OPA: 8181,
   },
   
 
