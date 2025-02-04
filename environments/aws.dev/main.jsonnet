@@ -106,10 +106,6 @@ local secrets = import 'secrets.libsonnet';
           KEYCLOAK_IMAGE:"petroud/stelar-tuc:keycloak",
           REDIS_IMAGE:"redis:7",
           KC_INIT:"petroud/stelar-tuc:kcinit",
-          KAFBAT_IMAGE: "ghcr.io/kafbat/kafka-ui:v1.1.0",
-          KAFKA_IMAGE: 'confluentinc/cp-kafka:7.8.0',
-          ZOOKEEPER_IMAGE: 'confluentinc/cp-zookeeper:7.8.0',
-          OPA_IMAGE:'openpolicyagent/opa:1.1.0',
         },
     }
     + defaults,
@@ -127,7 +123,6 @@ local secrets = import 'secrets.libsonnet';
     import 'ontop.libsonnet',
     import 'minio.libsonnet',
     import 'keycloak.libsonnet',
-    import 'kafka.libsonnet',
     import 'stelarapi.libsonnet',
     import 'stelar_ingress.libsonnet',
     import 'ckan.libsonnet',
