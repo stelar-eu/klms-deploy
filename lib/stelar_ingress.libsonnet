@@ -109,7 +109,6 @@ local ingress(pim, config, name, annotations, host, paths) =
                 ["/(stelar)(/|$)(.*)", "ImplementationSpecific", "stelarapi", "apiserver-api"],
                 ["/(s3)(/|$)(.*)", "ImplementationSpecific", "minio", "minio-minio"],
                 ["/(kg)(/|$)(.*)", "ImplementationSpecific", "ontop", "ontop-ontop"],
-                ["/(kafka)(/|$)(.*)", "ImplementationSpecific", "kafbat", "kafbat-kfb"],
             ]
         ),
     }    
