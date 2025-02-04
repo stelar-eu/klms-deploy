@@ -215,7 +215,6 @@ def generate_jsonnet_content(yaml_data, secrets_list):
               KAFBAT_IMAGE: "ghcr.io/kafbat/kafka-ui:v1.1.0",
               KAFKA_IMAGE: 'confluentinc/cp-kafka:7.8.0',
               ZOOKEEPER_IMAGE: 'confluentinc/cp-zookeeper:7.8.0',
-              OPA_IMAGE:'openpolicyagent/opa:1.1.0',
             }},
         }}
         + defaults,

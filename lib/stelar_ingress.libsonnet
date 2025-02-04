@@ -110,7 +110,6 @@ local ingress(pim, config, name, annotations, host, paths) =
                 ["/(s3)(/|$)(.*)", "ImplementationSpecific", "minio", "minio-minio"],
                 ["/(kg)(/|$)(.*)", "ImplementationSpecific", "ontop", "ontop-ontop"],
                 ["/(kafka)(/|$)(.*)", "ImplementationSpecific", "kafbat", "kafbat-kfb"],
-                ["/(opa)(/|$)(.*)", "ImplementationSpecific", "keycloak", "opaserver-opa"],
             ]
         ),
     }    
