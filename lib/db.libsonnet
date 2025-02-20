@@ -50,6 +50,12 @@ local DB_CONFIG(pim) = {
     KEYCLOAK_DB_SCHEMA: pim.db.KEYCLOAK_DB_SCHEMA, # 'keycloak'
 
 
+    ########################################
+    ##  QUAY DB SPECS ######################
+    ########################################  
+    QUAY_DB_USER: pim.db.QUAY_DB_USER,
+    QUAY_DB: pim.db.QUAY_DB,
+
     //CKAN modules schemata and databases ??????????? what about this
     DATASTORE_READONLY_USER: 'datastore_ro',
     DATASTORE_DB: 'datastore',
@@ -79,6 +85,7 @@ local DB_CONFIG(pim) = {
             // Pass secrets to the container by referencing their names
             + container.withEnvMap({
                 CKAN_DB_PASSWORD: envSource.secretKeyRef.withName(config.secrets.db.ckan_db_password_secret)+envSource.secretKeyRef.withKey("password"),          
+                QUAY_DB_PASSWORD: envSource.secretKeyRef.withName(config.secrets.db.quay_db_password_secret)+envSource.secretKeyRef.withKey("password"),          
                 POSTGRES_PASSWORD: envSource.secretKeyRef.withName(config.secrets.db.postgres_db_password_secret)+envSource.secretKeyRef.withKey("password"),          
                 KEYCLOAK_DB_PASSWORD: envSource.secretKeyRef.withName(config.secrets.db.keycloak_db_passowrd_secret)+envSource.secretKeyRef.withKey("password"),
                 DATASTORE_READONLY_PASSWORD: envSource.secretKeyRef.withName(config.secrets.db.datastore_db_password_secret)+envSource.secretKeyRef.withKey("password"),

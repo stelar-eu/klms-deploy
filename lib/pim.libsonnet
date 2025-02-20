@@ -26,7 +26,7 @@
     KAFBAT: 8080,
     KAFKA_INTERNAL: 9092,
     ZOOKEEPER: 2181,
-    OPA: 8181,
+    QUAY: 8080,
   },
   
 
@@ -51,6 +51,14 @@
     KAFKA_BROKER_1_URL: "kafka-cluster:19092",
     KAFKA_BROKER_2_URL: "kafka-cluster:29092",
   },
+
+
+  registry: {
+    QUAY_PULLERS_ROLE: "pullers",
+    QUAY_PUSHERS_ROLE: "pushers",
+    KC_ROLES_CLAIM: "groups",
+    MINIO_BUCKET: "registry",
+  },
   
   
   ###########################
@@ -67,6 +75,8 @@
     DATASTORE_READONLY_USER: 'datastore_ro',
     KEYCLOAK_DB_USER: 'keycloak',
     KEYCLOAK_DB_SCHEMA: 'keycloak',
+    QUAY_DB_USER: 'quay',
+    QUAY_DB: 'quay',
   },
 
 

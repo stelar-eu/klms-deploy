@@ -94,6 +94,15 @@ local ingress(pim, config, name, annotations, host, paths) =
             ]
         ),
 
+        ingress_reg: ingress(pim, config,
+            "reg",
+            annotations = {},
+            host = config.endpoint.REGISTRY_SUBDOMAIN+'.'+config.endpoint.ROOT_DOMAIN,
+            paths = [
+                ["/", "Prefix", "quay", "quay-quay"]
+            ]
+        ),
+
         ingress: ingress(pim, config, 
             "stelar",
             annotations = {
@@ -109,6 +118,8 @@ local ingress(pim, config, name, annotations, host, paths) =
                 ["/(stelar)(/|$)(.*)", "ImplementationSpecific", "stelarapi", "apiserver-api"],
                 ["/(s3)(/|$)(.*)", "ImplementationSpecific", "minio", "minio-minio"],
                 ["/(kg)(/|$)(.*)", "ImplementationSpecific", "ontop", "ontop-ontop"],
+                ["/(kafka)(/|$)(.*)", "ImplementationSpecific", "kafbat", "kafbat-kfb"],
+                //["/(flink)(/|$)(.*)", "ImplementationSpecific", "flink-cluster", "jmanager-fl"],
             ]
         ),
     }    
