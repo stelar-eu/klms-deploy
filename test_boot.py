@@ -155,6 +155,7 @@ def generate_jsonnet_content(yaml_data, secrets_list):
           PRIMARY_SUBDOMAIN: "{yaml_data["dns"][0]["subdomains"][2]["primary"]}",
           KEYCLOAK_SUBDOMAIN: "{yaml_data["dns"][0]["subdomains"][0]["keycloak"]}",
           MINIO_API_SUBDOMAIN: "{yaml_data["dns"][0]["subdomains"][1]["minio"]}",
+          REGISTRY_SUBDOMAIN: "{yaml_data["dns"][0]["subdomains"][3]["registry"]}",
         }}
       }},
       configuration::
@@ -181,6 +182,7 @@ def generate_jsonnet_content(yaml_data, secrets_list):
               ckan_db_password_secret: "{secrets_list[1]["secret_name"]}",
               keycloak_db_passowrd_secret: "{secrets_list[2]["secret_name"]}",
               datastore_db_password_secret: "{secrets_list[3]["secret_name"]}",
+              quay_db_password_secret: "{secrets_list[9]["secret_name"]}",
             }},
             keycloak: {{
               root_password_secret: "{secrets_list[4]["secret_name"]}",
@@ -212,6 +214,8 @@ def generate_jsonnet_content(yaml_data, secrets_list):
               KEYCLOAK_IMAGE:"petroud/stelar-tuc:keycloak",
               REDIS_IMAGE:"redis:7",
               KC_INIT:"petroud/stelar-tuc:kcinit",
+              REGISTRY_IMAGE: "petroud/stelar-tuc:registry",
+              REGISTRY_INIT: "petroud/stelar-tuc:registry-init"
              }},
         }}
         + defaults,
@@ -232,7 +236,8 @@ def generate_jsonnet_content(yaml_data, secrets_list):
         import 'stelarapi.libsonnet',
         import 'stelar_ingress.libsonnet',
         import 'ckan.libsonnet',
-        import 'systeminit.libsonnet'
+        import 'systeminit.libsonnet',
+        import 'registry.libsonnet',
       ],
       /*
       Translate to manifests. This will call the
