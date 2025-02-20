@@ -160,7 +160,7 @@ local KEYCLOAK_CONFIG(pim,config) = {
                 + container.withImagePullPolicy("Always")
                 + container.withEnvMap({
                    KUBE_NAMESPACE: pim.namespace,
-                   KC_ISSUER: keycloak_external_url + "/" + pim.keycloak.REALM + "/",
+                   KC_ISSUER: keycloak_external_url + "/realms/" + pim.keycloak.REALM + "/",
                    KC_QUAY_PUSHERS: pim.registry.QUAY_PUSHERS_ROLE,
                    KC_QUAY_PULLERS: pim.registry.QUAY_PULLERS_ROLE,
                    KC_QUAY_GROUP_CLAIM: pim.registry.KC_ROLES_CLAIM,
