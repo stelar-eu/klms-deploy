@@ -24,17 +24,7 @@ local envSource = k.core.v1.envVarSource;
 
     Environment/configuration values
     
- */
-
-# These should be initialized randomly
-# However, it is possible to let the ckan setup code to do it.
-# Note: if we do it here, the values override the onelss in ckan.ini (from setup)
-local SESSION_SECRETS = {
-  CKAN___BEAKER__SESSION__SECRET: 'qD-fHjSOa6xTMsAJDkfLKY-eRaYZnlI-5YBkkponncA',
-  CKAN___API_TOKEN__JWT__ENCODE__SECRET: 'string:ixORfkMa1CYT2yj1LApKM1S6GW7CUHlTjObiA5DgfXM',
-  CKAN___API_TOKEN__JWT__DECODE__SECRET: 'string:ixORfkMa1CYT2yj1LApKM1S6GW7CUHlTjObiA5DgfXM',
-};
-
+*/
 
 local KEYCLOAK_CONFIG(pim,config) = {
     CKANEXT__KEYCLOAK__SERVER_URL: config.endpoint.SCHEME+"://"+config.endpoint.KEYCLOAK_SUBDOMAIN+'.'+config.endpoint.ROOT_DOMAIN, 
@@ -46,9 +36,7 @@ local KEYCLOAK_CONFIG(pim,config) = {
 };
 
 
-local ENV= 
-    SESSION_SECRETS 
-    + {
+local ENV= {
     # CKAN core
     CKAN_VERSION: '2.10.0',
     CKAN_PORT: "5000",
@@ -149,7 +137,9 @@ local ckan_deployment(pim, config) =
             CKAN_SITE_URL: config.endpoint.SCHEME+"://"+config.endpoint.PRIMARY_SUBDOMAIN+"."+config.endpoint.ROOT_DOMAIN,
             CKAN_SYSADMIN_PASSWORD: envSource.secretKeyRef.withName(config.secrets.ckan.ckan_admin_password_secret)+envSource.secretKeyRef.withKey("password"),
             CKANEXT__KEYCLOAK__CLIENT_SECRET_KEY: envSource.secretKeyRef.withName(pim.keycloak.KC_CKAN_CLIENT_NAME+"-client-secret")+envSource.secretKeyRef.withKey("secret"),
-
+            CKAN___BEAKER__SESSION__SECRET: envSource.secretKeyRef.withName(config.secrets.ckan.ckan_auth_secret)+envSource.secretKeyRef.withKey("session-key"),
+            CKAN___API_TOKEN__JWT__ENCODE__SECRET: envSource.secretKeyRef.withName(config.secrets.ckan.ckan_auth_secret)+envSource.secretKeyRef.withKey("jwt-key"),
+            CKAN___API_TOKEN__JWT__DECODE__SECRET: envSource.secretKeyRef.withName(config.secrets.ckan.ckan_auth_secret)+envSource.secretKeyRef.withKey("jwt-key"),
             # Create secret env vars in order to access it and construct required URLs.
             A_CKAN_DB_PASSWORD: envSource.secretKeyRef.withName(config.secrets.db.ckan_db_password_secret)+envSource.secretKeyRef.withKey("password"),
             A_DATASTORE_DB_PASSWORD: envSource.secretKeyRef.withName(config.secrets.db.datastore_db_password_secret)+envSource.secretKeyRef.withKey("password"),

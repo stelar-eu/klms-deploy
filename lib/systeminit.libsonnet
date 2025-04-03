@@ -201,9 +201,9 @@ local KEYCLOAK_CONFIG(pim,config) = {
                 + container.withImagePullPolicy("Always")
                 + container.withArgs(["setup"]) // Set how the image should be executed
                 + container.withEnvMap( KEYCLOAK_CONFIG(pim, config) + {
-                    CKAN___BEAKER__SESSION__SECRET: 'qD-fHjSOa6xTMsAJDkfLKY-eRaYZnlI-5YBkkponncA',
-                    CKAN___API_TOKEN__JWT__ENCODE__SECRET: 'string:ixORfkMa1CYT2yj1LApKM1S6GW7CUHlTjObiA5DgfXM',
-                    CKAN___API_TOKEN__JWT__DECODE__SECRET: 'string:ixORfkMa1CYT2yj1LApKM1S6GW7CUHlTjObiA5DgfXM',
+                    CKAN___BEAKER__SESSION__SECRET: envSource.secretKeyRef.withName(config.secrets.ckan.ckan_auth_secret)+envSource.secretKeyRef.withKey("session-key"),
+                    CKAN___API_TOKEN__JWT__ENCODE__SECRET: envSource.secretKeyRef.withName(config.secrets.ckan.ckan_auth_secret)+envSource.secretKeyRef.withKey("jwt-key"),
+                    CKAN___API_TOKEN__JWT__DECODE__SECRET: envSource.secretKeyRef.withName(config.secrets.ckan.ckan_auth_secret)+envSource.secretKeyRef.withKey("jwt-key"),
                     CKANEXT__KEYCLOAK__CLIENT_SECRET_KEY: envSource.secretKeyRef.withName(pim.keycloak.KC_CKAN_CLIENT_NAME+"-client-secret")+envSource.secretKeyRef.withKey("secret"),
 
                     CKAN_VERSION: '2.10.0',

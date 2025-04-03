@@ -133,6 +133,7 @@ local API_CONFIG(pim, config) = {
                     MINIO_ROOT_PASSWORD: envSource.secretKeyRef.withName(config.secrets.minio.minio_root_password_secret)+envSource.secretKeyRef.withKey("password"),
                     CKAN_ADMIN_TOKEN: envSource.secretKeyRef.withName("ckan-admin-token-secret")+envSource.secretKeyRef.withKey("token"),
                     SESSION_SECRET_KEY: envSource.secretKeyRef.withName(config.secrets.api.session_secret_key)+envSource.secretKeyRef.withKey("key"),
+                    CKAN_ENCODE_KEY: envSource.secretKeyRef.withName(config.secrets.ckan.ckan_auth_secret)+envSource.secretKeyRef.withKey("jwt-key"),
                 })
                 + container.withPorts([
                     containerPort.newNamed(pim.ports.STELARAPI, "api")

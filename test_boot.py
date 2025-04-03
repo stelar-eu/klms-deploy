@@ -5,6 +5,8 @@ import json
 import os
 import yaml
 import textwrap
+import random
+import string
 
 config.load_kube_config()
 
@@ -53,6 +55,30 @@ def apply_secret_to_cluster(secret):
             print(f"⚠️ Secret '{secret['metadata']['name']}' already exists.\n")
         else:
             print(f"❌ Failed to apply secret: {e}\n")
+
+
+def generate_jwt_key(length=43):
+    characters = string.ascii_letters + string.digits
+    return f"string:{''.join(random.choices(characters, k=length))}"
+
+
+def generate_random_string(length=40, chunk_size=8, separator='-'):
+    characters = string.ascii_letters + string.digits
+    raw_string = ''.join(random.choices(characters, k=length))
+    chunks = [raw_string[i:i+chunk_size] for i in range(0, length, chunk_size)]
+    return separator.join(chunks)
+
+
+def generate_ckan_secrets(namespace):
+    secret_data = {}
+    # Create session secret
+    secret_data["session-key"] = generate_random_string(40, 8, "-")
+    # Create JWT encode key
+    secret_data["jwt-key"] = generate_jwt_key()
+
+    apply_secret_to_cluster(create_k8s_secret("ckan-auth-secret",
+                                              namespace,
+                                              secret_data))
 
 
 def create_tls_secret(namespace, cert_path, key_path):
@@ -193,6 +219,7 @@ def generate_jsonnet_content(yaml_data, secrets_list):
             }},
             ckan: {{
               ckan_admin_password_secret: "{secrets_list[6]["secret_name"]}",
+              ckan_auth_secret: "ckan-auth-secret",
             }},
             minio: {{
               minio_root_password_secret: "{secrets_list[7]["secret_name"]}",
@@ -334,6 +361,9 @@ def main():
             secret["secret_name"], yaml_data["namespace"], secret["secret_data"][0]
         )
         apply_secret_to_cluster(secret_yaml)
+
+    # Generate CKAN auth secrets
+    generate_ckan_secrets(yaml_data["namespace"])
 
     # If a certificate and key file were provided then generate the TLS secret certificate
     if cert_path and key_path:
