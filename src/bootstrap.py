@@ -116,6 +116,82 @@ def create_tls_secret(namespace, cert_path, key_path):
     return secret
 
 
+def generate_sample_yaml(file_path="example_config.yaml"):
+    """
+    Generates a YAML configuration file with sample values and comprehensive comments.
+    """
+    yaml_content = """
+# This is a sample configuration file for STELAR deployment. It is provided 
+# as input to the bootstrap script for generating Kubernetes secrets and
+# configuring the Tanka environment.
+# Environment name (e.g., "staging", "production", "minikube.dev")
+env_name: "minikube.dev"
+
+# Define either "amazon" for AWS or "minikube" for local Kubernetes
+platform: "minikube"
+
+# The Kubernetes context to use
+k8s_context: "minikube"
+
+# The Kubernetes namespace for deployment
+namespace: "stelar-dev"
+
+# The contact person for this configuration
+author: "dpetrou@tuc.gr"
+
+dns:
+  - name: "minikube"  # DNS configuration name, could be "stelar.gr" or "stelar-klms.eu" for public configs
+    scheme: "http"  # Scheme to use (e.g., "http" or "https")
+    subdomains:
+      keycloak: "kc"  # Keycloak subdomain
+      minio: "minio"  # MinIO subdomain
+      primary: "klms"  # Main application subdomain
+
+config:
+  - smtp_server: "stelar.gr"  # SMTP server address
+    smtp_port: "465"  # SMTP port (e.g., 465 for SSL, 587 for TLS)
+    smtp_username: "##YOUR_SMTP_USERNAME_HERE##"  # SMTP username for authentication
+    s3_console_url: "http://klms.minikube/s3/login"  # URL for the S3 console
+
+secrets:
+  - name: "postgresdb-secret"
+    data:
+      - password: "##YOUR_PASSWORD_HERE##"
+  - name: "ckandb-secret"
+    data:
+      - password: "##YOUR_PASSWORD_HERE##"
+  - name: "keycloakdb-secret"
+    data:
+      - password: "##YOUR_PASSWORD_HERE##"
+  - name: "datastoredb-secret"
+    data:
+      - password: "##YOUR_PASSWORD_HERE##"
+  - name: "keycloakroot-secret"
+    data:
+      - password: "##YOUR_PASSWORD_HERE##"
+  - name: "smtpapi-secret"
+    data:
+      - password: "##YOUR_PASSWORD_HERE##"
+  - name: "ckanadmin-secret"
+    data:
+      - password: "##YOUR_PASSWORD_HERE##"
+  - name: "minioroot-secret"
+    data:
+      - password: "##YOUR_PASSWORD_HERE##"
+  - name: "session-secret-key"
+    data:
+      - key: "##YOUR_SECRET_KEY_HERE##"
+  - name: "quaydb-secret"
+    data:
+      - key: "##YOUR_PASSWORD_HERE##"
+    """
+    
+    with open(file_path, "w") as file:
+        file.write(yaml_content)
+        
+    print("📝 YAML sample configuration file 'example_config.yaml' has been generated successfully.")
+
+
 def generate_jsonnet_content(yaml_data, secrets_list):
     print("📝 Generating JSONNet main file content...")
 
@@ -289,11 +365,15 @@ def write_jsonnet_file(path_to_jsonnet, yaml_data, secrets_list):
 
 
 def parse_args():
-    if "-f" not in sys.argv:
+    if "-f" not in sys.argv and "-sample" not in sys.argv:
         print(
-            "❌ Usage: python python_prog.py -f <file.yaml> [-cert <cert_path> -key <key_path>]"
+            "❌ Usage: python bootstrap.py -f <file.yaml> [-cert <cert_path> -key <key_path>] or python bootstrap.py -sample to generate a sample YAML file."
         )
         sys.exit(1)
+
+    if "-sample" in sys.argv:
+        generate_sample_yaml()
+        sys.exit(0)
 
     yaml_file = sys.argv[sys.argv.index("-f") + 1]
     cert_path = sys.argv[sys.argv.index("-cert") + 1] if "-cert" in sys.argv else None
