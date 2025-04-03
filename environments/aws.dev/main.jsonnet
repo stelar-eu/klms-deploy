@@ -49,6 +49,7 @@ local secrets = import 'secrets.libsonnet';
       PRIMARY_SUBDOMAIN: "klms",
       KEYCLOAK_SUBDOMAIN: "kc",
       MINIO_API_SUBDOMAIN: "minio",
+      REGISTRY_SUBDOMAIN: "img",
     }
   },
   configuration::
@@ -75,6 +76,7 @@ local secrets = import 'secrets.libsonnet';
           ckan_db_password_secret: "ckandb-secret",
           keycloak_db_passowrd_secret: "keycloakdb-secret",
           datastore_db_password_secret: "datastoredb-secret",
+          quay_db_password_secret: "quaydb-secret",
         },
         keycloak: {
           root_password_secret: "keycloakroot-secret",
@@ -85,6 +87,7 @@ local secrets = import 'secrets.libsonnet';
         },
         ckan: {
           ckan_admin_password_secret: "ckanadmin-secret",
+          ckan_auth_secret: "ckan-auth-secret",
         },
         minio: {
           minio_root_password_secret: "minioroot-secret",
@@ -106,7 +109,9 @@ local secrets = import 'secrets.libsonnet';
           KEYCLOAK_IMAGE:"petroud/stelar-tuc:keycloak",
           REDIS_IMAGE:"redis:7",
           KC_INIT:"petroud/stelar-tuc:kcinit",
-        },
+          REGISTRY_IMAGE: "petroud/stelar-tuc:registry",
+          REGISTRY_INIT: "petroud/stelar-tuc:registry-init"
+         },
     }
     + defaults,
 
@@ -126,7 +131,8 @@ local secrets = import 'secrets.libsonnet';
     import 'stelarapi.libsonnet',
     import 'stelar_ingress.libsonnet',
     import 'ckan.libsonnet',
-    import 'systeminit.libsonnet'
+    import 'systeminit.libsonnet',
+    import 'registry.libsonnet',
   ],
   /*
   Translate to manifests. This will call the
