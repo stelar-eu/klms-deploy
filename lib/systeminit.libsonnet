@@ -176,7 +176,7 @@ local KEYCLOAK_CONFIG(pim,config) = {
                    MINIO_HOST: config.minio.API_DOMAIN,
                    MINIO_ROOT_USER: pim.minio.MINIO_ROOT_USER,
                    MINIO_ROOT_PASSWORD: envSource.secretKeyRef.withName(config.secrets.minio.minio_root_password_secret)+envSource.secretKeyRef.withKey("password"),
-                   MC_INSECURE: config.minio.INSECURE_MC_CLIENT,
+                   MC_INSECURE: std.toString(config.minio.INSECURE_MC_CLIENT),
                    MINIO_REGISTRY_BUCKET: pim.registry.MINIO_BUCKET,
                    QUAY_SERVER_HOSTNAME: config.endpoint.REGISTRY_SUBDOMAIN + "."+config.endpoint.ROOT_DOMAIN,
                    QUAY_REDIS_HOSTNAME: 'redis',

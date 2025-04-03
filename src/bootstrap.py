@@ -154,36 +154,36 @@ config:
     s3_console_url: "http://klms.minikube/s3/login"  # URL for the S3 console
 
 secrets:
-  - name: "postgresdb-secret"
+  - name: "postgresdb-secret" # Password for PostgreSQL default database 
     data:
       - password: "##YOUR_PASSWORD_HERE##"
-  - name: "ckandb-secret"
+  - name: "ckandb-secret"  # Password for PostgreSQL CKAN database 
     data:
       - password: "##YOUR_PASSWORD_HERE##"
-  - name: "keycloakdb-secret"
+  - name: "keycloakdb-secret" # Password for PostgreSQL Keycloak database 
     data:
       - password: "##YOUR_PASSWORD_HERE##"
-  - name: "datastoredb-secret"
+  - name: "datastoredb-secret" # Password for PostgreSQL Datastore database 
     data:
       - password: "##YOUR_PASSWORD_HERE##"
-  - name: "keycloakroot-secret"
+  - name: "keycloakroot-secret" # Password for STELAR Administrator user 
     data:
       - password: "##YOUR_PASSWORD_HERE##"
-  - name: "smtpapi-secret"
+  - name: "smtpapi-secret" # Password for SMTP server (mailing server)
     data:
       - password: "##YOUR_PASSWORD_HERE##"
-  - name: "ckanadmin-secret"
+  - name: "ckanadmin-secret" # Password for CKAN Administrator user
     data:
       - password: "##YOUR_PASSWORD_HERE##"
-  - name: "minioroot-secret"
+  - name: "minioroot-secret" # Password for MinIO root user
     data:
       - password: "##YOUR_PASSWORD_HERE##"
-  - name: "session-secret-key"
+  - name: "session-secret-key" # Secret key for session management
     data:
       - key: "##YOUR_SECRET_KEY_HERE##"
-  - name: "quaydb-secret"
+  - name: "quaydb-secret" # Password for PostgreSQL Quay database
     data:
-      - key: "##YOUR_PASSWORD_HERE##"
+      - password: "##YOUR_PASSWORD_HERE##"
     """
     
     with open(file_path, "w") as file:

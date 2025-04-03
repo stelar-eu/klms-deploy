@@ -17,7 +17,7 @@ local standard_annotations =  {
 /* N.B. This will eventually be moved to the PSM !! */
 local letsencrypt_annotations = {
     "cert-manager.io/cluster-issuer": "letsencrypt-production",
-    "nginx.ingress.kubernetes.io/ssl-redirect": "false",
+    "nginx.ingress.kubernetes.io/ssl-redirect": "true",
 };
 
 
@@ -96,10 +96,18 @@ local ingress(pim, config, name, annotations, host, paths) =
 
         ingress_reg: ingress(pim, config,
             "reg",
-            annotations = {},
+            annotations = {
+              "nginx.ingress.kubernetes.io/proxy-body-size": "5120m",
+                "nginx.ingress.kubernetes.io/proxy-http-version": "1.1",
+                "nginx.ingress.kubernetes.io/proxy-chunked-transfer-encoding": "off",
+                "nginx.ingress.kubernetes.io/proxy-set-header": "Host $http_host; X-Real-IP $remote_addr; X-Forwarded-For $proxy_add_x_forwarded_for; X-Forwarded-Proto $scheme;",
+                "nginx.ingress.kubernetes.io/proxy-set-headers": "Connection '';",
+            },
             host = config.endpoint.REGISTRY_SUBDOMAIN+'.'+config.endpoint.ROOT_DOMAIN,
             paths = [
-                ["/", "Prefix", "quay", "quay-quay"]
+                ["/", "Prefix", "quay", "quay-quay"],
+                ["/v2/", "Prefix", "quay", "quay-quay"],
+                ["/websocket", "Prefix", "quay", "quay-quay"]
             ]
         ),
 
