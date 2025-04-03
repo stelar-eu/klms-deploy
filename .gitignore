@@ -16,6 +16,8 @@ __pycache__/
 # Vendored helm charts
 /charts
 
+*.yaml
+
 # Distribution / packaging
 .Python
 build/
@@ -28,6 +30,8 @@ eggs/
 .installed.cfg
 *.egg
 MANIFEST
+
+/environments/*
 
 # PyInstaller
 #  Usually these files are written by a python script from a template
