@@ -69,12 +69,14 @@ local API_CONFIG(pim, config) = {
     MAIN_INGRESS_SUBDOMAIN: config.endpoint.PRIMARY_SUBDOMAIN, # eg "klms"
     KEYCLOAK_SUBDOMAIN: config.endpoint.KEYCLOAK_SUBDOMAIN, # eg "kc"
     MINIO_API_SUBDOMAIN: config.endpoint.MINIO_API_SUBDOMAIN, # eg "minio"
+    REGISTRY_SUBDOMAIN: config.endpoint.REGISTRY_SUBDOMAIN, # eg "registry"
 
     MINIO_API_EXT_URL: "%(SCHEME)s://%(MINIO_API_SUBDOMAIN)s.%(ROOT_DOMAIN)s" % config.endpoint,
     KEYCLOAK_EXT_URL: "%(SCHEME)s://%(KEYCLOAK_SUBDOMAIN)s.%(ROOT_DOMAIN)s" % config.endpoint,
     KEYCLOAK_ISSUER_URL: self.KEYCLOAK_EXT_URL + "/realms/" + pim.keycloak.REALM,
     MAIN_EXT_URL: "%(SCHEME)s://%(PRIMARY_SUBDOMAIN)s.%(ROOT_DOMAIN)s" % config.endpoint,
-
+    REGISTRY_EXT_URL: "%(SCHEME)s://%(REGISTRY_SUBDOMAIN)s.%(ROOT_DOMAIN)s" % config.endpoint,
+    REGISTRY_API: "http://quay:%d" % pim.ports.QUAY,
 
     ########################################
     ##  MINIO  #############################
