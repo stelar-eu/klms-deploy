@@ -16,8 +16,6 @@ The knowledge layer comprises: (a) a data catalog that offers automatically enha
 
 * [Stelar Operator](https://github.com/stelar-eu/stelar-operator-airflow) necessary to design and implement workflows inside the STELAR KLMS using the [Apache Airflow](https://airflow.apache.org/) workflow engine. 
 
-* An instance of [MLFlow](https://mlflow.org/) maintains metadata regarding all executions in the same PostgreSQL database (the one also used by Data Catalog).
-
 * [Dashboards](https://github.com/stelar-eu/klms-core-components-setup/tree/main/dashboard) offer a quick overview about datasets, workflows and tasks managed by the KLMS.
 
 * A RESTful [Data API](https://github.com/stelar-eu/data-api) is used for managing and searching resources in the KLMS. 
