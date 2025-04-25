@@ -74,7 +74,7 @@ local ingress(pim, config, name, annotations, host, paths) =
             "s3", 
             annotations = {
                 "nginx.ingress.kubernetes.io/proxy-body-size": "5120m",
-                "nginx.ingress.kubernetes.io/proxy-http-version": "1.1",
+                  "nginx.ingress.kubernetes.io/proxy-http-version": "1.1",
                 "nginx.ingress.kubernetes.io/proxy-chunked-transfer-encoding": "off",
                 "nginx.ingress.kubernetes.io/proxy-set-header": "Host $http_host; X-Real-IP $remote_addr; X-Forwarded-For $proxy_add_x_forwarded_for; X-Forwarded-Proto $scheme;",
                 "nginx.ingress.kubernetes.io/proxy-set-headers": "Connection '';",
@@ -126,7 +126,8 @@ local ingress(pim, config, name, annotations, host, paths) =
                 ["/(stelar)(/|$)(.*)", "ImplementationSpecific", "stelarapi", "apiserver-api"],
                 ["/(s3)(/|$)(.*)", "ImplementationSpecific", "minio", "minio-minio"],
                 ["/(kg)(/|$)(.*)", "ImplementationSpecific", "ontop", "ontop-ontop"],
-                ["/(kafka)(/|$)(.*)", "ImplementationSpecific", "kafbat", "kafbat-kfb"],
+                ["/(visualizer)(/|$)(.*)", "ImplementationSpecific", "visualizer", "profvis-vis"],
+                //["/(kafka)(/|$)(.*)", "ImplementationSpecific", "kafbat", "kafbat-kfb"],
                 //["/(flink)(/|$)(.*)", "ImplementationSpecific", "flink-cluster", "jmanager-fl"],
             ]
         ),

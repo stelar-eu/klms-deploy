@@ -27,6 +27,7 @@
     KAFKA_INTERNAL: 9092,
     ZOOKEEPER: 2181,
     QUAY: 8080,
+    VISUALIZER: 8080,
   },
   
 

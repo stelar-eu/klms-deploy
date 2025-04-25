@@ -318,7 +318,8 @@ def generate_jsonnet_content(yaml_data, secrets_list):
               REDIS_IMAGE:"redis:7",
               KC_INIT:"petroud/stelar-tuc:kcinit",
               REGISTRY_IMAGE: "petroud/stelar-tuc:registry",
-              REGISTRY_INIT: "petroud/stelar-tuc:registry-init"
+              REGISTRY_INIT: "petroud/stelar-tuc:registry-init",
+              VISUALIZER_IMAGE: "petroud/profvisualizer:latest",
              }},
         }}
         + defaults,
@@ -341,6 +342,7 @@ def generate_jsonnet_content(yaml_data, secrets_list):
         import 'ckan.libsonnet',
         import 'systeminit.libsonnet',
         import 'registry.libsonnet',
+        import 'visualizer.libsonnet',
       ],
       /*
       Translate to manifests. This will call the
