@@ -146,6 +146,7 @@ dns:
       keycloak: "kc"  # Keycloak subdomain
       minio: "minio"  # MinIO subdomain
       primary: "klms"  # Main application subdomain
+      registry: "img"  # Image Registry subdomain
 
 config:
   - smtp_server: "stelar.gr"  # SMTP server address
