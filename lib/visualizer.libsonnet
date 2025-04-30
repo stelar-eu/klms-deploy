@@ -19,6 +19,7 @@ local containerPort = k.core.v1.containerPort;
             + container.withImagePullPolicy("Always")
             + container.withEnvMap({
                 CONTEXT_PATH: "visualizer",
+                MINIO_INSECURE: config.minio.INSECURE_MC_CLIENT,
                 EMBEDDOR_DOMAIN: config.endpoint.SCHEME + "://" + config.endpoint.PRIMARY_SUBDOMAIN + "." + config.endpoint.ROOT_DOMAIN,
             })
             + container.withPorts([
