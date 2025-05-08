@@ -207,8 +207,8 @@ local KEYCLOAK_CONFIG(pim,config) = {
                     CKANEXT__KEYCLOAK__CLIENT_SECRET_KEY: envSource.secretKeyRef.withName(pim.keycloak.KC_CKAN_CLIENT_NAME+"-client-secret")+envSource.secretKeyRef.withKey("secret"),
 
                     CKAN_VERSION: '2.10.0',
-                    CKAN_SYSADMIN_NAME: "ckan_admin",
-                    CKAN_SYSADMIN_EMAIL: "vsam@softnet.tuc.gr",
+                    CKAN_SYSADMIN_NAME: "admin",
+                    CKAN_SYSADMIN_EMAIL: "info@stelar.gr",
                     CKAN_STORAGE_PATH: "/var/lib/ckan",
                     KUBE_NAMESPACE: pim.namespace,
                     CKAN__PLUGINS: "envvars image_view text_view recline_view datastore datapusher"
