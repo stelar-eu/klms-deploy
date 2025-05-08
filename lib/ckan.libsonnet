@@ -44,8 +44,8 @@ local ENV= {
     CKAN__ROOT_PATH: "/dc",
     CKAN_SITE_ID: "default",
 
-    CKAN_SYSADMIN_NAME: "ckan_admin",
-    CKAN_SYSADMIN_EMAIL: "vsam@softnet.tuc.gr",
+    CKAN_SYSADMIN_NAME: "admin",
+    CKAN_SYSADMIN_EMAIL: "info@stelar.gr",
 
     # Must match the volumeMount below
     CKAN_STORAGE_PATH: "/var/lib/ckan",
