@@ -230,6 +230,8 @@ local KEYCLOAK_CONFIG(pim,config) = {
                     # Create secret env vars in order to access it and construct required URLs.
                     A_CKAN_DB_PASSWORD: envSource.secretKeyRef.withName(config.secrets.db.ckan_db_password_secret)+envSource.secretKeyRef.withKey("password"),
                     A_DATASTORE_DB_PASSWORD: envSource.secretKeyRef.withName(config.secrets.db.datastore_db_password_secret)+envSource.secretKeyRef.withKey("password"),
+                    STELAR_SYSADMIN_ID: envSource.secretKeyRef.withName("stelar-admin-id")+envSource.secretKeyRef.withKey("id"),
+                    
                     # Construct db connection URLs.
                     local _DB_HOST = {host: pim.db.POSTGRES_HOST},
                     local _CKAN_U = _DB_HOST+{user: pim.db.CKAN_DB_USER, password: "$(A_CKAN_DB_PASSWORD)"},
