@@ -8,8 +8,6 @@ import textwrap
 import random
 import string
 
-config.load_kube_config()
-
 
 def process_yaml_file(yaml_file):
     with open(yaml_file, "r") as file:
@@ -407,6 +405,15 @@ def main():
         raise ValueError(
             "❌ Namespace field cannot be left blank. Enter a valid Kubernetes namespace name."
         )
+
+
+    k8s_context = yaml_data.get('k8s_context', None)
+    if not k8s_context:
+        raise ValueError(
+            "❌ k8s_context field cannot be omitted. Set to a valid kubectl context."
+        )
+    config.load_kube_config(context=k8s_context)
+
 
     print("🌐 Setting up Tanka environment...")
     cmd = f'tk env add environments/{yaml_data["env_name"]} --context-name {yaml_data["k8s_context"]} --namespace {yaml_data["namespace"]}'
