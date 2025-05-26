@@ -127,6 +127,8 @@ local ingress(pim, config, name, annotations, host, paths) =
                 ["/(s3)(/|$)(.*)", "ImplementationSpecific", "minio", "minio-minio"],
                 ["/(kg)(/|$)(.*)", "ImplementationSpecific", "ontop", "ontop-ontop"],
                 ["/(visualizer)(/|$)(.*)", "ImplementationSpecific", "visualizer", "profvis-vis"],
+                ["/(sde)(/|$)(.*)", "ImplementationSpecific", "sde-manager", "sdeui-sdeui"],
+                ["/(airflow)(/|$)(.*)", "ImplementationSpecific", "airflow-webserver", "airflow-ui"],
                 //["/(kafka)(/|$)(.*)", "ImplementationSpecific", "kafbat", "kafbat-kfb"],
                 //["/(flink)(/|$)(.*)", "ImplementationSpecific", "flink-cluster", "jmanager-fl"],
             ]

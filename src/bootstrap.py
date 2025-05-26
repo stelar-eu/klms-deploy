@@ -319,6 +319,7 @@ def generate_jsonnet_content(yaml_data, secrets_list):
               REGISTRY_IMAGE: "petroud/stelar-tuc:registry",
               REGISTRY_INIT: "petroud/stelar-tuc:registry-init",
               VISUALIZER_IMAGE: "petroud/profvisualizer:latest",
+              SDE_MANAGER_IMAGE: "petroud/sde-manager:latest,
              }},
         }}
         + defaults,
