@@ -101,10 +101,10 @@ local secrets = import 'secrets.libsonnet';
     self.provisioning
     + {
         images: {
-          API_IMAGE: 'petroud/stelar-tuc:data-api-dev',
+          API_IMAGE: 'petroud/stelar-api:prod',
           CKAN_IMAGE: 'petroud/stelar-tuc:ckan',
           POSTGIS_IMAGE:"petroud/stelar-tuc:postgres",
-          MINIO_IMAGE:"quay.io/minio/minio:latest",
+          MINIO_IMAGE:"quay.io/minio/minio:RELEASE.2025-04-22T22-12-26Z-cpuv1",
           ONTOP_IMAGE: "petroud/stelar-tuc:ontop",
           KEYCLOAK_IMAGE:"petroud/stelar-tuc:keycloak",
           REDIS_IMAGE:"redis:7",
@@ -112,6 +112,8 @@ local secrets = import 'secrets.libsonnet';
           REGISTRY_IMAGE: "petroud/stelar-tuc:registry",
           REGISTRY_INIT: "petroud/stelar-tuc:registry-init",
           VISUALIZER_IMAGE: "petroud/profvisualizer:latest",
+          SDE_MANAGER_IMAGE: "petroud/sde-manager:latest",
+          PREVIEWER_IMAGE: "petroud/stelar-previewer:latest",
          },
     }
     + defaults,
@@ -132,9 +134,10 @@ local secrets = import 'secrets.libsonnet';
     import 'stelarapi.libsonnet',
     import 'stelar_ingress.libsonnet',
     import 'ckan.libsonnet',
-    import 'systeminit.libsonnet',
     import 'registry.libsonnet',
     import 'visualizer.libsonnet',
+    import 'sdemanager.libsonnet',
+    import 'previewer.libsonnet',
   ],
   /*
   Translate to manifests. This will call the
