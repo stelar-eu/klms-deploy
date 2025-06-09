@@ -113,23 +113,15 @@ local DATAPUSHER_IMAGE_NAME = "ckan/ckan-base-datapusher:%s" % ENV.DATAPUSHER_VE
 
     It requires
     (a) a custom image,
-    (b) a volume for storing various data
-    (c) the deployment itself
+    (b) the deployment itself
 
  */
 
-
-local pvc_ckan_storage(pim) = 
-    pvol.pvcWithDynamicStorage(
-        "ckan-storage", "5Gi", 
-        pim.dynamic_volume_storage_class);
-
-local ckan_deployment(pim, config) = 
-    // local MYENV = ENV {
-    //     CKAN_SITE_URL: "https://klms."+psm.endpoint.host
-    // };
-    //+ KEYCLOAK_CONFIG(psm);
-    stateful.new(name="ckan", containers = [
+local ckan_deployment(pim, config) =
+  deploy.new(
+    name = "ckan",
+    replicas = 1,
+    containers = [
         container.new('ckan', pim.images.CKAN_IMAGE)
         + container.withImagePullPolicy("Always")
         + container.withEnvMap(ENV +
@@ -176,29 +168,26 @@ local ckan_deployment(pim, config) =
         ])
         + container.withArgs(["start-server"])
         + container.withVolumeMounts([
-            volumeMount.new("ckan-storage-vol", ENV.CKAN_STORAGE_PATH, false),
             volumeMount.new("ckan-ini","/srv/stelar/config", false),
-            ])
+        ])
 
         + container.securityContext.withAllowPrivilegeEscalation(false)
-
     ],
     podLabels = {
-        'app.kubernetes.io/name': 'data-catalog',
-        'app.kubernetes.io/component': 'ckan',
+      'app.kubernetes.io/name': 'data-catalog',
+      'app.kubernetes.io/component': 'ckan',
     })
-    + stateful.spec.template.spec.withInitContainers([
-        podinit.wait4_redis("wait4-redis", ENV.CKAN_REDIS_URL),
-        podinit.wait4_postgresql("wait4-db", pim, config),
-        podinit.wait4_http("wait4-solr", "http://solr:"+pim.ports.SOLR+"/solr/"),
-    ])
-    + stateful.spec.template.spec.withVolumes([
-        vol.fromPersistentVolumeClaim("ckan-storage-vol", "ckan-storage"),
-        vol.fromConfigMap("ckan-ini","ckan-config", [{key:"ckan.ini", path:"ckan.ini"}])
-    ])
-    + stateful.spec.template.spec.securityContext.withRunAsUser(92)
-    + stateful.spec.template.spec.securityContext.withRunAsGroup(92)
-    + stateful.spec.template.spec.securityContext.withFsGroup(92);
+    + deploy.spec.template.spec.withInitContainers([
+            podinit.wait4_redis("wait4-redis", ENV.CKAN_REDIS_URL),
+            podinit.wait4_postgresql("wait4-db", pim, config),
+            podinit.wait4_http("wait4-solr", "http://solr:" + pim.ports.SOLR + "/solr/")
+        ])
+    + deploy.spec.template.spec.withVolumes([
+            vol.fromConfigMap("ckan-ini", "ckan-config", [{key: "ckan.ini", path: "ckan.ini"}])
+        ])
+    + deploy.spec.template.spec.securityContext.withRunAsUser(92)
+    + deploy.spec.template.spec.securityContext.withRunAsGroup(92)
+    + deploy.spec.template.spec.securityContext.withFsGroup(92);
 
 
 /*********************
@@ -306,47 +295,25 @@ local datapusher_deployment(pim) = deploy.new(
 )
 ;
 
-
-
-
-
-
-
 /*************************************
 
     Final assembly of all resources
 
  */
 
-
-
 {
-
-    /*
-        local obfuscate(m)=std.mapWithKey(function(k,d) std.base64(std.manifestJsonMinified(d)), m),
-
-        configs: [
-            cm.new("ckan-dbenv", DBENV),
-            secret.new("ckan-session-secrets",{})
-            + secret.withData(obfuscate(SESSION_SECRETS))
-        ],
-    */
-
 
     manifest(pim, config): {
         ckan: [
-            pvc_ckan_storage(pim),
             ckan_deployment(pim, config),
             svcs.headlessService.new("ckan", "ckan", pim.ports.CKAN, "api")
         ],
-
 
         solr: [
             pvc_solr_data(pim), 
             solr_deployment(pim),
             svcs.headlessService.new("solr", "solr", pim.ports.SOLR, "solr")
         ],
-
 
         local datapusher_dep = datapusher_deployment(pim),
         datapusher: [
