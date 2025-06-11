@@ -138,6 +138,7 @@ local secrets = import 'secrets.libsonnet';
     import 'visualizer.libsonnet',
     import 'sdemanager.libsonnet',
     import 'previewer.libsonnet',
+    import 'network.libsonnet',
   ],
   /*
   Translate to manifests. This will call the
