@@ -27,7 +27,6 @@ local envVarSource = k.core.v1.envVarSource;
 local policyRule = k.rbac.v1.policyRule;
 local configMap = k.core.v1.configMap;
 local envSource = k.core.v1.envVarSource;
-local secretSelector = k.core.v1.secretKeySelectors;
 
 
 
@@ -93,6 +92,12 @@ local API_CONFIG(pim, config) = {
     FLASK_RUN_PORT: std.toString(pim.ports.STELARAPI),
     API_URL: pim.api.INTERNAL_URL, # Note: this is not the actual API url, but instead it is the URL sent to tool executions as hookup!
 
+
+    ########################################
+    ##  LLM SEARCH  ########################
+    ########################################
+    ENABLE_LLM_SEARCH: config.llm_search.ENABLE_LLM_SEARCH,
+    LLM_SEARCH_URL: pim.llm_search.INTERNAL_URL,
 
     ########################################
     ##  SMTP  ##############################

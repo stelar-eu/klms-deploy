@@ -151,6 +151,11 @@ config:
     smtp_port: "465"  # SMTP port (e.g., 465 for SSL, 587 for TLS)
     smtp_username: "##YOUR_SMTP_USERNAME_HERE##"  # SMTP username for authentication
     s3_console_url: "http://klms.minikube/s3/login"  # URL for the S3 console
+    groq_api_url: "https://api.groq.com/"  # Groq API URL for LLM search (if enabled)
+    groq_api_model: "meta-llama/llama-4-scout-17b-16e-instruct"  # Groq API model to use for LLM search (if enabled)
+  
+options:
+  - enable_llm_search: false
 
 secrets:
   - name: "postgresdb-secret" # Password for PostgreSQL default database 
@@ -183,8 +188,12 @@ secrets:
   - name: "quaydb-secret" # Password for PostgreSQL Quay database
     data:
       - password: "##YOUR_PASSWORD_HERE##"
+
+  # Uncomment the following lines to add a Groq API key secret if the LLM search is enabled
+  # - name: "groq-api-key"
+  #   data:
+  #     - key: "##YOUR_API_KEY_HERE##"  
     """
-    
     with open(file_path, "w") as file:
         file.write(yaml_content)
         
@@ -277,6 +286,13 @@ def generate_jsonnet_content(yaml_data, secrets_list):
           }}
         }}
         + {{
+          llm_search: {{
+            ENABLE_LLM_SEARCH: {"'true'" if yaml_data["options"][0]["enable_llm_search"] else "'false'"},
+            GROQ_API_URL: "{yaml_data["config"][0]["groq_api_url"] if yaml_data["options"][0]["enable_llm_search"] else "null"}",
+            GROQ_MODEL: "{yaml_data["config"][0]["groq_model"] if yaml_data["options"][0]["enable_llm_search"] else "null"}",
+          }}
+        }}
+        + {{
           secrets: {{
             db: {{
               postgres_db_password_secret: "{secrets_list[0]["secret_name"]}",
@@ -298,6 +314,9 @@ def generate_jsonnet_content(yaml_data, secrets_list):
             }},
             minio: {{
               minio_root_password_secret: "{secrets_list[7]["secret_name"]}",
+            }},
+            llm_search: {{
+              groq_api_key_secret: "{secrets_list[10]["secret_name"] if yaml_data["options"][0]["enable_llm_search"] else "null"}",
             }}
           }}
         }},
@@ -308,7 +327,7 @@ def generate_jsonnet_content(yaml_data, secrets_list):
         self.provisioning
         + {{
             images: {{
-              API_IMAGE: 'petroud/stelar-tuc:data-api-dev',
+              API_IMAGE: 'petroud/stelar-api:prod',
               CKAN_IMAGE: 'petroud/stelar-tuc:ckan',
               POSTGIS_IMAGE:"petroud/stelar-tuc:postgres",
               MINIO_IMAGE:"quay.io/minio/minio:RELEASE.2025-04-22T22-12-26Z-cpuv1",
@@ -320,6 +339,8 @@ def generate_jsonnet_content(yaml_data, secrets_list):
               REGISTRY_INIT: "petroud/stelar-tuc:registry-init",
               VISUALIZER_IMAGE: "petroud/profvisualizer:latest",
               SDE_MANAGER_IMAGE: "petroud/sde-manager:latest",
+              PREVIEWER_IMAGE: "petroud/stelar-previewer:latest",
+              LLM_SEARCH_IMAGE: "petroud/semantic-dataset-search:latest",
              }},
         }}
         + defaults,
@@ -343,6 +364,9 @@ def generate_jsonnet_content(yaml_data, secrets_list):
         import 'systeminit.libsonnet',
         import 'registry.libsonnet',
         import 'visualizer.libsonnet',
+        import 'previewer.libsonnet',
+        import 'network.libsonnet',
+        {'import "llmsearch.libsonnet",' if yaml_data["options"][0]["enable_llm_search"] else ''}
       ],
       /*
       Translate to manifests. This will call the

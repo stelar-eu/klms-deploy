@@ -28,6 +28,7 @@
     ZOOKEEPER: 2181,
     QUAY: 8080,
     VISUALIZER: 8080,
+    LLM_SEARCH: 8000,
   },
   
 
@@ -91,6 +92,12 @@
     INTERNAL_URL: "http://stelarapi/",
   },
 
+  ###########################
+  ## LLM SEARCH #############
+  ###########################
+  llm_search: {
+    INTERNAL_URL: "http://llmsearch:8000",
+  },
 
   ###########################
   ## MINIO  #################
