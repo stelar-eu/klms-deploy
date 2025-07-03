@@ -141,6 +141,7 @@ local API_CONFIG(pim, config) = {
                     CKAN_ADMIN_TOKEN: envSource.secretKeyRef.withName("ckan-admin-token-secret")+envSource.secretKeyRef.withKey("token"),
                     SESSION_SECRET_KEY: envSource.secretKeyRef.withName(config.secrets.api.session_secret_key)+envSource.secretKeyRef.withKey("key"),
                     CKAN_ENCODE_KEY: envSource.secretKeyRef.withName(config.secrets.ckan.ckan_auth_secret)+envSource.secretKeyRef.withKey("jwt-key"),
+                    GROQ_API_KEY: if config.llm_search.ENABLE_LLM_SEARCH=='true' then envSource.secretKeyRef.withName(config.secrets.llm_search.groq_api_key_secret)+envSource.secretKeyRef.withKey("key") else 'none',
                 })
                 + container.withPorts([
                     containerPort.newNamed(pim.ports.STELARAPI, "api")
