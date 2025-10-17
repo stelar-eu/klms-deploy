@@ -31,6 +31,7 @@ local vol = k.core.v1.volume;
                 GROQ_MODEL: config.llm_search.GROQ_MODEL,
                 LLM_OPTION: "groq",
                 CHROMA_DIR: "/app/chroma",
+                REDIS_URL: "redis://redis:"+pim.ports.REDIS+"/5"
             })
             + container.withPorts([
                 containerPort.newNamed(pim.ports.LLM_SEARCH, "api"),
