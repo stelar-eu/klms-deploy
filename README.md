@@ -18,9 +18,19 @@ The knowledge layer comprises: (a) a data catalog that offers automatically enha
 
 * [QUAY Registry](https://quay.io/), via a custom [distribution](https://github.com/stelar-eu/klms-core-components-setup/tree/main/image-registry) for managing STELAR Data Analysis Tools container images.
 
-* [MinIO](https://min.io/) serves as a storage layer for the files in the data lake.
+* [MinIO](https://min.io/) serves as a storage layer for the data assets tracked by the Data Catalog as well as for tool images.
 
-* [Stelar Operator](https://github.com/stelar-eu/stelar-operator-airflow) necessary to design and implement workflows inside the STELAR KLMS using the [Apache Airflow](https://airflow.apache.org/) workflow engine. 
+* [Redis](https://redis.io/) is used as an in-memory data structure store for caching.
+
+* [LLM-powered Semantic Dataset Search Facility](https://github.com/stelar-eu/semantic-dataset-search) is a tool for enhancing dataset search capabilities using large language models. It is integrated into the KLMS Console and implemented as a FastAPI service under the hood.
+
+* [STELAR Resource Previewer](https://github.com/stelar-eu/stelar-resource-previewer) is a streamlit-based tool for visualizing and exploring the resources of the data catalog artifacts. It is exposed via the central ingress controller of the KLMS deployment and embedded in the KLMS Console.
+
+* [STELAR Profile Visualizer](https://github.com/stelar-eu/klms-profile-visualizer) is a tool for visualizing and exploring the profiles of the data catalog artifacts. It is also exposed via the central ingress controller of the KLMS deployment and embedded in the KLMS Console.
+
+
+
+
 
 
 The STELAR KLMS supports two alternative workflow engines: 
@@ -29,40 +39,95 @@ The STELAR KLMS supports two alternative workflow engines:
 
 * In its Professional and Enterprise editions, it supports the [RapidMiner Studio & AI Hub](https://rapidminer.com/), which is a widely used commercial platform for machine learning and data science workflows.
 
+***While both options have been well-tested in regards with their compatibility, the range of open-source tools and systems STELAR can integrate with is limitless. Integration can be achieved by the STELAR API directly or indirectly through the STELAR Python SDK.***
+
 Access to the STELAR API is provided either directly via its RESTful endpoints or via the STELAR Python SDK, a client library for interacting with the STELAR API. The SDK is available via [PyPI](https://pypi.org/project/stelar-client/) and can be installed via pip:
 
 ```
 pip install stelar_client
 ```
 The source code of the SDK is available at its [GitHub repository](https://github.com/stelar-eu/stelar_client).
-## KLMS tools 
+# STELAR Toolkit — Tools Index
 
-* [Synopses Data engine](https://sdeaas.github.io/) for Extreme Scale Analytics-as-a-Service.
+## Discovery
 
-* [GeoTriples](https://github.com/AI-team-UoA/GeoTriples) for publishing geospatial data as Linked Geospatial Data in RDF.
+- **Synopsis Data Engine (SDE)** — data stream summarization with persistent synopses.  
+  **Lang:** Java · **Integration:** In-cluster via client · **Partners:** ARC, TUE  
+  **GitHub:** `stelar-eu/Synopses-Data-Engine`  
 
-* [pyJedAI](https://github.com/stelar-eu/Schema-Matching-and-Entity-Linking) for Schema Matching and Entity Linking.
+- **Correlation Detective** — scalable multivariate correlation mining for vector datasets.  
+  **Lang:** Java · **Integration:** In-cluster · **Partner:** TUE  
+  **GitHub:** `stelar-eu/correlation-detective` · **Docker:** `stelareu/correlation-detective`  
 
-* [JedAI-spatial](https://github.com/AI-team-UoA/JedAI-spatial) for computing topological relations between datasets with geometric entities.
+- **Forecasting Model Orchestrator (FOMO)** — orchestrates/optimizes time-series forecasting models under a compute budget.  
+  **Lang:** Python 3.10 · **Integration:** In-cluster · **Partner:** TUE  
+  **GitHub:** `stelar-eu/fomo` · **Docker:** `stelareu/fomo`  
 
-* [Correlation detective (CorDet)](https://github.com/CorrelationDetective/library) for finding interesting multivariate correlations in vector datasets.
+- **TableSage** — LLM-powered tabular profiling, summarization, and metadata enrichment.  
+  **Lang:** Python 3.10 · **Integration:** In-cluster · **Partner:** ARC  
+  **GitHub:** `stelar-eu/TableSage-Docker` · **Docker:** `stelareu/tablesage`  
 
-* [Data Profiler](https://github.com/stelar-eu/data-profiler), a library for profiling different types of data and files.
-
-* [Data Selection](https://github.com/stelar-eu/data-selection) interface for searching, ranking, and comparing datasets available in the KLMS Data Catalog.
-
-* [GenericNER](https://github.com/stelar-eu/GenericNER) for named entity recognition (NER) on input texts.
-
-* [FoodNER](https://github.com/stelar-eu/FoodNER), a service for detecting and extracting Name Entities from Food Science text files.
-
-* [Synthetic Data Generation](https://github.com/stelar-eu/Synthetic-Data-Generation) for textual data in agri-food domain.
-
-* [Hazard-classification](https://github.com/stelar-eu/Hazard-classification) from incidents reported in agri-food domain.
+- **Data Profiler** — automatic profiling for tabular, time-series, raster, text, hierarchical, and RDF data.  
+  **Lang:** Python 3.8 · **Integration:** In-cluster · **Partner:** ARC  
+  **GitHub:** `stelar-eu/stelardataprofiler-docker` · **Docker:** `stelareu/data-profiler`  
 
 
-## Examples 
+## Interlinking
 
-* Orchestration of several KLMS components for [entity extraction and linking](https://github.com/stelar-eu/klms-deploy/tree/main/examples/workflows) over unstructured food safety data employing Airflow workflow engine and the Data API for publishing and searching in the Data Catalog.
+- **pyJedAI Entity Matching (pyJedAI EM)** — duplicate detection across datasets via multi-stage pipelines.  
+  **Lang:** Python 3.9 · **Integration:** In-cluster · **Partner:** UoA  
+  **GitHub:** `stelar-eu/pyjedai-em` · **Docker:** `stelareu/pyjedai-em`  
+
+- **pyJedAI Schema Matching (pyJedAI SM)** — schema alignment for highly heterogeneous datasets.  
+  **Lang:** Python 3.9 · **Integration:** In-cluster · **Partner:** UoA  
+  **GitHub:** `stelar-eu/pyjedai-sm` · **Docker:** `stelareu/pyjedai-sm`  
+
+- **JedAI-spatial** — interlinking for geospatial RDF; computes DE9IM topological relations.  
+  **Lang:** Java · **Integration:** In-cluster · **Partner:** UoA  
+  **GitHub:** `stelar-eu/jedai-spatial` · **Docker:** `stelareu/jedai-spatial`  
+
+- **Spatio-Temporal Time Series Extraction (TS-Extraction)** — extracts per-pixel/field LAI statistics over time from satellite imagery.  
+  **Lang:** Python 3.10 · **Integration:** In-cluster · **Partner:** TUE  
+  **GitHub:** `stelar-eu/spatiotemporal_timeseries_extraction` · **Docker:** `stelareu/ts-extract`  
+
+- **Time Series Imputation (TS-Imputation)** — SOTA imputation for time series (DL, statistical, and LLM-based methods).  
+  **Lang:** C#, Python 3.12 · **Integration:** In-cluster / Remote · **Partner:** ARC  
+  **GitHub:** `stelar-eu/TS-Impute` · **Docker:** `stelareu/ts-impute`  
+
+- **Missing Data Interpolation** — fills gaps in daily weather data via inverse-distance weighted interpolation.  
+  **Lang:** Python 3.8 · **Integration:** In-cluster · **Partner:** ABACO  
+  **GitHub:** `stelar-eu/missing-data-interpolation` · **Docker:** `stelareu/missing-data-interpolation`  
+
+
+## Annotation
+
+- **Field Segmentation** — automatic agricultural field boundary extraction from satellite imagery (RGB/NIR).  
+  **Lang:** Python 3.9 · **Integration:** In-cluster · **Partner:** TUE  
+  **GitHub:** `stelar-eu/field_segmentation` · **Docker:** `stelareu/field-segmentation`  
+
+- **AvengER** — LLM ensembling/fine-tuning for entity resolution with configurable workflows and evaluation.  
+  **Lang:** Python 3.8 · **Integration:** In-cluster · **Partner:** ARC  
+  **GitHub:** `stelar-eu/AvengER-Docker` · **Docker:** `stelareu/avenger`  
+
+- **Generic NER** — translation, summarization, NER, main-entity selection, and entity linking pipeline.  
+  **Lang:** Python 3.12 · **Integration:** In-cluster · **Partner:** ARC  
+  **GitHub:** `stelar-eu/GenericNER` · **Docker:** `stelareu/generic-ner`  
+
+- **Crop Classification** — DL pipeline on LAI-derived time series for crop type & growth prediction.  
+  **Lang:** Python 3.11 · **Integration:** In-cluster / Remote · **Partner:** UniBwM  
+  **GitHub:** `stelar-eu/crop_prediction_tool` · **Docker:** `stelareu/crop-prediction`  
+
+- **Vocational Score Raster** — generates rasterized vocational-skill score maps across regions.  
+  **Lang:** Python 3.8 · **Integration:** In-cluster · **Partner:** ABACO  
+  **GitHub:** `stelar-eu/vocational-score-raster` · **Docker:** `stelareu/vocational-score-raster`  
+
+- **Agri Products Match** — matches fertilizers/pesticides to reference products via NPK/active substances; multilingual.  
+  **Lang:** Python 3.8 · **Integration:** In-cluster · **Partner:** ABACO  
+  **GitHub:** `stelar-eu/agri-products-match` · **Docker:** `stelareu/agri-products-match`  
+
+- **Hazard Classification** — incident reporting for the agri-food domain.  
+  **Lang:** Python · **Integration:** None · **Partner:** UniBwM  
+  **GitHub:** `stelar-eu/Hazard-classification` · **Docker:** `stelareu/hazard-classification`  
 
 
 # License
