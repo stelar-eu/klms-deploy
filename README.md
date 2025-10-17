@@ -2,23 +2,26 @@
 This repository provides instructions, documentation, and examples regarding deployment of the Knowledge Lake Management System (KLMS) developed by the [STELAR project](https://stelar-project.eu/). The STELAR KLMS supports and facilitates a holistic approach for FAIR (Findable, Accessible, Interoperable, Reusable) and AI-ready (high-quality, reliably labeled) data. It allows to (semi-)automatically turn a raw data lake into a knowledge lake by: (a) enhancing the data lake with a knowledge layer; and (b) developing and integrating a set of data management tools and workflows. 
 The knowledge layer comprises: (a) a data catalog that offers automatically enhanced metadata for the raw data assets in the lake; and (b) a knowledge graph that semantically describes and interlinks these data assets using suitable domain ontologies and vocabularies. The provided STELAR tools and workflows offer novel functionalities for: (a) data discovery and quality management; (b) data linking and alignment, and (c) data annotation and synthetic data generation.
 
-![alt text](https://github.com/stelar-eu/klms-deploy/blob/main/misc/klms_architecture.png?raw=true)
+![alt text](https://github.com/stelar-eu/klms-deploy/blob/main/misc/klms_architecture.jpg?raw=true)
 
 ## KLMS core components
 
+* [STELAR API](https://github.com/stelar-eu/data-api). The main entry point to the KLMS system, exposing RESTful endpoints for managing and searching resources in the KLMS. Houses the core services of the KLMS, including user management, dataset management, metadata extraction, and search functionalities, task and workflow invocation. Exposes a GUI for interacting with the KLMS system, the STELAR KLMS Console, supporting the full spectrum of KLMS functionalities.
+
+* [Data Catalog](https://github.com/stelar-eu/klms-core-components-setup/tree/main/ckan-k8s) of datasets in KLMS, deployed as a [CKAN](https://ckan.org/) instance, mainly utilized under the hood.
+
 * [Keycloak](https://www.keycloak.org/) is used for Identity and Access Management;
 
-* [Data Catalog](https://github.com/stelar-eu/klms-core-components-setup/tree/main/data-catalog) of datasets in KLMS, deployed as a [CKAN](https://ckan.org/) site. Metadata about published datasets (i.e., CKAN packages and resources) is stored in a [PostgreSQL](https://www.postgresql.org/) database.	
+* [PostgreSQL](https://github.com/stelar-eu/klms-core-components-setup/tree/main/image-registry) serves as the main relational database backbone for storing KLMS metadata and user information.
 
-* A Knowledge Graph is deployed via [Ontop](https://ontop-vkg.org/), employing [mappings](https://github.com/stelar-eu/klms-ontology/tree/main/mappings) from the database to a virtual RDF graph according to the [KLMS ontology](https://github.com/stelar-eu/klms-ontology).
+* [Ontop](https://ontop-vkg.org/) a knowledge graph, employing [mappings](https://github.com/stelar-eu/klms-ontology/tree/main/mappings) from the database to a virtual RDF graph according to the [KLMS ontology](https://github.com/stelar-eu/klms-ontology).
+
+* [QUAY Registry](https://quay.io/), via a custom [distribution](https://github.com/stelar-eu/klms-core-components-setup/tree/main/image-registry) for managing STELAR Data Analysis Tools container images.
 
 * [MinIO](https://min.io/) serves as a storage layer for the files in the data lake.
 
 * [Stelar Operator](https://github.com/stelar-eu/stelar-operator-airflow) necessary to design and implement workflows inside the STELAR KLMS using the [Apache Airflow](https://airflow.apache.org/) workflow engine. 
 
-* [Dashboards](https://github.com/stelar-eu/klms-core-components-setup/tree/main/dashboard) offer a quick overview about datasets, workflows and tasks managed by the KLMS.
-
-* A RESTful [Data API](https://github.com/stelar-eu/data-api) is used for managing and searching resources in the KLMS. 
 
 The STELAR KLMS supports two alternative workflow engines: 
 
@@ -26,7 +29,12 @@ The STELAR KLMS supports two alternative workflow engines:
 
 * In its Professional and Enterprise editions, it supports the [RapidMiner Studio & AI Hub](https://rapidminer.com/), which is a widely used commercial platform for machine learning and data science workflows.
 
+Access to the STELAR API is provided either directly via its RESTful endpoints or via the STELAR Python SDK, a client library for interacting with the STELAR API. The SDK is available via [PyPI](https://pypi.org/project/stelar-client/) and can be installed via pip:
 
+```
+pip install stelar_client
+```
+The source code of the SDK is available at its [GitHub repository](https://github.com/stelar-eu/stelar_client).
 ## KLMS tools 
 
 * [Synopses Data engine](https://sdeaas.github.io/) for Extreme Scale Analytics-as-a-Service.
