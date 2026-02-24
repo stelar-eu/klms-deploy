@@ -8,7 +8,7 @@
           "subdir": "ksonnet-util"
         }
       },
-      "version": "21437d146bae2ba3475623a319b9fb0a9b9bc03d",
+      "version": "dedb779b9d7ddb6fe84043b8db1b1a9cd7250d94",
       "sum": "0y3AFX9LQSpfWTxWKSwoLgbt0Wc9nnCwhMH2szKzHv0="
     },
     {
@@ -18,7 +18,7 @@
           "subdir": "tanka-util"
         }
       },
-      "version": "21437d146bae2ba3475623a319b9fb0a9b9bc03d",
+      "version": "dedb779b9d7ddb6fe84043b8db1b1a9cd7250d94",
       "sum": "ShSIissXdvCy1izTCDZX6tY7qxCoepE5L+WJ52Hw7ZQ="
     },
     {
@@ -35,11 +35,11 @@
       "source": {
         "git": {
           "remote": "https://github.com/jsonnet-libs/k8s-libsonnet.git",
-          "subdir": "1.29"
+          "subdir": "1.35"
         }
       },
-      "version": "291653b2c17d03e855e7e00ce0e4ec25502b2ce2",
-      "sum": "rD6FKvLBJtT+gRJDOz6z8iUzvjf/BiH8vdkyIcZMsno="
+      "version": "55380470fb7979e6ce0c4316cb9c27a266caf298",
+      "sum": "vFC1i2jVvqdl0okQh5QitzH613zJwoh18TSXfoHW9CE="
     },
     {
       "source": {
@@ -48,8 +48,8 @@
           "subdir": ""
         }
       },
-      "version": "4eee017d21cb63a303925d1dcd9fc5c496809b46",
-      "sum": "Kh0GbIycNmJPzk6IOMXn1BbtLNyaiiimclYk7+mvsns="
+      "version": "4d7f8cb24d613430799f9d56809cc6964f35cea9",
+      "sum": "hOrwkOx34tOXqoDVnwuI/Uf/dr9HFFSPWpDPOvnEGrk="
     }
   ],
   "legacyImports": false
