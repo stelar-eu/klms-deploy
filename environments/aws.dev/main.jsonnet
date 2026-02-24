@@ -70,6 +70,13 @@ local secrets = import 'secrets.libsonnet';
       }
     }
     + {
+      llm_search: {
+        ENABLE_LLM_SEARCH: 'true',
+        GROQ_API_URL: "https://api.groq.com/",
+        GROQ_MODEL: "meta-llama/llama-4-scout-17b-16e-instruct",
+      }
+    }
+    + {
       secrets: {
         db: {
           postgres_db_password_secret: "postgresdb-secret",
@@ -91,6 +98,9 @@ local secrets = import 'secrets.libsonnet';
         },
         minio: {
           minio_root_password_secret: "minioroot-secret",
+        },
+        llm_search: {
+          groq_api_key_secret: "groq-api-key",
         }
       }
     },
@@ -102,7 +112,7 @@ local secrets = import 'secrets.libsonnet';
     + {
         images: {
           API_IMAGE: 'petroud/stelar-api:prod',
-          CKAN_IMAGE: 'petroud/stelar-tuc:ckan',
+          CKAN_IMAGE: 'petroud/stelar-tuc:ckan-scaled',
           POSTGIS_IMAGE:"petroud/stelar-tuc:postgres",
           MINIO_IMAGE:"quay.io/minio/minio:RELEASE.2025-04-22T22-12-26Z-cpuv1",
           ONTOP_IMAGE: "petroud/stelar-tuc:ontop",
@@ -114,6 +124,7 @@ local secrets = import 'secrets.libsonnet';
           VISUALIZER_IMAGE: "petroud/profvisualizer:latest",
           SDE_MANAGER_IMAGE: "petroud/sde-manager:latest",
           PREVIEWER_IMAGE: "petroud/stelar-previewer:latest",
+          LLM_SEARCH_IMAGE: "petroud/semantic-dataset-search:latest",
          },
     }
     + defaults,
@@ -139,6 +150,9 @@ local secrets = import 'secrets.libsonnet';
     import 'sdemanager.libsonnet',
     import 'previewer.libsonnet',
     import 'network.libsonnet',
+    import "llmsearch.libsonnet",
+    import "sdemanager.libsonnet",
+    import 'airflow.libsonnet',
   ],
   /*
   Translate to manifests. This will call the
