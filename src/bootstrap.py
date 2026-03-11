@@ -9,6 +9,35 @@ import random
 import string
 
 
+
+def verify_cluster_issuer(issuer_name):
+    """Checks if the ClusterIssuer from YAML exists and is Ready."""
+    if not issuer_name:
+        return False
+
+    print(f"🔍 Verifying ClusterIssuer: {issuer_name}...")
+    custom_api = client.CustomObjectsApi()
+    
+    try:
+        issuer = custom_api.get_cluster_custom_object(
+            group="cert-manager.io",
+            version="v1",
+            plural="clusterissuers",
+            name=issuer_name
+        )
+        
+        status_conditions = issuer.get('status', {}).get('conditions', [])
+        is_ready = any(c.get('type') == 'Ready' and c.get('status') == 'True' for c in status_conditions)
+        
+        if is_ready:
+            print(f"✅ ClusterIssuer '{issuer_name}' is Ready.")
+            return True
+    except Exception:
+        print(f"⚠️ ClusterIssuer '{issuer_name}' not found. Falling back to manual mode.")
+    
+    return False
+
+
 def process_yaml_file(yaml_file):
     with open(yaml_file, "r") as file:
         data = yaml.safe_load(file)
@@ -200,18 +229,34 @@ secrets:
     print("📝 YAML sample configuration file 'example_config.yaml' has been generated successfully.")
 
 
-def generate_jsonnet_content(yaml_data, secrets_list):
+#returns [dynamic_storage_class, provisioning_storage_class]
+def get_storage_classes(platform):
+    if platform == "minikube":
+        return "longhorn", "csi-hostpath-sc"
+    elif platform == "okeanos":
+        return "longhorn", "longhorn"
+    else:  # Default to Amazon's storage class
+        return "ebs-sc", "ebs-sc"
+    
+#returns the value for the insecure MinIO client flag based on platform and any overrides
+def get_insecure_minio_flag(platform,override="true"):
+    if platform == "minikube" or override == "true":
+        return "true"
+    else:
+        return "false"
+
+
+def generate_jsonnet_content(yaml_data, secrets_list, insecure_minio_override, cluster_issuer):
     print("📝 Generating JSONNet main file content...")
 
-    # Determine storage classes based on platform
-    if yaml_data["platform"] == "minikube":
-        insecure_minio = "true"
-        dynamic_storage_class = "longhorn"
-        provisioning_storage_class = "csi-hostpath-sc"
-    else:  # Default to Amazon's storage class
-        insecure_minio = "false"
-        dynamic_storage_class = "ebs-sc"
-        provisioning_storage_class = "ebs-sc"
+    # 1. Determine storage classes based on platform
+    dynamic_storage_class, provisioning_storage_class = get_storage_classes(yaml_data["platform"])
+
+    # 2. Determine insecure MinIO client flag
+    insecure_minio = get_insecure_minio_flag(yaml_data["platform"], insecure_minio_override)
+
+    # 3. Format issuer for Jsonnet
+    issuer_val = f"'{cluster_issuer}'" if cluster_issuer != "null" else "null"
 
     jsonnet_content = textwrap.dedent(
         f"""
@@ -232,7 +277,6 @@ def generate_jsonnet_content(yaml_data, secrets_list):
         dynamic_volume_storage_class: '{provisioning_storage_class}',
       }},
       access:: {{
-        // Root Domain Name to the host of the STELAR deployment
         endpoint: {{
           scheme: '{yaml_data["dns"][0]["scheme"]}',
           host: '{yaml_data["dns"][0]["name"]}',
@@ -241,27 +285,9 @@ def generate_jsonnet_content(yaml_data, secrets_list):
       }},
       cluster:: {{
         endpoint: {{
-          /*
-          In order for the cluster to be able to operate,
-          (3) subdomains (belonging to ROOT_DOMAIN) are needed:
-          - PRIMARY:  It is the subdomain at which
-                      the main reverse proxy listens.
-                      Services as the Data API, Console,
-                      MinIO Console, OnTop, DC are covered
-                      by this.
-          - KEYCLOAK: Keycloak SSO server needs a dedicated
-                      domain in order to serve SSO to services.
-                      We choose here to use subdomain which
-                      will work just fine.
-          - MINIO_API: In order to avoid conflicts with MinIO
-                      paths (confusing a MinIO path for a
-                      reverse proxy path) we choose to use
-                      separate subdomain for the MinIO API only
-                      (Note: MinIO CONSOLE is served by the
-                      PRIMARY subdomain. )
-          */
           SCHEME: "{yaml_data["dns"][0]["scheme"]}",
           ROOT_DOMAIN: "{yaml_data["dns"][0]["name"]}",
+          CLUSTER_ISSUER: {issuer_val},  // <--- ADDED FOR CERT-MANAGER
           PRIMARY_SUBDOMAIN: "{yaml_data["dns"][0]["subdomains"][2]["primary"]}",
           KEYCLOAK_SUBDOMAIN: "{yaml_data["dns"][0]["subdomains"][0]["keycloak"]}",
           MINIO_API_SUBDOMAIN: "{yaml_data["dns"][0]["subdomains"][1]["minio"]}",
@@ -320,9 +346,6 @@ def generate_jsonnet_content(yaml_data, secrets_list):
             }}
           }}
         }},
-      ##########################################
-      ## The Platform Independent Model ########
-      ##########################################
       pim::
         self.provisioning
         + {{
@@ -345,13 +368,6 @@ def generate_jsonnet_content(yaml_data, secrets_list):
         }}
         + defaults,
 
-      /*
-      Here the library for each component is
-      defined in order to use them for manifest
-      generation later on. The services included
-      here will be actively deployed in the K8s
-      cluster.
-      */
       components:: [
         import 'db.libsonnet',
         import 'redis.libsonnet',
@@ -368,13 +384,6 @@ def generate_jsonnet_content(yaml_data, secrets_list):
         import 'network.libsonnet',
         {'import "llmsearch.libsonnet",' if yaml_data["options"][0]["enable_llm_search"] else ''}
       ],
-      /*
-      Translate to manifests. This will call the
-      manifest function of each component above,
-      passing the PIM and Config as arguments. This
-      will generate the manifests for all services
-      of the cluster.
-      */
       manifests: t.transform_pim($.pim, $.configuration, $.components)
     }}
     """
@@ -382,9 +391,9 @@ def generate_jsonnet_content(yaml_data, secrets_list):
     return jsonnet_content
 
 
-def write_jsonnet_file(path_to_jsonnet, yaml_data, secrets_list):
+def write_jsonnet_file(path_to_jsonnet, yaml_data, secrets_list, insecure_minio_override, cluster_issuer):
     print(f"🖊️ Writing JSONNet file to {path_to_jsonnet}...")
-    jsonnet_content = generate_jsonnet_content(yaml_data, secrets_list)
+    jsonnet_content = generate_jsonnet_content(yaml_data, secrets_list, insecure_minio_override, cluster_issuer)
     with open(path_to_jsonnet, "w") as jsonnet_file:
         jsonnet_file.write(jsonnet_content)
     print(f"✅ JSONNet file written successfully at {path_to_jsonnet}.")
@@ -439,6 +448,28 @@ def main():
         )
     config.load_kube_config(context=k8s_context)
 
+    
+    scheme = yaml_data["dns"][0]["scheme"]
+
+    # 1. Check if ClusterIssuer is defined in YAML and if it actually exists/is ready
+    target_issuer = yaml_data.get('cluster_issuer')
+    use_cert_manager = verify_cluster_issuer(target_issuer)
+
+    if use_cert_manager and scheme == "https":
+        # If Cert-Manager is ready, we don't need local files and we can trust SSL
+        insecure_minio = "false"
+        cluster_issuer = target_issuer
+        print(f"✨ SSL Mode: Automated via Cert-Manager ({target_issuer})")
+    else:
+        # Fallback: Use local files if provided, otherwise default to insecure
+        cluster_issuer = "null"
+        if cert_path and key_path:
+            print("🔐 SSL Mode: Manual (using provided .pem files)")
+            insecure_minio = "false" # Trusting you provided valid files
+        else:
+            print("⚠️ SSL Mode: Insecure/Self-signed (Fallback)")
+            insecure_minio = "true"
+
 
     print("🌐 Setting up Tanka environment...")
     cmd = f'tk env add environments/{yaml_data["env_name"]} --context-name {yaml_data["k8s_context"]} --namespace {yaml_data["namespace"]}'
@@ -485,7 +516,7 @@ def main():
         create_tls_secret(yaml_data["namespace"], cert_path, key_path)
 
     path_to_jsonnet = f'environments/{yaml_data["env_name"]}/main.jsonnet'
-    write_jsonnet_file(path_to_jsonnet, yaml_data, secrets_list)
+    write_jsonnet_file(path_to_jsonnet, yaml_data, secrets_list, insecure_minio, cluster_issuer)
 
 
 if __name__ == "__main__":
