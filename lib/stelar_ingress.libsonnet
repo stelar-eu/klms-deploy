@@ -121,6 +121,7 @@ local ingress(pim, config, name, annotations, host, paths) =
             },
             host = config.endpoint.PRIMARY_SUBDOMAIN+'.'+config.endpoint.ROOT_DOMAIN, 
             paths = [
+                ["/", "Exact", "stelarapi", "apiserver-api"],
                 ["/(dc)(/|$)(.*)", "ImplementationSpecific", "ckan", "api"],
                 ["/(stelar)(/|$)(.*)", "ImplementationSpecific", "stelarapi", "apiserver-api"],
                 ["/(s3)(/|$)(.*)", "ImplementationSpecific", "minio", "minio-minio"],
