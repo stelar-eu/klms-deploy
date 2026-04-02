@@ -67,12 +67,27 @@ local ingress(pim, config, name, annotations, subdomain, paths) =
       ["/v2/", "Prefix", "quay", "quay-quay"],
     ]),
 
-    ingress: ingress(pim, config, "stelar", {
-      "nginx.ingress.kubernetes.io/proxy-body-size": "5120m",
-    }, config.endpoint.PRIMARY_SUBDOMAIN, [
-      ["/", "Prefix", "stelarapi", "apiserver-api"],
-      ["/(dc)(/|$)(.*)", "ImplementationSpecific", "ckan", "api"],
-      ["/(stelar)(/|$)(.*)", "ImplementationSpecific", "stelarapi", "apiserver-api"],
-    ]),
+    ingress: ingress(pim, config, "stelar",
+            annotations = {
+                "nginx.ingress.kubernetes.io/proxy-body-size": "5120m",
+                "nginx.ingress.kubernetes.io/x-forwarded-prefix": "/$1",
+                "nginx.ingress.kubernetes.io/rewrite-target": "/$3",
+                "nginx.ingress.kubernetes.io/app-root": "/stelar",
+            },
+            subdomain = config.endpoint.PRIMARY_SUBDOMAIN,
+            paths = [
+                ["/", "Exact", "stelarapi", "apiserver-api"],
+                ["/(dc)(/|$)(.*)", "ImplementationSpecific", "ckan", "api"],
+                ["/(stelar)(/|$)(.*)", "ImplementationSpecific", "stelarapi", "apiserver-api"],
+                ["/(s3)(/|$)(.*)", "ImplementationSpecific", "minio", "minio-minio"],
+                ["/(kg)(/|$)(.*)", "ImplementationSpecific", "ontop", "ontop-ontop"],
+                ["/(visualizer)(/|$)(.*)", "ImplementationSpecific", "visualizer", "profvis-vis"],
+                ["/(previewer)(/|$)(.*)", "ImplementationSpecific", "previewer", "resprev-ui"],
+                ["/(sde)(/|$)(.*)", "ImplementationSpecific", "sde-manager", "sdeui-sdeui"],
+                ["/(airflow)(/|$)(.*)", "ImplementationSpecific", "airflow-webserver", "airflow-ui"],
+                //["/(kafka)(/|$)(.*)", "ImplementationSpecific", "kafbat", "kafbat-kfb"],
+                //["/(flink)(/|$)(.*)", "ImplementationSpecific", "flink-cluster", "jmanager-fl"],
+            ]
+        ),
   }
 }
