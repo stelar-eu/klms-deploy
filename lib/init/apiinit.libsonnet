@@ -1,6 +1,6 @@
 local k = import "k.libsonnet";
 local podinit = import "podinit.libsonnet";
-local images = import "images.libsonnet";
+local images = import "imgutil.libsonnet";
 
 local job = k.batch.v1.job;
 local container = k.core.v1.container;

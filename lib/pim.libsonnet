@@ -6,8 +6,9 @@
 # cluster among different platforms.     #
 ##########################################
 
-
 {
+  with_images(images): { images: images } + self,
+
   ###########################
   ## TCP PORTS  #############
   ###########################

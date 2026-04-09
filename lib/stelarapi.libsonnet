@@ -6,7 +6,7 @@ local podinit = import "podinit.libsonnet";
 local pvol = import "pvolumes.libsonnet";
 local svcs = import "services.libsonnet";
 local rbac = import "rbac.libsonnet";
-local images = import "images.libsonnet";
+local images = import "imgutil.libsonnet";
 
 /* K8S API MODEL */
 local k = import "k.libsonnet";
