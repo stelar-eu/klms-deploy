@@ -106,9 +106,6 @@ def generate_main_jsonnet(model: PlatformModel) -> str:
                 }},
                 minio: {{
                   minio_root_password_secret: '{_secret_name(model, "minioroot-secret")}',
-                }},
-                llm_search: {{
-                  groq_api_key_secret: 'null',
                 }}
               }}
             }},
@@ -116,7 +113,8 @@ def generate_main_jsonnet(model: PlatformModel) -> str:
             self.provisioning
             + pim.with_images(tier.images),
 
-          components:: tier.components,
+          components:: tier.components
+            + (if $.configuration.llm_search.ENABLE_LLM_SEARCH == 'true' then [import 'llmsearch.libsonnet'] else []),
           manifests: t.transform_pim($.pim, $.configuration, $.components)
         }}
     """)
