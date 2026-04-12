@@ -1,0 +1,355 @@
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import Any
+
+try:
+    from .live import infer_live_deployment
+    from .platform_model import PlatformModel
+except ImportError:
+    from live import infer_live_deployment
+    from platform_model import PlatformModel
+
+
+JOB_WEIGHT = 0.4
+COMPONENT_WEIGHT = 0.6
+FAILING_WAITING_REASONS = {
+    "CrashLoopBackOff",
+    "CreateContainerConfigError",
+    "CreateContainerError",
+    "ErrImagePull",
+    "ImagePullBackOff",
+    "RunContainerError",
+}
+
+
+@dataclass(frozen=True)
+class ExpectedResource:
+    kind: str
+    name: str
+    label: str
+
+
+@dataclass(frozen=True)
+class ResourceStatus:
+    kind: str
+    name: str
+    label: str
+    ready: bool
+    detail: str
+
+
+@dataclass(frozen=True)
+class JobStatus:
+    name: str
+    label: str
+    completed: bool
+    failed: bool
+    detail: str
+
+
+@dataclass(frozen=True)
+class StatusSnapshot:
+    context: str
+    namespace: str
+    tier: str
+    overall_percent: int
+    jobs_completed: int
+    jobs_total: int
+    components_ready: int
+    components_total: int
+    phase: str
+    blockers: list[str]
+    job_statuses: list[JobStatus]
+    component_statuses: list[ResourceStatus]
+
+
+CORE_COMPONENTS = [
+    ExpectedResource("statefulset", "db", "PostgreSQL"),
+    ExpectedResource("deployment", "redis", "Redis"),
+    ExpectedResource("statefulset", "minio", "MinIO"),
+    ExpectedResource("deployment", "keycloak", "Keycloak"),
+    ExpectedResource("deployment", "stelarapi", "STELAR API"),
+    ExpectedResource("deployment", "ckan", "CKAN"),
+    ExpectedResource("statefulset", "solr", "Solr"),
+    ExpectedResource("deployment", "datapusher", "DataPusher"),
+]
+
+FULL_COMPONENTS = [
+    ExpectedResource("deployment", "ontop", "Ontop"),
+    ExpectedResource("deployment", "quay", "Quay Registry"),
+    ExpectedResource("deployment", "visualizer", "Profile Visualizer"),
+    ExpectedResource("deployment", "previewer", "Resource Previewer"),
+]
+
+CORE_JOBS = [
+    ExpectedResource("job", "kcinit", "Keycloak Init"),
+    ExpectedResource("job", "apiinit", "API Init"),
+    ExpectedResource("job", "ckaninit", "CKAN Init"),
+]
+
+FULL_JOBS = [
+    ExpectedResource("job", "ontopinit", "Ontop Init"),
+    ExpectedResource("job", "quayinit", "Quay Init"),
+]
+
+
+def expected_components_for_model(model: PlatformModel) -> list[ExpectedResource]:
+    components = list(CORE_COMPONENTS)
+    if model.tier == "full":
+        components.extend(FULL_COMPONENTS)
+    if model.config.enable_llm_search:
+        components.append(ExpectedResource("deployment", "llmsearch", "LLM Search"))
+    return components
+
+
+def expected_jobs_for_model(model: PlatformModel) -> list[ExpectedResource]:
+    jobs = list(CORE_JOBS)
+    if model.tier == "full":
+        jobs.extend(FULL_JOBS)
+    return jobs
+
+
+def calculate_progress(
+    jobs_completed: int,
+    jobs_total: int,
+    components_ready: int,
+    components_total: int,
+) -> int:
+    jobs_ratio = 1.0 if jobs_total == 0 else jobs_completed / jobs_total
+    components_ratio = 1.0 if components_total == 0 else components_ready / components_total
+    overall = (jobs_ratio * JOB_WEIGHT) + (components_ratio * COMPONENT_WEIGHT)
+    return round(overall * 100)
+
+
+def render_bar(percent: int, width: int = 24) -> str:
+    bounded = max(0, min(100, percent))
+    filled = round(width * bounded / 100)
+    return "[" + "#" * filled + "-" * (width - filled) + f"] {bounded}%"
+
+
+def derive_phase(
+    percent: int,
+    job_statuses: list[JobStatus],
+    component_statuses: list[ResourceStatus],
+    pod_failures: list[str],
+) -> str:
+    if any(job.failed for job in job_statuses) or pod_failures:
+        return "Degraded"
+    if percent == 100 and all(component.ready for component in component_statuses):
+        return "Ready"
+    if percent >= 71:
+        return "Nearly Ready"
+    return "Progressing"
+
+
+def format_status(snapshot: StatusSnapshot) -> str:
+    lines = [
+        f"Context: {snapshot.context}",
+        f"Namespace: {snapshot.namespace}",
+        f"Tier: {snapshot.tier}",
+        f"Status: {snapshot.phase} {snapshot.overall_percent}%",
+        render_bar(snapshot.overall_percent),
+        "",
+        f"Jobs: {snapshot.jobs_completed}/{snapshot.jobs_total} completed",
+        f"Components: {snapshot.components_ready}/{snapshot.components_total} ready",
+    ]
+
+    if snapshot.blockers:
+        lines.append("")
+        lines.append("Blocking:")
+        lines.extend(f"- {blocker}" for blocker in snapshot.blockers)
+
+    return "\n".join(lines)
+
+
+def collect_status(model: PlatformModel) -> StatusSnapshot:
+    from kubernetes import client, config
+
+    config.load_kube_config(context=model.k8s_context)
+
+    namespace = model.namespace
+    apps_api = client.AppsV1Api()
+    batch_api = client.BatchV1Api()
+    core_api = client.CoreV1Api()
+
+    deployments = {
+        item.metadata.name: item
+        for item in apps_api.list_namespaced_deployment(namespace=namespace).items
+    }
+    statefulsets = {
+        item.metadata.name: item
+        for item in apps_api.list_namespaced_stateful_set(namespace=namespace).items
+    }
+    jobs = {
+        item.metadata.name: item
+        for item in batch_api.list_namespaced_job(namespace=namespace).items
+    }
+    pods = core_api.list_namespaced_pod(namespace=namespace).items
+
+    expected_components = expected_components_for_model(model)
+    expected_jobs = expected_jobs_for_model(model)
+
+    component_statuses = [
+        _component_status(resource, deployments, statefulsets)
+        for resource in expected_components
+    ]
+    job_statuses = [_job_status(resource, jobs) for resource in expected_jobs]
+
+    jobs_completed = sum(1 for job in job_statuses if job.completed)
+    components_ready = sum(1 for component in component_statuses if component.ready)
+    overall_percent = calculate_progress(
+        jobs_completed,
+        len(job_statuses),
+        components_ready,
+        len(component_statuses),
+    )
+
+    pod_failures = _pod_failures(pods)
+    blockers = [
+        f"{job.label}: {job.detail}"
+        for job in job_statuses
+        if not job.completed
+    ] + [
+        f"{component.label}: {component.detail}"
+        for component in component_statuses
+        if not component.ready
+    ] + pod_failures
+
+    return StatusSnapshot(
+        context=model.k8s_context,
+        namespace=namespace,
+        tier=model.tier,
+        overall_percent=overall_percent,
+        jobs_completed=jobs_completed,
+        jobs_total=len(job_statuses),
+        components_ready=components_ready,
+        components_total=len(component_statuses),
+        phase=derive_phase(overall_percent, job_statuses, component_statuses, pod_failures),
+        blockers=blockers,
+        job_statuses=job_statuses,
+        component_statuses=component_statuses,
+    )
+
+
+def collect_inferred_status(context_name: str, namespace: str) -> tuple[StatusSnapshot | None, list[str]]:
+    live = infer_live_deployment(context_name, namespace)
+    if not live.active or live.model is None:
+        return None, live.warnings
+    return collect_status(live.model), live.warnings
+
+
+def _component_status(
+    resource: ExpectedResource,
+    deployments: dict[str, Any],
+    statefulsets: dict[str, Any],
+) -> ResourceStatus:
+    if resource.kind == "deployment":
+        deployment = deployments.get(resource.name)
+        if deployment is None:
+            return ResourceStatus(resource.kind, resource.name, resource.label, False, "missing deployment")
+        return _deployment_status(resource, deployment)
+
+    statefulset = statefulsets.get(resource.name)
+    if statefulset is None:
+        return ResourceStatus(resource.kind, resource.name, resource.label, False, "missing statefulset")
+    return _statefulset_status(resource, statefulset)
+
+
+def _deployment_status(resource: ExpectedResource, deployment: Any) -> ResourceStatus:
+    spec = deployment.spec
+    status = deployment.status
+    replicas = spec.replicas or 0
+    observed = status.observed_generation or 0
+    generation = deployment.metadata.generation or 0
+    ready = status.ready_replicas or 0
+    updated = status.updated_replicas or 0
+    available = status.available_replicas or 0
+
+    if observed < generation:
+        return ResourceStatus(
+            resource.kind,
+            resource.name,
+            resource.label,
+            False,
+            "controller has not observed the latest deployment spec",
+        )
+
+    if ready >= replicas and updated >= replicas and available >= replicas:
+        return ResourceStatus(resource.kind, resource.name, resource.label, True, "ready")
+
+    return ResourceStatus(
+        resource.kind,
+        resource.name,
+        resource.label,
+        False,
+        f"{ready}/{replicas} ready, {updated}/{replicas} updated, {available}/{replicas} available",
+    )
+
+
+def _statefulset_status(resource: ExpectedResource, statefulset: Any) -> ResourceStatus:
+    spec = statefulset.spec
+    status = statefulset.status
+    replicas = spec.replicas or 0
+    observed = status.observed_generation or 0
+    generation = statefulset.metadata.generation or 0
+    ready = status.ready_replicas or 0
+    updated = status.updated_replicas or 0
+
+    if observed < generation:
+        return ResourceStatus(
+            resource.kind,
+            resource.name,
+            resource.label,
+            False,
+            "controller has not observed the latest statefulset spec",
+        )
+
+    if ready >= replicas and updated >= replicas:
+        return ResourceStatus(resource.kind, resource.name, resource.label, True, "ready")
+
+    return ResourceStatus(
+        resource.kind,
+        resource.name,
+        resource.label,
+        False,
+        f"{ready}/{replicas} ready, {updated}/{replicas} updated",
+    )
+
+
+def _job_status(resource: ExpectedResource, jobs: dict[str, Any]) -> JobStatus:
+    job = jobs.get(resource.name)
+    if job is None:
+        return JobStatus(resource.name, resource.label, False, False, "missing job")
+
+    if _job_has_condition(job, "Failed", "True") or (job.status.failed or 0) > 0:
+        return JobStatus(resource.name, resource.label, False, True, "job failed")
+
+    completions = job.spec.completions or 1
+    succeeded = job.status.succeeded or 0
+    if _job_has_condition(job, "Complete", "True") or succeeded >= completions:
+        return JobStatus(resource.name, resource.label, True, False, "completed")
+
+    active = job.status.active or 0
+    if active > 0:
+        return JobStatus(resource.name, resource.label, False, False, "job still running")
+
+    return JobStatus(resource.name, resource.label, False, False, "job pending")
+
+
+def _job_has_condition(job: Any, kind: str, value: str) -> bool:
+    for condition in job.status.conditions or []:
+        if condition.type == kind and condition.status == value:
+            return True
+    return False
+
+
+def _pod_failures(pods: list[Any]) -> list[str]:
+    failures: list[str] = []
+    for pod in pods:
+        pod_name = pod.metadata.name
+        for status in pod.status.container_statuses or []:
+            waiting = getattr(status.state, "waiting", None)
+            if waiting and waiting.reason in FAILING_WAITING_REASONS:
+                failures.append(f"Pod {pod_name}: {waiting.reason}")
+    return failures

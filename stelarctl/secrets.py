@@ -3,7 +3,11 @@ import random
 import string
 
 from kubernetes import client, config
-from platform_model import PlatformModel
+
+try:
+    from .platform_model import PlatformModel
+except ImportError:
+    from platform_model import PlatformModel
 
 
 def _random_string(length: int, chunk_size: int = 8, separator: str = "-") -> str:
@@ -24,11 +28,23 @@ def _apply_secret(v1: client.CoreV1Api, name: str, namespace: str, data: dict):
     secret = {
         "apiVersion": "v1",
         "kind": "Secret",
-        "metadata": {"name": name, "namespace": namespace},
+        "metadata": {
+            "name": name,
+            "namespace": namespace,
+            "labels": {
+                "app.kubernetes.io/managed-by": "stelarctl",
+                "app.kubernetes.io/part-of": "stelar",
+            },
+        },
         "type": "Opaque",
         "data": _encode(data),
     }
-    v1.create_namespaced_secret(namespace=namespace, body=secret)
+    try:
+        v1.create_namespaced_secret(namespace=namespace, body=secret)
+    except client.exceptions.ApiException as exc:
+        if exc.status != 409:
+            raise
+        v1.replace_namespaced_secret(name=name, namespace=namespace, body=secret)
 
 
 def apply_secrets(model: PlatformModel):

@@ -7,7 +7,7 @@ def J() -> JsonnetRunner:
         "foo/test.jsonnet",
         ["lib"],
         """
-        local images = import "images.libsonnet";
+        local images = import "imgutil.libsonnet";
         //local url = u.url;
         //local url_from = u.url_from;
         """,
@@ -31,4 +31,3 @@ def test_image_spec(J):
         "test3": "Always",
         "test4": "IfNotPresent" 
     }
-

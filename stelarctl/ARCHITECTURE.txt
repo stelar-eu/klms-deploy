@@ -1,0 +1,300 @@
+STELARCTL ARCHITECTURE
+=======================
+Date: 2026-04-12
+
+
+1. PURPOSE
+-----------
+`stelarctl` is the operator-facing deployment tool for STELAR KLMS.
+It owns:
+  - deployment planning and apply
+  - live status inspection
+  - teardown
+  - Tanka environment materialization (`spec.json`, `main.jsonnet`, stored model)
+
+The user should not need to call `kubectl` or `tk` directly during normal operation.
+
+
+2. COMMANDS
+------------
+Current commands:
+  stelarctl deploy model.yaml --env <env-dir>
+  stelarctl deploy model.yaml --env <env-dir> --wait
+  stelarctl status [--env <env-dir> | --context <ctx> --namespace <ns>]
+  stelarctl teardown [--env <env-dir> | --context <ctx> --namespace <ns>]
+  stelarctl validate model.yaml
+  stelarctl generate model.yaml --env <env-dir>
+  stelarctl secrets-apply model.yaml
+  stelarctl secrets-delete model.yaml
+
+Teardown flags:
+  --delete-namespace   delete the namespace after purging resources
+  --delete-env         delete the local environment directory
+  --yes                skip confirmation prompts
+
+Default teardown behavior:
+  purge deployment resources only, keep the namespace and keep the environment directory.
+
+
+3. PLATFORM MODEL
+------------------
+All desired deployment parameters live in a YAML file validated against `PlatformModel`
+in Python (Pydantic).
+
+The model contains:
+  - platform
+  - k8s_context
+  - namespace
+  - author
+  - tier
+  - infrastructure
+  - dns
+  - config
+  - secrets
+
+The model is the desired state input to `deploy`.
+
+
+4. TWO STATE REPRESENTATIONS
+-----------------------------
+`stelarctl` works with two different deployment-state representations:
+
+1. Stored model
+  - the last successful desired model known to `stelarctl`
+  - saved under the Tanka environment directory as `model.yaml`
+
+2. Inferred live model
+  - reconstructed from Kubernetes API state
+  - used by `status`
+  - used by `deploy` as the source of truth when stored state drifts or is absent
+
+Important rule:
+  `status` is always based on inferred live state, never on the stored model.
+
+
+5. MODEL COMPARISON RULES
+--------------------------
+Deploy planning always starts by inferring live cluster state for the target
+`(k8s_context, namespace)`.
+
+Comparison order:
+
+1. Load stored model from `<env-dir>/model.yaml` if it exists
+2. Infer live model from the cluster
+3. Compare stored vs inferred, ignoring secret values
+4. If stored and inferred agree:
+     use stored as the baseline
+5. If stored and inferred disagree:
+     use inferred live state as the baseline
+6. Compare input model against the chosen baseline
+
+Comparison semantics:
+  - secret names are comparable
+  - secret values are comparable only when the baseline is the stored model
+  - secret values are NOT recoverable from the live cluster
+
+Decision outcomes:
+  - no stored model + no live deployment -> fresh deploy
+  - input == stored -> no-op
+  - input == inferred but secret values are unknown -> prompt user
+  - any meaningful difference -> hard redeploy
+
+
+6. HARD REDEPLOY STRATEGY
+--------------------------
+The current deploy strategy is hard redeploy only.
+
+Hard redeploy flow:
+  1. validate input model
+  2. run preflight checks
+  3. materialize `spec.json`
+  4. generate `main.jsonnet`
+  5. show `tk diff`
+  6. require confirmation unless `--yes`
+  7. if a live deployment exists, purge namespace resources
+  8. annotate namespace with STELAR metadata
+  9. apply user-defined secrets
+  10. apply generated secrets
+  11. `tk apply`
+  12. persist stored model as `<env-dir>/model.yaml`
+
+Optional wait mode:
+  - `deploy --wait` polls inferred live status until the target reaches `Ready 100%`
+  - `--wait-timeout` and `--wait-interval` control polling behavior
+  - wait exits non-zero if the deployment becomes `Degraded` or if the timeout is reached
+
+Current assumption:
+  any meaningful config or tier change is destructive enough to justify a hard redeploy.
+
+Future possibility:
+  soft redeploy for selected config-only changes.
+
+
+7. PRE-FLIGHT CHECKS
+---------------------
+Preflight runs before deploy.
+
+Checks:
+  - `k8s_context` exists in kubeconfig
+  - if the target context is not active, switch to it
+  - if namespace is missing:
+      - prompt to create it
+      - or create automatically under `--yes`
+  - storage classes exist
+  - ingress class exists
+  - cert-manager issuer exists and is Ready when `tls.mode == cert-manager`
+
+Hard errors point back to the model field that failed validation.
+
+
+8. LIVE STATUS
+---------------
+`status` resolves the target from:
+  - `--env` via `spec.json`, or
+  - `--context` + `--namespace`, or
+  - active kube context + default namespace
+
+`status` infers:
+  - whether an active STELAR deployment exists
+  - tier
+  - DNS / ingress shape
+  - TLS mode
+  - storage class usage
+  - config values from ConfigMaps
+  - secret names from workload env references
+
+Progress is computed as:
+  40% completed jobs
+  60% ready long-running components
+
+Phase mapping:
+  - Progressing
+  - Nearly Ready
+  - Ready
+  - Degraded
+
+Rendered output includes:
+  - percentage
+  - loading bar
+  - jobs completed / total
+  - components ready / total
+  - blocking items
+
+
+9. ACTIVE DEPLOYMENT DETECTION
+-------------------------------
+An active STELAR deployment is identified from live resources, not from namespace
+annotations alone.
+
+Signals considered:
+  - known STELAR Deployments / StatefulSets
+  - known STELAR Ingresses
+  - known STELAR ConfigMaps
+
+Reason:
+  teardown may leave the namespace itself alive, so annotations alone are not enough.
+
+
+10. TANKA ENVIRONMENT OWNERSHIP
+--------------------------------
+`stelarctl` owns the materialized Tanka environment directory.
+
+Current environment files:
+  - `spec.json`
+  - `main.jsonnet`
+  - `model.yaml`   (stored desired state after successful deploy)
+
+How `spec.json` is created:
+  - written by `stelarctl.env.write_spec_json`
+  - `spec.contextNames = [model.k8s_context]`
+  - `spec.namespace = model.namespace`
+  - resource defaults include:
+      - `stelar.eu/author`
+      - `app.kubernetes.io/managed-by = tanka`
+      - `app.kubernetes.io/part-of = stelar`
+      - `stelar.deployment = main`
+
+How `main.jsonnet` is created:
+  - generated from the validated platform model
+  - selects the tier libsonnet
+  - injects DNS, TLS, storage, config, secret names, and optional LLM search wiring
+
+How target resolution works:
+  - `status --env` and `teardown --env` read `spec.json`
+  - this resolves the deployment key: `(context, namespace)`
+
+Open point:
+  naming convention for environment directories is still a user/repo convention,
+  not currently derived by `stelarctl`.
+
+
+11. GENERATED SECRETS
+----------------------
+`ckan-auth-secret` is generated by `stelarctl`, not supplied by the platform model.
+
+Generated fields:
+  - `session-key`
+  - `jwt-key`
+
+Current behavior:
+  regenerated on deploy.
+
+
+12. TIER SYSTEM
+----------------
+Supported tiers:
+  - `core`
+  - `full`
+
+Tiers are composed through tier-specific libsonnet files.
+
+Tier implications:
+  - tier determines expected jobs and long-running components
+  - tier affects live inference and progress calculation
+  - tier change always implies hard redeploy
+
+LLM search is not a separate tier.
+It is an optional flag in application config and appears as an extra component.
+
+
+13. TEARDOWN
+-------------
+`teardown` is target-based, not model-based.
+
+Default behavior:
+  - purge deployment resources from the target namespace
+  - remove stored model from the environment directory if `--env` was provided
+  - clear STELAR namespace annotations
+  - keep namespace
+  - keep environment directory
+
+Optional destructive behavior:
+  - `--delete-namespace`
+  - `--delete-env`
+
+
+14. WHAT IS IMPLEMENTED VS NOT
+-------------------------------
+Implemented:
+  - deploy planning with stored vs inferred comparison
+  - live inferred status
+  - hard redeploy flow
+  - environment materialization
+  - teardown
+  - deploy wait-for-readiness mode
+
+Not yet implemented:
+  - packaging / installable `stelarctl` executable
+  - soft redeploy path
+  - post-deploy test suite
+
+
+15. REMAINING OPEN QUESTIONS
+-----------------------------
+1. Post-deployment verification
+  `status` tells us convergence, but there is still no explicit functional test suite
+  for API, Keycloak, MinIO, CKAN, etc.
+
+2. Packaging
+  The CLI works as `python -m stelarctl.main`, but there is no installable console
+  entrypoint yet.

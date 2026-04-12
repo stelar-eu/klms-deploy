@@ -1,5 +1,9 @@
 import textwrap
-from platform_model import PlatformModel
+
+try:
+    from .platform_model import PlatformModel
+except ImportError:
+    from platform_model import PlatformModel
 
 
 def _cluster_issuer(model: PlatformModel) -> str:
