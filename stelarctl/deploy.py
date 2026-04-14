@@ -23,6 +23,7 @@ try:
     from .platform_model import PlatformModel
     from .secrets import apply_generated_secrets, apply_secrets
     from .status import collect_inferred_status, format_status
+    from .verify import run_verification_checks, verification_checks_for_model
 except ImportError:
     from compare import compare_models
     from env import load_stored_model, save_stored_model, stored_model_path, write_spec_json
@@ -36,6 +37,7 @@ except ImportError:
     from platform_model import PlatformModel
     from secrets import apply_generated_secrets, apply_secrets
     from status import collect_inferred_status, format_status
+    from verify import run_verification_checks, verification_checks_for_model
 
 
 @dataclass(frozen=True)
@@ -144,9 +146,14 @@ def perform_deploy(
     *,
     auto_approve: bool = False,
     wait: bool = False,
+    verify: bool = False,
     wait_timeout: int = DEFAULT_WAIT_TIMEOUT_SECONDS,
     wait_interval: int = DEFAULT_WAIT_POLL_INTERVAL_SECONDS,
 ) -> DeployDecision:
+    effective_wait = wait or verify
+    if verify and not wait:
+        typer.echo("Verification requested; waiting for readiness before running checks.")
+
     decision = plan_deploy(model, env_path)
 
     typer.echo(decision.reason)
@@ -157,13 +164,15 @@ def perform_deploy(
 
     if decision.action == "noop":
         typer.echo("Input model matches the active deployment. No changes to apply.")
-        if wait:
+        if effective_wait:
             wait_for_ready(
                 model.k8s_context,
                 model.namespace,
                 timeout_seconds=wait_timeout,
                 poll_interval=wait_interval,
             )
+        if verify:
+            verify_deployment(model)
         return decision
 
     if decision.action == "prompt_secret_values":
@@ -173,13 +182,15 @@ def perform_deploy(
         )
         if secrets_same:
             typer.echo("No changes detected in the live deployment.")
-            if wait:
+            if effective_wait:
                 wait_for_ready(
                     model.k8s_context,
                     model.namespace,
                     timeout_seconds=wait_timeout,
                     poll_interval=wait_interval,
                 )
+            if verify:
+                verify_deployment(model)
             return DeployDecision(action="noop", reason=decision.reason, differences=[])
         decision = DeployDecision(
             action="hard_redeploy",
@@ -217,13 +228,15 @@ def perform_deploy(
     _run_command(["tk", "apply", str(env_path), "--auto-approve", "always"])
     save_stored_model(env_path, model)
     typer.echo(f"Stored deployment model written to {env_path / 'model.yaml'}.")
-    if wait:
+    if effective_wait:
         wait_for_ready(
             model.k8s_context,
             model.namespace,
             timeout_seconds=wait_timeout,
             poll_interval=wait_interval,
         )
+    if verify:
+        verify_deployment(model)
     return decision
 
 
@@ -286,6 +299,25 @@ def wait_for_ready(
     else:
         typer.echo(format_status(snapshot))
     raise typer.Exit(1)
+
+
+def verify_deployment(model: PlatformModel) -> None:
+    checks = verification_checks_for_model(model)
+    if not checks:
+        typer.echo("No deploy verification checks are defined for this deployment.")
+        return
+
+    typer.echo("Running deploy verification checks.")
+    results = run_verification_checks(model.k8s_context, model.namespace, checks)
+
+    failed = False
+    for result in results:
+        status = "PASS" if result.ok else "FAIL"
+        typer.echo(f"{status} {result.label}: {result.detail}")
+        failed = failed or not result.ok
+
+    if failed:
+        raise typer.Exit(1)
 
 
 def teardown_target(

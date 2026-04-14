@@ -249,6 +249,35 @@ def test_perform_deploy_waits_even_on_noop(monkeypatch, tmp_path: Path):
     assert calls == ["wait:minikube:stelar-dev:45:3"]
 
 
+def test_perform_deploy_verifies_on_noop(monkeypatch, tmp_path: Path):
+    model = make_model()
+    calls: list[str] = []
+
+    monkeypatch.setattr(
+        "stelarctl.deploy.plan_deploy",
+        lambda input_model, env_path: DeployDecision(action="noop", reason="same", differences=[]),
+    )
+    monkeypatch.setattr(
+        "stelarctl.deploy.wait_for_ready",
+        lambda context_name, namespace, timeout_seconds=600, poll_interval=5: calls.append(
+            f"wait:{context_name}:{namespace}:{timeout_seconds}:{poll_interval}"
+        ),
+    )
+    monkeypatch.setattr("stelarctl.deploy.verify_deployment", lambda input_model: calls.append("verify"))
+
+    decision = perform_deploy(
+        model,
+        tmp_path / "env",
+        auto_approve=True,
+        verify=True,
+        wait_timeout=45,
+        wait_interval=3,
+    )
+
+    assert decision.action == "noop"
+    assert calls == ["wait:minikube:stelar-dev:45:3", "verify"]
+
+
 def test_perform_deploy_secret_confirmation_can_short_circuit(monkeypatch, tmp_path: Path):
     model = make_model()
     monkeypatch.setattr(
@@ -353,6 +382,45 @@ def test_perform_deploy_can_wait_for_readiness(monkeypatch, tmp_path: Path):
     )
 
     assert calls[-1] == "wait:minikube:stelar-dev:123:7"
+
+
+def test_perform_deploy_can_verify_after_apply(monkeypatch, tmp_path: Path):
+    model = make_model()
+    calls: list[str] = []
+
+    monkeypatch.setattr(
+        "stelarctl.deploy.plan_deploy",
+        lambda input_model, env_path: DeployDecision(action="fresh", reason="fresh", differences=[]),
+    )
+    monkeypatch.setattr(
+        "stelarctl.deploy.preflight_check",
+        lambda input_model, auto_approve=False: calls.append("preflight"),
+    )
+    monkeypatch.setattr("stelarctl.deploy.write_spec_json", lambda env_path, input_model: calls.append("spec"))
+    monkeypatch.setattr("stelarctl.deploy.write_main_jsonnet", lambda input_model, env: calls.append("main"))
+    monkeypatch.setattr("stelarctl.deploy._run_command", lambda command, check=True: calls.append("cmd:" + command[0]))
+    monkeypatch.setattr(
+        "stelarctl.deploy.infer_live_deployment",
+        lambda context, namespace: LiveDeployment(context, namespace, False, None, []),
+    )
+    monkeypatch.setattr("stelarctl.deploy.annotate_namespace", lambda input_model: calls.append("annotate"))
+    monkeypatch.setattr("stelarctl.deploy.apply_secrets", lambda input_model: calls.append("secrets"))
+    monkeypatch.setattr("stelarctl.deploy.apply_generated_secrets", lambda input_model: calls.append("generated"))
+    monkeypatch.setattr("stelarctl.deploy.save_stored_model", lambda env_path, input_model: calls.append("save"))
+    monkeypatch.setattr(
+        "stelarctl.deploy.wait_for_ready",
+        lambda context_name, namespace, timeout_seconds=600, poll_interval=5: calls.append("wait"),
+    )
+    monkeypatch.setattr("stelarctl.deploy.verify_deployment", lambda input_model: calls.append("verify"))
+
+    perform_deploy(
+        model,
+        tmp_path / "env",
+        auto_approve=True,
+        verify=True,
+    )
+
+    assert calls[-2:] == ["wait", "verify"]
 
 
 def test_wait_for_ready_returns_when_snapshot_reaches_ready(monkeypatch):

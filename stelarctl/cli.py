@@ -141,6 +141,7 @@ def deploy(
     env: Path = typer.Option(..., "--env", "-e", help="Path to Tanka environment directory"),
     auto_approve: bool = typer.Option(False, "--yes", "-y", help="Skip hard-redeploy confirmation prompt"),
     wait: bool = typer.Option(False, "--wait", help="Wait until the deployment reaches Ready 100%"),
+    verify: bool = typer.Option(False, "--verify", help="Run post-deploy service checks after readiness"),
     wait_timeout: int = typer.Option(600, "--wait-timeout", min=1, help="Maximum seconds to wait for readiness"),
     wait_interval: int = typer.Option(5, "--wait-interval", min=1, help="Polling interval in seconds while waiting"),
 ):
@@ -151,6 +152,7 @@ def deploy(
         env,
         auto_approve=auto_approve,
         wait=wait,
+        verify=verify,
         wait_timeout=wait_timeout,
         wait_interval=wait_interval,
     )

@@ -20,6 +20,7 @@ The user should not need to call `kubectl` or `tk` directly during normal operat
 Current commands:
   stelarctl deploy model.yaml --env <env-dir>
   stelarctl deploy model.yaml --env <env-dir> --wait
+  stelarctl deploy model.yaml --env <env-dir> --verify
   stelarctl status [--env <env-dir> | --context <ctx> --namespace <ns>]
   stelarctl teardown [--env <env-dir> | --context <ctx> --namespace <ns>]
   stelarctl validate model.yaml
@@ -122,6 +123,15 @@ Optional wait mode:
   - `deploy --wait` polls inferred live status until the target reaches `Ready 100%`
   - `--wait-timeout` and `--wait-interval` control polling behavior
   - wait exits non-zero if the deployment becomes `Degraded` or if the timeout is reached
+
+Optional verification mode:
+  - `deploy --verify` runs post-deploy service checks after readiness
+  - verification implies waiting for readiness first
+  - verification exits non-zero if any check fails
+  - current checks target stable in-cluster service endpoints for:
+      - CKAN status API
+      - Keycloak readiness API
+      - MinIO health API
 
 Current assumption:
   any meaningful config or tier change is destructive enough to justify a hard redeploy.
@@ -282,18 +292,19 @@ Implemented:
   - environment materialization
   - teardown
   - deploy wait-for-readiness mode
+  - deploy-time service verification
 
 Not yet implemented:
   - packaging / installable `stelarctl` executable
   - soft redeploy path
-  - post-deploy test suite
 
 
 15. REMAINING OPEN QUESTIONS
 -----------------------------
-1. Post-deployment verification
-  `status` tells us convergence, but there is still no explicit functional test suite
-  for API, Keycloak, MinIO, CKAN, etc.
+1. Verification depth
+  The initial verification suite covers stable in-cluster endpoints for CKAN,
+  Keycloak, and MinIO. STELAR API specific verification and full-tier checks
+  can be added once stable service-level endpoints are defined.
 
 2. Packaging
   The CLI works as `python -m stelarctl.main`, but there is no installable console

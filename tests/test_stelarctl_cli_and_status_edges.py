@@ -66,8 +66,8 @@ def test_deploy_command_passes_wait_flags(monkeypatch, tmp_path):
     monkeypatch.setattr("stelarctl.cli._load", lambda path: "model")
     monkeypatch.setattr(
         "stelarctl.cli.perform_deploy",
-        lambda pm, env, auto_approve=False, wait=False, wait_timeout=600, wait_interval=5: calls.append(
-            (pm, env, auto_approve, wait, wait_timeout, wait_interval)
+        lambda pm, env, auto_approve=False, wait=False, verify=False, wait_timeout=600, wait_interval=5: calls.append(
+            (pm, env, auto_approve, wait, verify, wait_timeout, wait_interval)
         ),
     )
 
@@ -80,6 +80,7 @@ def test_deploy_command_passes_wait_flags(monkeypatch, tmp_path):
             str(tmp_path / "env"),
             "--yes",
             "--wait",
+            "--verify",
             "--wait-timeout",
             "90",
             "--wait-interval",
@@ -88,7 +89,7 @@ def test_deploy_command_passes_wait_flags(monkeypatch, tmp_path):
     )
 
     assert result.exit_code == 0
-    assert calls == [("model", tmp_path / "env", True, True, 90, 2)]
+    assert calls == [("model", tmp_path / "env", True, True, True, 90, 2)]
 
 
 def test_teardown_command_passes_delete_flags(monkeypatch, tmp_path):

@@ -70,6 +70,7 @@ def test_live_deploy_status_redeploy_and_teardown(tmp_path: Path):
             str(env_path),
             "--yes",
             "--wait",
+            "--verify",
             "--wait-timeout",
             str(LIVE_TIMEOUT_SECONDS),
             "--wait-interval",
@@ -77,6 +78,10 @@ def test_live_deploy_status_redeploy_and_teardown(tmp_path: Path):
         )
         assert "Stored deployment model written to" in deploy.stdout
         assert "Deployment reached Ready 100%." in deploy.stdout
+        assert "Running deploy verification checks." in deploy.stdout
+        assert "PASS CKAN status API: ok" in deploy.stdout
+        assert "PASS Keycloak readiness API: ok" in deploy.stdout
+        assert "PASS MinIO health API: ok" in deploy.stdout
         assert (env_path / "model.yaml").exists()
 
         ready_status = _run_cli("status", "--context", context_name, "--namespace", namespace).stdout
