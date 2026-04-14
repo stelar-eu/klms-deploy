@@ -293,9 +293,9 @@ Implemented:
   - teardown
   - deploy wait-for-readiness mode
   - deploy-time service verification
+  - installable Python console entrypoint
 
 Not yet implemented:
-  - packaging / installable `stelarctl` executable
   - soft redeploy path
 
 
@@ -306,6 +306,6 @@ Not yet implemented:
   Keycloak, and MinIO. STELAR API specific verification and full-tier checks
   can be added once stable service-level endpoints are defined.
 
-2. Packaging
-  The CLI works as `python -m stelarctl.main`, but there is no installable console
-  entrypoint yet.
+2. Packaging distribution
+  `pyproject.toml` exposes the `stelarctl` console entrypoint. The remaining
+  packaging work is deciding how releases are built and distributed.

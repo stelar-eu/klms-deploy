@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "stelarctl"
+version = "0.1.0"
+description = "Operator-facing deployment CLI for STELAR KLMS."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "GPL-2.0-only" }
+dependencies = [
+  "kubernetes>=35.0.0",
+  "pydantic>=2.0",
+  "PyYAML>=6.0",
+  "typer>=0.24.0",
+]
+
+[project.optional-dependencies]
+test = [
+  "jsonnet>=0.22.0",
+  "pytest>=8.0",
+]
+
+[project.scripts]
+stelarctl = "stelarctl.main:main"
+
+[tool.setuptools.packages.find]
+include = ["stelarctl*"]
