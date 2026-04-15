@@ -23,6 +23,7 @@ from stelarctl.generator import (
     _insecure_minio,
     _secret_name,
     generate_main_jsonnet,
+    write_main_jsonnet,
 )
 from stelarctl.loader import load_model
 from stelarctl.platform_model import DNSConfig, PlatformModel
@@ -183,6 +184,16 @@ def test_generate_main_jsonnet_renders_llm_and_tls_settings():
     assert "ENABLE_LLM_SEARCH: 'true'" in rendered
     assert "GROQ_API_URL: 'https://api.groq.example'" in rendered
     assert "import 'llmsearch.libsonnet'" in rendered
+
+
+def test_write_main_jsonnet_creates_missing_env_dir(tmp_path: Path):
+    env_path = tmp_path / "missing" / "env"
+
+    path = write_main_jsonnet(make_model(), str(env_path))
+
+    assert path == env_path / "main.jsonnet"
+    assert path.exists()
+    assert "local tk_env = import 'spec.json';" in path.read_text(encoding="utf-8")
 
 
 def test_random_string_respects_chunking():

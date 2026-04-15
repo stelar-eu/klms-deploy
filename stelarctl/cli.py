@@ -8,7 +8,7 @@ from kubernetes import config
 
 try:
     from .deploy import perform_deploy, teardown_target
-    from .env import resolve_env_target
+    from .env import resolve_env_target, write_spec_json
     from .generator import write_main_jsonnet
     from .loader import load_model
     from .platform_model import PlatformModel
@@ -16,7 +16,7 @@ try:
     from .status import collect_inferred_status, format_status
 except ImportError:
     from deploy import perform_deploy, teardown_target
-    from env import resolve_env_target
+    from env import resolve_env_target, write_spec_json
     from generator import write_main_jsonnet
     from loader import load_model
     from platform_model import PlatformModel
@@ -70,8 +70,9 @@ def generate(
     model: Path = typer.Argument(..., help="Path to platform model YAML"),
     env: Path = typer.Option(..., "--env", "-e", help="Path to Tanka environment directory"),
 ):
-    """Generate main.jsonnet for a Tanka environment from a platform model."""
+    """Materialize spec.json and main.jsonnet for a Tanka environment."""
     pm = _load(model)
+    write_spec_json(env, pm)
     write_main_jsonnet(pm, str(env))
 
 

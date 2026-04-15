@@ -1,4 +1,5 @@
 import textwrap
+from pathlib import Path
 
 try:
     from .platform_model import PlatformModel
@@ -124,8 +125,10 @@ def generate_main_jsonnet(model: PlatformModel) -> str:
     """)
 
 
-def write_main_jsonnet(model: PlatformModel, env_path: str):
-    path = f"{env_path}/main.jsonnet"
-    with open(path, "w") as f:
+def write_main_jsonnet(model: PlatformModel, env_path: str) -> Path:
+    path = Path(env_path) / "main.jsonnet"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", encoding="utf-8") as f:
         f.write(generate_main_jsonnet(model))
     print(f"✅ main.jsonnet written to {path}")
+    return path

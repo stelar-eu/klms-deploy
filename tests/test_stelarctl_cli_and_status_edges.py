@@ -128,12 +128,16 @@ def test_generate_command_writes_main_jsonnet(monkeypatch, tmp_path):
     calls = []
 
     monkeypatch.setattr("stelarctl.cli._load", lambda path: "model")
+    monkeypatch.setattr("stelarctl.cli.write_spec_json", lambda env, model: calls.append(("spec", env, model)))
     monkeypatch.setattr("stelarctl.cli.write_main_jsonnet", lambda model, env: calls.append((model, env)))
 
     result = runner.invoke(app, ["generate", str(tmp_path / "model.yaml"), "--env", str(tmp_path / "env")])
 
     assert result.exit_code == 0
-    assert calls == [("model", str(tmp_path / "env"))]
+    assert calls == [
+        ("spec", tmp_path / "env", "model"),
+        ("model", str(tmp_path / "env")),
+    ]
 
 
 def test_render_bar_clamps_values():
