@@ -1,152 +1,271 @@
-STELARCTL ARCHITECTURE DECISIONS
-=================================
-Date: 2026-04-10
+STELARCTL ARCHITECTURE
+======================
+Date: 2026-04-15
 
 
-1. COMMANDS
+1. PRINCIPLES
+--------------
+stelarctl is the operational interface for STELAR deployment lifecycle:
+
+  - deploy from a validated platform model
+  - inspect live progress
+  - purge target namespace resources
+
+The first version intentionally stays simple:
+
+  - no deployment state machine
+  - no deploy-status annotation
+  - no convergence timeout
+  - no live platform model inference
+  - no no-op detection
+  - status is read-only and idempotent
+  - deploy does not wait for readiness
+  - hard redeploy is destructive and must be confirmed
+
+
+2. COMMANDS
 ------------
-  stelarctl deploy model.yaml   - first deployment and redeployment
-  stelarctl status              - deployment status (-w to watch)
-  stelarctl teardown            - remove deployment resources
+  stelarctl deploy model.yaml [--env environments/<env>]
+    Deploy or hard-redeploy using context and namespace from model.yaml.
 
-  teardown flags (combinable, each requires confirmation):
-    --delete-namespace    delete the namespace itself
-    --delete-env          delete the local Tanka environment directory
-  Default: purge resources only, keep namespace and environment directory.
+  stelarctl status
+    Show live progress in the active kubeconfig context and namespace.
 
-The user never interacts with kubectl or tk directly.
+  stelarctl teardown [--namespace <namespace>] [--env environments/<env>]
+    Purge resources from the active kubeconfig context.
 
-
-2. PLATFORM MODEL
-------------------
-All deployment parameters live in a YAML file validated against PlatformModel (Pydantic).
-Every field is explicit - nothing is derived from ambient machine state.
+No command exposes --context.
 
 
-3. TANKA ENVIRONMENT OWNERSHIP
---------------------------------
-stelarctl owns the full Tanka environment lifecycle: creates the directory,
-generates spec.json and main.jsonnet, and calls `tk apply` as a subprocess.
-
-
-4. PRE-FLIGHT CHECK
---------------------
-Runs before every operation:
-  - k8s_context exists in kubeconfig        -> hard error if not
-  - context is not active                   -> switch to it
-  - namespace missing                       -> prompt user, create if confirmed
-
-The 4 context/namespace combinations:
-  correct  + correct  -> proceed
-  correct  + missing  -> prompt to create namespace
-  missing  + correct  -> hard error
-  missing  + missing  -> hard error
-
-
-5. DEPLOYMENT STATE
---------------------
-Stored as a namespace annotation written on first deployment:
-  stelar.eu/tier: "core" | "full"
-
-Missing annotation = no existing deployment, proceed as fresh deploy.
-
-
-6. REDEPLOY STRATEGY
+3. TARGET RESOLUTION
 ---------------------
-Any difference between the new model and the live cluster triggers a hard redeploy:
-  purge all namespace resources (including PVCs) -> annotate namespace ->
-  apply secrets -> generate main.jsonnet -> tk apply
+deploy:
 
-Requires explicit user confirmation. Data loss is intentional - PVCs from the
-old deployment are incompatible with a reconfigured or upgraded tier.
+  context   = model.k8s_context
+  namespace = model.namespace
 
-Future: soft redeploy for config-only changes (no data loss, no downtime) using
-ConfigMap hash annotations to trigger rolling restarts automatically.
+  The generated Tanka spec.json must use these exact values.
+  tk apply must target these exact values.
+
+status:
+
+  context   = active kubeconfig context
+  namespace = active kubeconfig namespace, or default when unset
+
+teardown:
+
+  context   = active kubeconfig context
+  namespace = --namespace, otherwise active kubeconfig namespace, otherwise default
 
 
-7. TIER SYSTEM
+4. TANKA ENVIRONMENT
+---------------------
+A Tanka environment represents one deployment target:
+
+  (model.k8s_context, model.namespace)
+
+Default path:
+
+  environments/<normalized-k8s-context>.<normalized-namespace>/
+
+Example:
+
+  model.k8s_context: minikube
+  model.namespace: stelar
+
+  -> environments/minikube.stelar/
+
+Rules:
+
+  - --env overrides the inferred path.
+  - If env/spec.json exists, it must match model.k8s_context and model.namespace.
+  - stelarctl owns these managed files:
+
+      spec.json
+      main.jsonnet
+      model.yaml
+
+  - On every deploy, stelarctl deletes those managed files if they exist.
+  - stelarctl then regenerates spec.json and main.jsonnet.
+  - stelarctl writes model.yaml only after tk apply succeeds.
+  - stelarctl does not delete the environment directory.
+  - stelarctl does not delete other files under the environment.
+
+
+5. STATUS
+----------
+status is read-only. It must not create, patch, delete, or repair anything.
+
+It returns DeploymentProgress:
+
+  - active context
+  - active namespace
+  - active STELAR resources found: yes/no
+  - progress percentage
+  - progress bar
+  - completed jobs / total required jobs
+  - ready components / total required components
+  - warnings
+
+Progress:
+
+    completed required jobs + ready required components
+    -------------------------------------------------- * 100
+       total required jobs + total required components
+
+Interpretation:
+
+  No active STELAR resources:
+    No active deployment exists in the target.
+
+  Active STELAR resources:
+    A deployment exists. Progress is informational only in this version.
+
+
+6. DEPLOY
+----------
+deploy is non-blocking with respect to readiness. It returns after tk apply
+finishes.
+
+deploy uses one flow for first deploy and hard redeploy. The only branch is
+whether STELAR resources already exist in the target namespace.
+
+Algorithm:
+
+  1. Load and validate model.yaml.
+
+  2. Resolve target from model.k8s_context and model.namespace.
+
+  3. Resolve environment:
+
+       --env provided -> use it
+       --env omitted  -> infer from model target
+
+  4. Validate existing env/spec.json against the model target.
+
+  5. Run validate_model_against_cluster(model).
+
+  6. Check whether labeled STELAR deployment resources exist in the model target.
+
+  7. If no active STELAR resources exist:
+
+       deploy fresh.
+
+  8. If active STELAR resources exist:
+
+       show current progress.
+       warn that continuing will hard-redeploy the target.
+       warn that namespace resources, including PVCs, will be purged.
+       require confirmation before purging resources.
+
+  9. If hard redeploy is confirmed:
+
+       purge target namespace resources using the shared purge primitive.
+       keep namespace.
+       keep environment directory.
+
+  10. Delete managed local environment files if they exist:
+
+        spec.json
+        main.jsonnet
+        model.yaml
+
+  11. Apply user and generated secrets.
+
+  12. Generate spec.json and main.jsonnet.
+
+  13. Run tk apply.
+
+  14. On successful apply:
+
+        write environment/model.yaml
+        write namespace metadata annotations
+        print current progress
+        tell user to run stelarctl status
+
+  15. If tk apply fails:
+
+        do not write environment/model.yaml
+        leave generated spec.json and main.jsonnet for diagnosis
+
+
+7. HARD REDEPLOY AND TEARDOWN
+------------------------------
+Hard redeploy and teardown share:
+
+  purge_resources_in_target(context, namespace)
+
+teardown:
+
+  purge resources from target namespace
+  keep namespace
+  keep environment directory
+
+hard redeploy:
+
+  purge resources from target namespace
+  keep namespace
+  keep environment directory
+  then deploy again
+
+teardown constraints:
+
+  - context is always active kubeconfig context
+  - --namespace overrides active kubeconfig namespace
+  - --env is optional metadata/validation only
+  - no --context
+  - no --yes
+  - no --delete-namespace
+  - no --delete-env
+
+
+8. ANNOTATIONS
 ---------------
-Tiers: core, full. Each is self-contained (components + images) in a libsonnet file.
-- Users change tiers only, not individual components
-- Any tier change triggers a hard redeploy
+Write only metadata:
 
-Required secrets per tier are defined in platform_model.py (Python, not Jsonnet).
-Missing required secrets -> hard error at validation. Extra secrets -> warning only.
+  stelar.eu/tier
+  stelar.eu/environment-id
+  stelar.eu/environment-path
+  stelar.eu/last-deployed-at
+  stelar.eu/last-deployed-by
+  stelar.eu/deploy-started-at
 
+Optional future metadata:
 
-8. CLUSTER PREREQUISITES CHECK
---------------------------------
-After model validation, before touching the cluster:
-  - cert-manager installed and issuer exists  (if tls.mode == "cert-manager")
-  - dynamic_class storage class exists
-  - provisioning_class storage class exists
-  - ingress_class exists
+  stelar.eu/deploy-owner
+  stelar.eu/deploy-operation
+  stelar.eu/model-hash
+  stelar.eu/cluster-fingerprint
 
-Hard error with a precise message pointing to the relevant model field.
+Do not store named states:
 
-
-9. MODEL COMPARISON
---------------------
-Before redeploy, stelarctl diffs the new model against the previous deployment:
-
-Stored model present (environments/<platform>/model.yaml):
-  - Identical models -> skip, inform user nothing changed
-  - Any difference (including secret names or values) -> hard redeploy, no prompt needed
-  - Stored model updated after every successful deployment
-
-Stored model absent (different machine):
-  - Infer from cluster: tier (annotation), DNS (Ingress), TLS (Certificates),
-    storage (PVCs), ingress class, config values (ConfigMaps), secret names
-  - Prompt: "Existing deployment detected. Did you change any secret values?"
-  - Either answer -> hard redeploy (cannot verify secret values, safest path)
-
-No tier annotation -> fresh deploy, no comparison.
+  deploy-status
+  deploying
+  ready
+  failed
+  degraded
+  unknown
 
 
-10. GENERATED SECRETS
------------------------
-ckan-auth-secret (session-key, jwt-key) is system-generated.
-Created on first deployment, regenerated fresh on every hard redeploy.
+9. SECRETS
+-----------
+Secrets are applied from the input model during deploy.
+
+Generated secrets are regenerated on every hard redeploy.
+
+This version does not infer secret names or values from the cluster and does not
+attempt no-op detection based on secrets.
 
 
-11. LLM SEARCH
----------------
-Not a tier - a flag in AppConfig (enable_llm_search). When enabled,
-llmsearch.libsonnet is injected into the components list in main.jsonnet.
-groq_api_url and groq_api_model are hardcoded config values, not secrets.
+10. OPEN QUESTIONS
+-------------------
+1. Define stale deploy-started-at warning threshold.
 
+2. Decide whether cluster identity needs kube API server URL or stronger
+   fingerprint beyond kube context name.
 
-12. PIM / PSM SEPARATION
---------------------------
-PIM (lib/pim.libsonnet)      - static: ports, DB names, internal URLs
-PSM (main.jsonnet, generated) - deployment-specific: DNS, TLS, storage, secrets, SMTP
+3. Define live platform model inference and no-op detection.
 
+4. Define first supported soft-redeploy class.
 
-=============================
-OPEN QUESTIONS / TO-DO
-=============================
-
-1. CONCURRENT DEPLOY PROTECTION
-  If a redeploy is triggered while a previous deployment is still starting up,
-  the result is undefined. Options discussed:
-    a. Blocking deploy: stelarctl waits until all pods are Ready before returning
-    b. Lock annotation (stelar.eu/status: deploying|ready): refuse redeploy if locked,
-       but stuck-lock problem if stelarctl crashes mid-deploy
-    c. Live pod state guard: refuse redeploy if any pods are Pending/ContainerCreating
-    d. Combination of a + b (most robust)
-  Decision pending.
-
-2. POST-DEPLOYMENT TEST SUITE
-  After a successful deploy, stelarctl should optionally run a test suite to verify
-  the deployment is functional (API reachable, Keycloak responding, MinIO accessible, etc.).
-  This would give confidence that the deployment is not just "running" but actually working.
-  Design of the test suite is TBD.
-
-3. TANKA ENVIRONMENT CREATION
-  The exact procedure for how stelarctl creates and manages the Tanka environment
-  directory is still vague. Open questions:
-    - What exactly goes into spec.json and how is it generated from the model?
-    - Does stelarctl need the Kubernetes API server URL explicitly in the model,
-      or can it be read from the kubeconfig for the given context?
-    - What is the naming convention for the environment directory?
-  Needs further investigation before implementation.
+5. Define generated-secret behavior for future soft redeploy.

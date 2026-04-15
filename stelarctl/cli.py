@@ -1,84 +1,125 @@
-import typer
 from pathlib import Path
 from typing import Optional
 
+import typer
+
+from env import read_env_target, resolve_deploy_env
+from generator import write_tanka_environment
 from loader import load_model
 from platform_model import PlatformModel
-from generator import write_main_jsonnet
-from secrets import apply_secrets, apply_generated_secrets, delete_secrets
+from preflight import validate_model_against_cluster
+from purge import purge_resources_in_target
+from secrets import apply_generated_secrets, apply_secrets
+from status import (
+    active_kube_target,
+    deployment_progress,
+    progress_bar,
+    resources_exist_in_target,
+)
+
 
 app = typer.Typer(name="stelarctl", help="STELAR platform deployment tool")
 
 
-def _load(model_path: Path) -> PlatformModel:
-    return load_model(str(model_path), PlatformModel)
+def deploy_flow_pseudocode(platform_model: PlatformModel, env: Optional[Path] = None):
+    """Pseudocode for the intended deploy flow. This is not called by the CLI."""
 
+    # 1. Resolve env from model unless --env is provided.
+    env_path = resolve_deploy_env(platform_model, env)
 
-@app.command()
-def generate(
-    model: Path = typer.Argument(..., help="Path to platform model YAML"),
-    env: Path = typer.Option(..., "--env", "-e", help="Path to Tanka environment directory"),
-):
-    """Generate main.jsonnet for a Tanka environment from a platform model."""
-    pm = _load(model)
-    write_main_jsonnet(pm, str(env))
+    # 2. Validate model references against model.k8s_context/model.namespace.
+    valid_platform_model = validate_model_against_cluster(platform_model)
 
+    # 3. Stop before cluster writes if validation fails.
+    # validate_model_against_cluster raises before this point when invalid.
+    if not valid_platform_model:
+        return
 
-@app.command()
-def secrets_apply(
-    model: Path = typer.Argument(..., help="Path to platform model YAML"),
-    generated: bool = typer.Option(True, help="Also apply system-generated secrets (e.g. ckan-auth-secret)"),
-):
-    """Apply secrets defined in the platform model to the cluster."""
-    pm = _load(model)
-    apply_secrets(pm)
-    typer.echo("✅ User-defined secrets applied.")
-    if generated:
-        apply_generated_secrets(pm)
-        typer.echo("✅ Generated secrets applied.")
+    # 4. Check whether the target already contains STELAR deployment resources.
+    target_has_resources = resources_exist_in_target(
+        platform_model.k8s_context,
+        platform_model.namespace,
+    )
 
+    # 5. If resources exist, warn and require hard-redeploy confirmation.
+    if target_has_resources:
+        # confirm_hard_redeploy_or_abort(
+        #     context=platform_model.k8s_context,
+        #     namespace=platform_model.namespace,
+        #     message="Continuing will purge namespace resources, including PVCs.",
+        # )
+        purge_resources_in_target(platform_model.k8s_context, platform_model.namespace)
 
-@app.command()
-def secrets_delete(
-    model: Path = typer.Argument(..., help="Path to platform model YAML"),
-    confirm: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation prompt"),
-):
-    """Delete all secrets in the namespace defined by the platform model."""
-    pm = _load(model)
-    if not confirm:
-        typer.confirm(
-            f"Delete ALL secrets in namespace '{pm.namespace}' on context '{pm.k8s_context}'?",
-            abort=True,
-        )
-    delete_secrets(pm)
-    typer.echo(f"✅ All secrets deleted from namespace '{pm.namespace}'.")
+    # 6. Apply user and generated secrets.
+    apply_secrets(platform_model)
+    apply_generated_secrets(platform_model)
+
+    # 7. Generate spec.json/main.jsonnet.
+    write_tanka_environment(platform_model, env_path)
+
+    # 8. Hard redeploy/status-aware apply is not implemented on this branch yet.
+    raise NotImplementedError("Pseudocode only; implement each deploy step incrementally.")
 
 
 @app.command()
 def deploy(
     model: Path = typer.Argument(..., help="Path to platform model YAML"),
-    env: Path = typer.Option(..., "--env", "-e", help="Path to Tanka environment directory"),
-    skip_secrets: bool = typer.Option(False, "--skip-secrets", help="Skip secret application"),
+    env: Optional[Path] = typer.Option(None, "--env", "-e", help="Override inferred Tanka environment directory"),
 ):
-    """Full deployment: apply secrets and generate main.jsonnet."""
-    pm = _load(model)
+    """Deploy or redeploy STELAR using context and namespace from the model."""
+    pm = load_model(str(model), PlatformModel)
+    env_path = resolve_deploy_env(pm, env)
 
-    if not skip_secrets:
-        apply_secrets(pm)
-        apply_generated_secrets(pm)
-        typer.echo("✅ Secrets applied.")
+    typer.echo(f"Target: {pm.k8s_context}/{pm.namespace}")
+    typer.echo(f"Environment: {env_path}")
 
-    write_main_jsonnet(pm, str(env))
-    typer.echo("✅ main.jsonnet generated. Run 'tk apply <env>' to deploy.")
+    validate_model_against_cluster(pm)
+    typer.echo("Model validated against cluster.")
+
+    apply_secrets(pm)
+    apply_generated_secrets(pm)
+    typer.echo("Secrets applied.")
+
+    write_tanka_environment(pm, env_path)
+    typer.echo("Tanka environment generated.")
+    typer.echo("Hard redeploy/status-aware apply is not implemented on this branch yet.")
 
 
 @app.command()
-def validate(
-    model: Path = typer.Argument(..., help="Path to platform model YAML"),
+def status():
+    """Show live progress in the active kubeconfig context and namespace."""
+    context, namespace = active_kube_target()
+    active, progress, detail = deployment_progress(context, namespace)
+
+    typer.echo(f"Target: {context}/{namespace}")
+    if not active:
+        typer.echo("No active STELAR resources found.")
+        return
+
+    typer.echo(f"Progress: {progress}% {progress_bar(progress)}")
+    typer.echo(detail)
+
+
+@app.command()
+def teardown(
+    namespace: Optional[str] = typer.Option(None, "--namespace", help="Override active kubeconfig namespace"),
+    env: Optional[Path] = typer.Option(None, "--env", "-e", help="Optional Tanka environment metadata"),
 ):
-    """Validate a platform model YAML without applying anything."""
-    pm = _load(model)
-    typer.echo(f"✅ Model valid: platform={pm.platform}, tier={pm.tier}, namespace={pm.namespace}")
+    """Purge resources from the active kubeconfig context."""
+    context, resolved_namespace = active_kube_target(namespace)
+
+    if env is not None:
+        env_target = read_env_target(env)
+        if env_target and env_target != (context, resolved_namespace):
+            raise typer.BadParameter(
+                f"Environment {env} targets {env_target[0]}/{env_target[1]}, "
+                f"but teardown targets {context}/{resolved_namespace}."
+            )
+
+    typer.echo(f"Target: {context}/{resolved_namespace}")
+    typer.confirm("Purge all resources from this namespace?", abort=True)
+    typer.echo("Teardown purge is not implemented on this branch yet.")
+    raise typer.Exit(1)
 
 
 if __name__ == "__main__":

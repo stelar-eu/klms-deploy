@@ -1,4 +1,7 @@
+import json
 import textwrap
+from pathlib import Path
+
 from platform_model import PlatformModel
 
 
@@ -120,8 +123,49 @@ def generate_main_jsonnet(model: PlatformModel) -> str:
     """)
 
 
-def write_main_jsonnet(model: PlatformModel, env_path: str):
-    path = f"{env_path}/main.jsonnet"
-    with open(path, "w") as f:
+def write_spec_json(model: PlatformModel, env_path: Path) -> Path:
+    env_path.mkdir(parents=True, exist_ok=True)
+    path = env_path / "spec.json"
+    payload = {
+        "apiVersion": "tanka.dev/v1alpha1",
+        "kind": "Environment",
+        "metadata": {
+            "name": str(env_path),
+            "namespace": f"{env_path}/main.jsonnet",
+        },
+        "spec": {
+            "contextNames": [model.k8s_context],
+            "namespace": model.namespace,
+            "resourceDefaults": {
+                "annotations": {
+                    "stelar.eu/author": model.author,
+                },
+                "labels": {
+                    "app.kubernetes.io/managed-by": "tanka",
+                    "app.kubernetes.io/part-of": "stelar",
+                    "stelar.deployment": "main",
+                },
+            },
+            "expectVersions": {},
+            "injectLabels": True,
+        },
+    }
+    with path.open("w", encoding="utf-8") as handle:
+        json.dump(payload, handle, indent=2)
+        handle.write("\n")
+    return path
+
+
+def write_main_jsonnet(model: PlatformModel, env_path: Path) -> Path:
+    env_path.mkdir(parents=True, exist_ok=True)
+    path = env_path / "main.jsonnet"
+    with path.open("w", encoding="utf-8") as f:
         f.write(generate_main_jsonnet(model))
     print(f"✅ main.jsonnet written to {path}")
+    return path
+
+
+def write_tanka_environment(model: PlatformModel, env_path: Path) -> tuple[Path, Path]:
+    spec = write_spec_json(model, env_path)
+    main = write_main_jsonnet(model, env_path)
+    return spec, main
