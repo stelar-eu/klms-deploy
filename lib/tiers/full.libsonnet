@@ -1,4 +1,5 @@
 local core = import 'core.libsonnet';
+local systeminit = import 'systeminit.libsonnet';
 
 {
   images: core.images + {
@@ -11,14 +12,11 @@ local core = import 'core.libsonnet';
     LLM_SEARCH_IMAGE: 'petroud/semantic-dataset-search:latest',
   },
 
-  // TODO: finalize full tier component list
-  components: core.components + [
+  components: core.baseComponents + [
     import 'ontop.libsonnet',
     import 'registry.libsonnet',
     import 'visualizer.libsonnet',
     import 'previewer.libsonnet',
-    import 'init/kcinit_with_registry.libsonnet',
-    import 'init/ontopinit.libsonnet',
-    import 'init/quayinit.libsonnet',
+    systeminit('full'),
   ],
 }

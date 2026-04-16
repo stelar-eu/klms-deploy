@@ -1,3 +1,5 @@
+local systeminit = import 'systeminit.libsonnet';
+
 {
   images: {
     API_IMAGE: 'petroud/stelar-api:prod',
@@ -9,7 +11,7 @@
     KC_INIT: 'petroud/stelar-tuc:kcinit',
   },
 
-  components: [
+  baseComponents:: [
     import 'db.libsonnet',
     import 'redis.libsonnet',
     import 'minio.libsonnet',
@@ -18,9 +20,9 @@
     import 'ckan.libsonnet',
     import 'stelar_ingress.libsonnet',
     import 'network.libsonnet',
-    import 'init/initrbac.libsonnet',
-    import 'init/kcinit.libsonnet',
-    import 'init/apiinit.libsonnet',
-    import 'init/ckaninit.libsonnet',
+  ],
+
+  components: self.baseComponents + [
+    systeminit('core'),
   ],
 }
