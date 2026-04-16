@@ -261,10 +261,11 @@ def generate_jsonnet_content(yaml_data, secrets_list, insecure_minio_override, c
     jsonnet_content = textwrap.dedent(
         f"""
     local tk_env = import 'spec.json';
-    local urllib = import "urllib.libsonnet";
-    local t = import 'transform.libsonnet';
-    local defaults = import 'pim.libsonnet';
+    local urllib = import "unused/urllib.libsonnet";
+    local t = import 'util/transform.libsonnet';
+    local defaults = import 'util/pim.libsonnet';
     local secrets = import 'secrets.libsonnet';
+    local systeminit = import 'deployment/systeminit.libsonnet';
 
     {{
       _tk_env:: tk_env.spec,
@@ -369,20 +370,20 @@ def generate_jsonnet_content(yaml_data, secrets_list, insecure_minio_override, c
         + defaults,
 
       components:: [
-        import 'db.libsonnet',
-        import 'redis.libsonnet',
-        import 'ontop.libsonnet',
-        import 'minio.libsonnet',
-        import 'keycloak.libsonnet',
-        import 'stelarapi.libsonnet',
-        import 'stelar_ingress.libsonnet',
-        import 'ckan.libsonnet',
-        import 'systeminit.libsonnet',
-        import 'registry.libsonnet',
-        import 'visualizer.libsonnet',
-        import 'previewer.libsonnet',
-        import 'network.libsonnet',
-        {'import "llmsearch.libsonnet",' if yaml_data["options"][0]["enable_llm_search"] else ''}
+        import 'deployment/db.libsonnet',
+        import 'deployment/redis.libsonnet',
+        import 'deployment/ontop.libsonnet',
+        import 'deployment/minio.libsonnet',
+        import 'deployment/keycloak.libsonnet',
+        import 'deployment/stelarapi.libsonnet',
+        import 'deployment/stelar_ingress.libsonnet',
+        import 'deployment/ckan.libsonnet',
+        systeminit('full'),
+        import 'deployment/registry.libsonnet',
+        import 'deployment/visualizer.libsonnet',
+        import 'deployment/previewer.libsonnet',
+        import 'deployment/network.libsonnet',
+        {'import "deployment/llmsearch.libsonnet",' if yaml_data["options"][0]["enable_llm_search"] else ''}
       ],
       manifests: t.transform_pim($.pim, $.configuration, $.components)
     }}

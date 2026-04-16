@@ -8,7 +8,7 @@ def J() -> JsonnetRunner:
         "foo/test.jsonnet",
         ["lib"],
         """
-        local u = import "urllib.libsonnet";
+        local u = import "unused/urllib.libsonnet";
         local url = u.url;
         local url_from = u.url_from;
         """,
