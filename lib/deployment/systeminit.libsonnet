@@ -12,6 +12,7 @@ local init_jobs_by_tier = {
         kcinit,
         apiinit,
         ckaninit,
+        ontopinit,
     ],
     full: [
         initrbac,

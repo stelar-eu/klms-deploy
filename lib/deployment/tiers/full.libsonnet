@@ -3,7 +3,6 @@ local systeminit = import '../systeminit.libsonnet';
 
 {
   images: core.images + {
-    ONTOP_IMAGE: 'petroud/stelar-tuc:ontop',
     REGISTRY_IMAGE: 'petroud/stelar-tuc:registry',
     REGISTRY_INIT: 'petroud/stelar-tuc:registry-init',
     VISUALIZER_IMAGE: 'petroud/profvisualizer:latest',
@@ -13,7 +12,6 @@ local systeminit = import '../systeminit.libsonnet';
   },
 
   components: core.baseComponents + [
-    import '../ontop.libsonnet',
     import '../registry.libsonnet',
     import '../visualizer.libsonnet',
     import '../previewer.libsonnet',
