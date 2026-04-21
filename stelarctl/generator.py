@@ -1,4 +1,9 @@
-"""Generate the `main.jsonnet` entry point for a Tanka environment."""
+"""Generate the `main.jsonnet` entry point for a Tanka environment.
+
+The generator is deliberately small and string-based because the heavy lifting
+belongs to the existing Jsonnet libraries. Its job is to translate validated
+Python model fields into the configuration object those libraries expect.
+"""
 
 import textwrap
 from pathlib import Path
@@ -149,6 +154,9 @@ def write_main_jsonnet(model: PlatformModel, env_path: str) -> Path:
     """Write generated Jsonnet into the requested environment directory."""
     path = Path(env_path) / "main.jsonnet"
     path.parent.mkdir(parents=True, exist_ok=True)
+    # main.jsonnet is overwritten on every generate/deploy so local edits do not
+    # drift from the platform model. Long-lived changes should go into the model
+    # or libsonnet libraries instead.
     with path.open("w", encoding="utf-8") as f:
         f.write(generate_main_jsonnet(model))
     print(f"✅ main.jsonnet written to {path}")

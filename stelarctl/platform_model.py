@@ -1,4 +1,10 @@
-"""Pydantic schema for the STELAR platform model YAML."""
+"""Pydantic schema for the STELAR platform model YAML.
+
+The schema is intentionally close to the operator-authored YAML because the same
+object is also persisted as `model.yaml` after a successful deploy. Validation
+rules here should catch model contradictions before any Kubernetes or Tanka work
+starts.
+"""
 
 from pydantic import BaseModel, model_validator
 from typing import Literal, Optional
@@ -38,6 +44,8 @@ class AppConfig(BaseModel):
     @model_validator(mode="after")
     def groq_fields_required_when_llm_enabled(self):
         """Require Groq settings when optional LLM search is enabled."""
+        # The generated llmsearch configuration needs both endpoint and model.
+        # Enforce the pair at schema level so generator.py can stay simple.
         if self.enable_llm_search:
             if not self.groq_api_url:
                 raise ValueError("groq_api_url is required when enable_llm_search is true")
@@ -83,6 +91,8 @@ class TLSConfig(BaseModel):
     @model_validator(mode="after")
     def issuer_required_for_cert_manager(self):
         """Require an issuer only for cert-manager-managed TLS."""
+        # Manual TLS and no-TLS deployments do not use a ClusterIssuer. Only the
+        # cert-manager path needs an issuer name for generated ingress metadata.
         if self.mode == "cert-manager" and not self.issuer:
             raise ValueError("issuer is required when mode is cert-manager")
         return self
@@ -115,6 +125,9 @@ class PlatformModel(BaseModel):
     @model_validator(mode="after")
     def tls_mode_compatible_with_scheme(self):
         """Prevent TLS configuration when generated URLs use plain HTTP."""
+        # The DNS scheme is used to generate service URLs. Allowing `http` URLs
+        # with TLS-enabled ingresses would create a model that is internally
+        # inconsistent and difficult to diagnose after apply.
         if self.dns.scheme == "http" and self.infrastructure.tls.mode != "none":
             raise ValueError("tls.mode must be 'none' when scheme is http")
         return self

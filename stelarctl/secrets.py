@@ -1,4 +1,10 @@
-"""Kubernetes Secret management for model-defined and generated secrets."""
+"""Kubernetes Secret management for model-defined and generated secrets.
+
+The platform model stores operator-provided secret values in plaintext YAML.
+This module is the boundary where those values are encoded and sent to the
+Kubernetes API. Deploy planning never calls these helpers while comparing live
+state, so secret values are not read back from the cluster.
+"""
 
 import base64
 import random
@@ -35,6 +41,8 @@ def _encode(data: dict) -> dict:
 
 def _apply_secret(v1: client.CoreV1Api, name: str, namespace: str, data: dict):
     """Create or replace an Opaque secret in the target namespace."""
+    # Use a raw dictionary instead of V1Secret to keep tests lightweight and to
+    # avoid depending on generated client model constructors for simple objects.
     secret = {
         "apiVersion": "v1",
         "kind": "Secret",

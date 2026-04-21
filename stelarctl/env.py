@@ -1,4 +1,9 @@
-"""Helpers for the Tanka environment files managed by `stelarctl`."""
+"""Helpers for the Tanka environment files managed by `stelarctl`.
+
+The environment directory is the bridge between the high-level platform model
+and Tanka. stelarctl owns the generated files there so status, deploy, and
+teardown all agree on the same context and namespace.
+"""
 
 from __future__ import annotations
 
@@ -17,6 +22,9 @@ except ImportError:
 
 MODEL_FILENAME = "model.yaml"
 SPEC_FILENAME = "spec.json"
+# `model.yaml` stores the last successful desired state; `spec.json` is the
+# Tanka environment descriptor. Both names are intentionally stable because
+# external scripts and operators may inspect them directly.
 
 
 def ensure_env_dir(env_path: Path) -> None:

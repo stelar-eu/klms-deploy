@@ -1,4 +1,10 @@
-"""Infer STELAR deployment metadata from live Kubernetes resources."""
+"""Infer STELAR deployment metadata from live Kubernetes resources.
+
+Live inference is intentionally best-effort. It provides enough model-shaped
+data for status and deploy planning, but it is not expected to reproduce every
+field from the original YAML exactly, especially secret values and some storage
+intent.
+"""
 
 from __future__ import annotations
 
@@ -26,7 +32,13 @@ FULL_WORKLOADS = {"ontop", "quay", "visualizer", "previewer"}
 
 @dataclass(frozen=True)
 class LiveDeployment:
-    """Best-effort reconstruction of a deployment from cluster state."""
+    """Best-effort reconstruction of a deployment from cluster state.
+
+    `active` answers whether known STELAR resources are present. `model` is only
+    set when enough resources exist to build a PlatformModel-compatible view.
+    `warnings` carries inference fallbacks that should be shown to operators but
+    are not necessarily fatal.
+    """
 
     context: str
     namespace: str
@@ -303,7 +315,10 @@ def _infer_secret_names(
         key_name = "key" if expected_name == "session-secret-key" else "password"
         secrets.append({"name": name, "data": {key_name: None}})
     if llm_enabled:
-        # The live cluster can expose the optional secret name, but PlatformModel does not store it yet.
+        # The live cluster can expose the optional LLM secret name through
+        # workload env refs, but PlatformModel does not store that secret yet.
+        # Keep this branch explicit so the extension point is visible when the
+        # model grows support for it.
         pass
     return secrets
 

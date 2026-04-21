@@ -1,4 +1,9 @@
-"""Deployment planning, apply, readiness waiting, and teardown orchestration."""
+"""Deployment planning, apply, readiness waiting, and teardown orchestration.
+
+This module is the operational core of stelarctl. It keeps deploy behavior
+explicitly state-driven: first decide what the current baseline is, then show
+the operator what will change, then run the destructive parts in a fixed order.
+"""
 
 from __future__ import annotations
 
@@ -53,9 +58,13 @@ class DeployDecision:
     """
 
     action: str
+    # Human-readable explanation printed before any apply or purge work starts.
     reason: str
+    # Differences between the selected baseline and the requested input model.
     differences: list[str]
+    # True when the only uncertainty is whether plaintext secret values changed.
     needs_secret_confirmation: bool = False
+    # Stored-vs-live drift, reported separately from input-vs-baseline changes.
     live_drift_differences: list[str] | None = None
 
 
@@ -121,6 +130,9 @@ def plan_deploy(input_model: PlatformModel, env_path: Path) -> DeployDecision:
             differences=inferred_compare.differences,
         )
 
+    # All earlier branches that allow stored_model to be None have returned.
+    # The assert documents that the remaining decision tree always has a stored
+    # baseline, even if live state later overrides it as the safer comparison.
     assert stored_model is not None
 
     live_drift = []
@@ -616,11 +628,16 @@ def purge_namespace(context_name: str, namespace: str) -> None:
 
 def _run_command(command: list[str], *, check: bool = True) -> subprocess.CompletedProcess[str]:
     """Run an external command, echo captured output, and optionally fail fast."""
+    # Capture output so Typer can write stdout/stderr through the same channel as
+    # the rest of the CLI. This also makes tests deterministic because command
+    # output is emitted after the subprocess exits.
     result = subprocess.run(command, text=True, capture_output=True)
     if result.stdout:
         typer.echo(result.stdout.rstrip())
     if result.stderr:
         typer.echo(result.stderr.rstrip(), err=True)
     if check and result.returncode != 0:
+        # Preserve the failing tool's return code. Operators and CI can then
+        # distinguish validation errors, Tanka failures, and kubectl failures.
         raise typer.Exit(result.returncode)
     return result

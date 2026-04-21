@@ -1,4 +1,9 @@
-"""Post-deploy verification checks against stable in-cluster service endpoints."""
+"""Post-deploy verification checks against stable in-cluster service endpoints.
+
+Readiness tells us that Kubernetes controllers have converged. Verification adds
+a service-level smoke test by calling selected in-cluster HTTP endpoints through
+the Kubernetes service proxy.
+"""
 
 from __future__ import annotations
 
@@ -17,7 +22,12 @@ except ImportError:
 
 @dataclass(frozen=True)
 class VerificationCheck:
-    """Definition of one HTTP check made through the Kubernetes service proxy."""
+    """Definition of one HTTP check made through the Kubernetes service proxy.
+
+    `service` uses Kubernetes service-proxy syntax, including named ports when
+    needed. A check can validate either through `validator` for structured
+    responses or through `expected_substrings` for simple text responses.
+    """
 
     label: str
     service: str
@@ -29,7 +39,11 @@ class VerificationCheck:
 
 @dataclass(frozen=True)
 class VerificationResult:
-    """Outcome of a deploy verification check."""
+    """Outcome of a deploy verification check.
+
+    `detail` is always operator-facing. It should explain what failed rather
+    than expose Python exception structure unless the request itself failed.
+    """
 
     label: str
     ok: bool

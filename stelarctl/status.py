@@ -1,4 +1,9 @@
-"""Live readiness calculation and formatting for STELAR deployments."""
+"""Live readiness calculation and formatting for STELAR deployments.
+
+Status is derived from current Kubernetes objects, not the stored desired model.
+That makes it useful during partial deploys, manual cluster changes, and
+teardowns, where the local environment directory may not describe reality.
+"""
 
 from __future__ import annotations
 
@@ -30,7 +35,12 @@ FAILING_WAITING_REASONS = {
 
 @dataclass(frozen=True)
 class ExpectedResource:
-    """A Kubernetes resource expected for a STELAR tier."""
+    """A Kubernetes resource expected for a STELAR tier.
+
+    `kind` is the Kubernetes controller type handled by this module, `name` is
+    the object name in the namespace, and `label` is what operators see in
+    status output.
+    """
 
     kind: str
     name: str
@@ -39,7 +49,11 @@ class ExpectedResource:
 
 @dataclass(frozen=True)
 class ResourceStatus:
-    """Readiness summary for a long-running component."""
+    """Readiness summary for a long-running component.
+
+    `ready` drives the progress calculation. `detail` explains either the ready
+    state or the specific rollout lag that should be fixed or waited on.
+    """
 
     kind: str
     name: str
@@ -50,7 +64,12 @@ class ResourceStatus:
 
 @dataclass(frozen=True)
 class JobStatus:
-    """Completion summary for an initialization job."""
+    """Completion summary for an initialization job.
+
+    Init jobs are expected to complete once. A failed job is treated more
+    severely than a not-yet-ready component because later services often depend
+    on the initialization side effects.
+    """
 
     name: str
     label: str
@@ -61,7 +80,12 @@ class JobStatus:
 
 @dataclass(frozen=True)
 class StatusSnapshot:
-    """Point-in-time deployment readiness snapshot."""
+    """Point-in-time deployment readiness snapshot.
+
+    This object is the stable boundary between status collection and terminal
+    formatting. Tests can assert on structured fields without depending on the
+    exact text layout produced by `format_status`.
+    """
 
     context: str
     namespace: str

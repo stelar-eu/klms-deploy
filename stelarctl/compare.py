@@ -1,4 +1,9 @@
-"""Model comparison helpers used by deployment planning."""
+"""Model comparison helpers used by deployment planning.
+
+The deploy planner needs readable, deterministic differences rather than a raw
+object equality check. This module normalizes PlatformModel objects into flat
+paths so terminal output and tests can refer to the same field names.
+"""
 
 from __future__ import annotations
 
@@ -13,7 +18,12 @@ except ImportError:
 
 @dataclass(frozen=True)
 class ComparisonResult:
-    """Flat difference list plus a convenience equality flag."""
+    """Flat difference list plus a convenience equality flag.
+
+    The `equal` flag is redundant with `not differences`, but keeping it on the
+    return object makes deploy planning branches read like decisions rather than
+    list-length checks.
+    """
 
     differences: list[str]
     equal: bool

@@ -3,6 +3,11 @@
 This module keeps CLI concerns small: parse command-line arguments, resolve a
 target deployment, load the platform model, and delegate real work to the
 deployment, environment, status, and secret modules.
+
+Command functions should stay thin. If a branch starts to need Kubernetes API
+logic, Tanka command orchestration, or model comparison rules, that behavior
+belongs in the supporting modules so it can be unit-tested without invoking the
+CLI runner.
 """
 
 from __future__ import annotations
@@ -22,6 +27,9 @@ try:
     from .secrets import apply_generated_secrets, apply_secrets, delete_secrets
     from .status import collect_inferred_status, format_status
 except ImportError:
+    # Some legacy invocation paths import modules without package context. Keep
+    # the fallback so `python stelarctl/cli.py`-style execution and older tests
+    # still resolve sibling modules.
     from deploy import perform_deploy, teardown_target
     from env import resolve_env_target, write_spec_json
     from generator import write_main_jsonnet
@@ -92,6 +100,8 @@ def generate(
 ):
     """Materialize spec.json and main.jsonnet for a Tanka environment."""
     pm = _load(model)
+    # Generate is intentionally offline after model validation: it writes the
+    # local environment files but does not contact Kubernetes or run Tanka.
     write_spec_json(env, pm)
     write_main_jsonnet(pm, str(env))
 
@@ -108,6 +118,9 @@ def status_command(
     resolved_context, resolved_namespace = _resolve_status_target(env, context_name, namespace)
 
     while True:
+        # Re-infer on every iteration instead of caching a PlatformModel. During
+        # deploys and teardowns, the set of live resources can change between
+        # refreshes.
         snapshot, warnings = collect_inferred_status(resolved_context, resolved_namespace)
         if watch:
             _clear_screen()
@@ -156,6 +169,8 @@ def secrets_delete(
     """Delete all secrets in the namespace defined by the platform model."""
     pm = _load(model)
     if not confirm:
+        # This command deletes more than model-listed secrets, because generated
+        # and component-created secrets may not be represented in PlatformModel.
         typer.confirm(
             f"Delete ALL secrets in namespace '{pm.namespace}' on context '{pm.k8s_context}'?",
             abort=True,
@@ -199,6 +214,8 @@ def teardown(
     auto_approve: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation prompt"),
 ):
     """Remove deployment resources, optionally deleting the namespace and environment directory."""
+    # Resolve the target before prompting so the confirmation message names the
+    # exact context/namespace affected by the destructive operation.
     resolved_context, resolved_namespace = _resolve_target(env, context_name, namespace)
     teardown_target(
         resolved_context,
@@ -216,6 +233,8 @@ def validate(
 ):
     """Validate a platform model YAML without applying anything."""
     pm = _load(model)
+    # Keep output terse enough for scripts while still proving the model was
+    # parsed into the expected high-level deployment identity.
     typer.echo(f"Model valid: platform={pm.platform}, tier={pm.tier}, namespace={pm.namespace}")
 
 
