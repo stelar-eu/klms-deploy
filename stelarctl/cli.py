@@ -51,8 +51,13 @@ def _resolve_status_target(
 ) -> tuple[str, str]:
     """Resolve the Kubernetes context and namespace used by status-like commands."""
     if env is not None:
+        # Environment directories are the preferred source for repeatable
+        # operations because spec.json records the exact context and namespace
+        # generated during deploy.
         return resolve_env_target(env)
     if context_name and namespace:
+        # Direct targeting is useful for inspecting or tearing down deployments
+        # when the local Tanka environment is unavailable.
         return context_name, namespace
 
     # Fall back to kubeconfig only after explicit `--env` and direct
@@ -63,6 +68,8 @@ def _resolve_status_target(
     if context_name:
         for entry in contexts:
             if entry["name"] == context_name:
+                # Kubernetes contexts may carry a default namespace. Respect it
+                # when --context is supplied without --namespace.
                 return context_name, namespace or entry.get("context", {}).get("namespace") or "default"
         raise typer.BadParameter(f"Kubernetes context '{context_name}' not found.")
     active_namespace = active.get("context", {}).get("namespace") or "default"
@@ -105,17 +112,23 @@ def status_command(
         if watch:
             _clear_screen()
         if snapshot is None:
+            # Status is intentionally live-only. A stored model in an env dir
+            # does not prove the deployment currently exists.
             typer.echo(f"No active STELAR deployment found in {resolved_context}/{resolved_namespace}.")
         else:
             typer.echo("Model source: inferred from live cluster")
             typer.echo(format_status(snapshot))
         if warnings:
+            # Warnings come from best-effort inference, for example missing
+            # annotations or defaulted ingress classes.
             typer.echo("")
             typer.echo("Warnings:")
             for warning in warnings:
                 typer.echo(f"- {warning}")
         if not watch:
             break
+        # Keep the loop simple and predictable; readiness-specific exit behavior
+        # lives in deploy.wait_for_ready.
         time.sleep(interval)
 
 
@@ -126,6 +139,8 @@ def secrets_apply(
 ):
     """Apply secrets defined in the platform model to the cluster."""
     pm = _load(model)
+    # User-defined secrets are applied first because generated secrets may be
+    # optional, but model secrets are required by generated workloads.
     apply_secrets(pm)
     typer.echo("User-defined secrets applied.")
     if generated:
@@ -161,6 +176,8 @@ def deploy(
 ):
     """Full deployment: compare state, hard-redeploy if needed, then apply through Tanka."""
     pm = _load(model)
+    # Keep command handlers thin. perform_deploy owns planning, confirmation,
+    # purge/apply ordering, optional wait, and optional verification.
     perform_deploy(
         pm,
         env,

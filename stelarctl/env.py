@@ -46,6 +46,8 @@ def save_stored_model(env_path: Path, model: PlatformModel) -> Path:
     """Persist the desired model after a successful deploy."""
     ensure_env_dir(env_path)
     path = stored_model_path(env_path)
+    # Preserve field order from the Pydantic model so diffs against the input
+    # model remain readable and stable across deploys.
     with path.open("w", encoding="utf-8") as handle:
         yaml.safe_dump(model.model_dump(mode="python"), handle, sort_keys=False)
     return path
@@ -55,6 +57,9 @@ def write_spec_json(env_path: Path, model: PlatformModel) -> Path:
     """Write Tanka `spec.json` from the validated platform model."""
     ensure_env_dir(env_path)
     path = spec_path(env_path)
+    # Tanka treats spec.json as the environment descriptor. stelarctl writes it
+    # from the model so status and teardown can later resolve the deployment
+    # target without re-reading the original input YAML.
     payload = {
         "apiVersion": "tanka.dev/v1alpha1",
         "kind": "Environment",
@@ -66,6 +71,9 @@ def write_spec_json(env_path: Path, model: PlatformModel) -> Path:
             "contextNames": [model.k8s_context],
             "namespace": model.namespace,
             "resourceDefaults": {
+                # These defaults are injected into generated Kubernetes objects
+                # by Tanka and make it easier to identify stelarctl-managed
+                # resources during manual cluster inspection.
                 "annotations": {
                     "stelar.eu/author": model.author,
                 },
@@ -95,6 +103,8 @@ def resolve_env_target(env_path: Path) -> tuple[str, str]:
 
     context_names = spec.get("spec", {}).get("contextNames") or []
     namespace = spec.get("spec", {}).get("namespace")
+    # stelarctl commands operate on exactly one deployment target at a time. A
+    # multi-context Tanka environment would make status and teardown ambiguous.
     if len(context_names) != 1 or not namespace:
         raise ValueError(f"Invalid Tanka environment spec in {path}")
     return context_names[0], namespace

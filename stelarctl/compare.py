@@ -32,6 +32,9 @@ def compare_models(
 
     differences: list[str] = []
     ignored = ignore_fields or set()
+    # Iterate over the union of keys so additions, removals, and changed values
+    # all produce a single stable diff format. `right -> left` matches deploy
+    # planning, where right is the baseline and left is the requested input.
     for key in sorted(set(left_flat) | set(right_flat)):
         if key in ignored:
             continue
@@ -48,10 +51,15 @@ def _normalize_model(model: PlatformModel, *, include_secret_values: bool) -> di
     payload = model.model_dump(exclude_none=True)
     payload.pop("secrets", None)
     normalized_secrets: dict[str, Any] = {}
+    # Secrets are represented as a name-indexed mapping so changing secret order
+    # in YAML does not trigger a redeploy. Secret names remain comparable because
+    # generated manifests reference names directly.
     for secret in sorted(model.secrets, key=lambda item: item.name):
         if include_secret_values:
             normalized_secrets[secret.name] = secret.data.model_dump(exclude_none=True)
         else:
+            # The sentinel preserves the fact that a secret exists while hiding
+            # values that cannot be recovered from live Kubernetes state.
             normalized_secrets[secret.name] = "__secret__"
     payload["secrets"] = normalized_secrets
     return payload
@@ -66,5 +74,7 @@ def _flatten(value: Any, prefix: str = "") -> dict[str, Any]:
             flattened.update(_flatten(nested_value, nested_prefix))
         return flattened
     if isinstance(value, list):
+        # Lists that reach this function are treated as atomic ordered values.
+        # Current normalization removes the most order-sensitive list, secrets.
         return {prefix: tuple(value)}
     return {prefix: value}

@@ -12,12 +12,16 @@ except ImportError:
 def _cluster_issuer(model: PlatformModel) -> str:
     """Return the Jsonnet literal for the configured cert-manager issuer."""
     if model.infrastructure.tls.mode == "cert-manager":
+        # Jsonnet needs a quoted string for real issuer names, but `null` for
+        # manual or disabled TLS so downstream libraries can branch cleanly.
         return f"'{model.infrastructure.tls.issuer}'"
     return "null"
 
 
 def _insecure_minio(model: PlatformModel) -> str:
     """Return the MinIO client TLS flag expected by existing Jsonnet libraries."""
+    # Existing Jsonnet consumes this value as the string "true"/"false", not as
+    # a boolean. Keep that contract to avoid changing generated manifests.
     return "false" if model.infrastructure.tls.mode != "none" else "true"
 
 
@@ -25,6 +29,8 @@ def _secret_name(model: PlatformModel, name: str) -> str:
     """Resolve a required logical secret name from the platform model."""
     match = next((s for s in model.secrets if s.name == name), None)
     if match is None:
+        # Fail while generating main.jsonnet rather than allowing Tanka to fail
+        # later with a less direct missing-field error.
         raise ValueError(f"Secret '{name}' not found in platform model")
     return match.name
 
@@ -44,6 +50,14 @@ def generate_main_jsonnet(model: PlatformModel) -> str:
     groq_url = config.groq_api_url or "null"
     groq_model = config.groq_api_model or "null"
 
+    # The generated Jsonnet keeps the platform model as the single operator input
+    # while still delegating Kubernetes-object construction to the existing
+    # libsonnet stack. Each top-level section below feeds an established library:
+    #   - _tk_env and _config mirror Tanka environment metadata.
+    #   - provisioning carries storage choices into persistent-volume helpers.
+    #   - cluster/configuration provide endpoint, API, MinIO, LLM, and secret
+    #     names consumed by component libraries.
+    #   - pim and components select images and workload definitions for the tier.
     return textwrap.dedent(f"""\
         local tk_env = import 'spec.json';
         local t = import 'transform.libsonnet';

@@ -7,6 +7,8 @@ from typing import Literal, Optional
 class DNSConfig(BaseModel):
     """DNS root, scheme, and service subdomain prefixes."""
 
+    # `root` is the common domain suffix. The subdomain fields below are prefixes
+    # used to build service URLs such as https://klms.example.org.
     root: str
     scheme: Literal["http", "https"]
     keycloak: str = "kc"
@@ -23,6 +25,8 @@ class DNSConfig(BaseModel):
 class AppConfig(BaseModel):
     """Application-level settings injected into generated manifests."""
 
+    # SMTP values are passed through to the STELAR API configuration. Passwords
+    # live in secrets instead of this config block.
     smtp_server: str
     smtp_port: str
     smtp_username: str
@@ -45,6 +49,8 @@ class AppConfig(BaseModel):
 class SecretData(BaseModel):
     """Supported data keys for model-defined Kubernetes secrets."""
 
+    # Most STELAR secrets use `password`; session-secret-key uses `key`. Keeping
+    # both optional lets live inference represent secret names without values.
     password: Optional[str] = None
     key: Optional[str] = None
 
@@ -59,6 +65,9 @@ class Secret(BaseModel):
 class StorageConfig(BaseModel):
     """StorageClass names used by generated persistent volumes."""
 
+    # dynamic_class is used by workload PVCs. provisioning_class is passed into
+    # the provisioning layer for volumes that are prepared outside normal PVC
+    # templates.
     dynamic_class: str       # used for PVCs (databases, minio, solr)
     provisioning_class: str  # used for provisioning volumes
 
@@ -66,6 +75,8 @@ class StorageConfig(BaseModel):
 class TLSConfig(BaseModel):
     """TLS mode and optional cert-manager issuer."""
 
+    # manual means generated ingresses expect TLS material to be provided outside
+    # cert-manager. none is required for plain HTTP deployments.
     mode: Literal["cert-manager", "manual", "none"]
     issuer: Optional[str] = None
 
@@ -88,6 +99,9 @@ class InfrastructureConfig(BaseModel):
 class PlatformModel(BaseModel):
     """Complete desired-state input accepted by `stelarctl` commands."""
 
+    # This model is both the user-facing YAML schema and the persisted desired
+    # state saved after deploy. Be careful when renaming fields: compare.py and
+    # generated environment files rely on stable field paths.
     platform: str
     k8s_context: str
     namespace: str

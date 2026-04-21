@@ -57,11 +57,17 @@ CORE_CHECKS = (
         path="minio/health/live",
     ),
 )
+# Verification runs after readiness and targets stable in-cluster service
+# endpoints through the Kubernetes service proxy. These checks intentionally
+# avoid public ingress paths so DNS and external TLS issues do not mask whether
+# core services are actually responding inside the cluster.
 
 
 def verification_checks_for_model(model: PlatformModel) -> tuple[VerificationCheck, ...]:
     # Initial verification suite is intentionally conservative and targets
-    # the core services with stable in-cluster endpoints.
+    # the core services with stable in-cluster endpoints. The model argument is
+    # kept so this function can later vary checks by tier or optional features
+    # without changing deploy.py.
     return CORE_CHECKS
 
 
@@ -80,6 +86,8 @@ def run_verification_checks(
     for check in checks:
         path = check.path.lstrip("/")
         try:
+            # The service proxy avoids opening local port-forwards and keeps the
+            # request scoped to the selected kubeconfig context and namespace.
             body, status_code, _headers = core_api.connect_get_namespaced_service_proxy_with_path_with_http_info(
                 name=check.service,
                 namespace=namespace,
@@ -95,6 +103,9 @@ def run_verification_checks(
             continue
 
         if check.validator is not None:
+            # Structured validators are preferred for APIs with stable response
+            # shapes. expected_substrings remains available for simple text
+            # endpoints such as health checks.
             if not check.validator(body):
                 detail = check.expected_detail or "response failed validation"
                 results.append(VerificationResult(check.label, False, detail))
@@ -147,6 +158,9 @@ def _body_to_mapping(body: Any) -> dict[str, Any] | None:
     if not isinstance(body, str):
         return None
 
+    # Some Kubernetes client versions return JSON strings, while tests and
+    # service proxies may return Python-literal-looking strings. Try strict JSON
+    # first, then ast.literal_eval as a tolerant fallback.
     for parser in (json.loads, ast.literal_eval):
         try:
             parsed = parser(body)

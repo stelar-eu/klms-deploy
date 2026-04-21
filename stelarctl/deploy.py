@@ -44,7 +44,13 @@ except ImportError:
 
 @dataclass(frozen=True)
 class DeployDecision:
-    """Result of comparing the input model with stored and live deployment state."""
+    """Result of comparing the input model with stored and live deployment state.
+
+    `action` is intentionally a small string vocabulary because the CLI uses it
+    to choose the next operational step. `differences` are always phrased as
+    "old -> new" from the baseline toward the input model, so they can be shown
+    directly to operators before a destructive redeploy.
+    """
 
     action: str
     reason: str
@@ -56,6 +62,10 @@ class DeployDecision:
 LIVE_UNCOMPARABLE_FIELDS = {
     "infrastructure.storage.dynamic_class",
 }
+# Some fields cannot be recovered faithfully from Kubernetes objects. Dynamic
+# storage class is one of them because live PVCs only expose the class actually
+# used by existing claims, which may not be enough to reconstruct every desired
+# provisioning choice in the original model.
 DEFAULT_WAIT_TIMEOUT_SECONDS = 600
 DEFAULT_WAIT_POLL_INTERVAL_SECONDS = 5
 
@@ -71,9 +81,14 @@ def plan_deploy(input_model: PlatformModel, env_path: Path) -> DeployDecision:
     stored_model = load_stored_model(env_path)
     live = infer_live_deployment(input_model.k8s_context, input_model.namespace)
 
+    # No stored desired state and no STELAR resources means there is no baseline
+    # to compare against. Treat the run as a first install.
     if stored_model is None and not live.active:
         return DeployDecision(action="fresh", reason="No stored model and no active STELAR deployment found.", differences=[])
 
+    # A stored model without a live deployment most commonly means the namespace
+    # was cleaned up outside stelarctl. A fresh deploy is safer than reporting a
+    # no-op because the cluster does not currently contain the desired system.
     if stored_model is not None and not live.active:
         return DeployDecision(
             action="fresh",
@@ -82,6 +97,11 @@ def plan_deploy(input_model: PlatformModel, env_path: Path) -> DeployDecision:
         )
 
     if stored_model is None and live.model is not None:
+        # A live deployment without stored state may have been created by an
+        # older tool version or from a copied environment directory. Compare
+        # against inferred live state, but never compare secret values because
+        # Kubernetes only stores their encoded form and stelarctl does not read
+        # or decode them for planning.
         inferred_compare = compare_models(
             input_model,
             live.model,
@@ -114,6 +134,10 @@ def plan_deploy(input_model: PlatformModel, env_path: Path) -> DeployDecision:
             ignore_fields=LIVE_UNCOMPARABLE_FIELDS,
         )
         live_drift = stored_vs_live.differences
+        # If stored state differs from live state, the live cluster is the safer
+        # baseline for deciding whether the input model is changing reality.
+        # Otherwise, use the stored model because it still contains plaintext
+        # secret values and can detect secret-only input changes.
         baseline = live.model if live_drift else stored_model
         baseline_is_inferred = bool(live_drift)
     else:
@@ -121,6 +145,9 @@ def plan_deploy(input_model: PlatformModel, env_path: Path) -> DeployDecision:
         baseline_is_inferred = False
 
     if baseline_is_inferred:
+        # Inferred baselines intentionally mask secret values. If every visible
+        # field matches, ask the operator whether the secret values are still the
+        # same instead of silently assuming a no-op or forcing a redeploy.
         input_vs_baseline = compare_models(
             input_model,
             baseline,
@@ -142,6 +169,8 @@ def plan_deploy(input_model: PlatformModel, env_path: Path) -> DeployDecision:
             live_drift_differences=live_drift,
         )
 
+    # At this point the stored model agrees with live state, so it is safe to do
+    # the strongest comparison, including secret values.
     full_compare = compare_models(input_model, baseline, include_secret_values=True)
     if full_compare.equal:
         return DeployDecision(action="noop", reason="Input model matches the stored deployment state.", differences=[])
@@ -164,6 +193,8 @@ def perform_deploy(
     wait_interval: int = DEFAULT_WAIT_POLL_INTERVAL_SECONDS,
 ) -> DeployDecision:
     """Run the full deploy workflow and return the planning decision used."""
+    # Verification depends on services being reachable, so it implies the same
+    # readiness wait even when the operator did not pass --wait explicitly.
     effective_wait = wait or verify
     if verify and not wait:
         typer.echo("Verification requested; waiting for readiness before running checks.")
@@ -172,11 +203,16 @@ def perform_deploy(
 
     typer.echo(decision.reason)
     if decision.live_drift_differences:
+        # Drift is not itself the requested change, but it changes which
+        # baseline is used. Echo it separately so the operator can distinguish
+        # "the cluster changed" from "the input model changed".
         typer.echo("Detected drift between stored state and live cluster:")
         for difference in decision.live_drift_differences:
             typer.echo(f"- {difference}")
 
     if decision.action == "noop":
+        # A no-op may still be useful with --wait or --verify, for example when
+        # continuing to monitor a deployment that was already applied earlier.
         typer.echo("Input model matches the active deployment. No changes to apply.")
         if effective_wait:
             wait_for_ready(
@@ -190,6 +226,9 @@ def perform_deploy(
         return decision
 
     if decision.action == "prompt_secret_values":
+        # This branch is reached only when all recoverable live state matches.
+        # The operator is the only remaining source of truth for plaintext
+        # secret values.
         secrets_same = typer.confirm(
             "Live deployment matches except secret values cannot be verified from Kubernetes. Are the secret values unchanged?",
             default=False,
@@ -214,11 +253,15 @@ def perform_deploy(
         )
 
     if decision.differences:
+        # These differences come from compare_models and are ordered for stable
+        # terminal output and predictable tests.
         typer.echo("Model differences:")
         for difference in decision.differences:
             typer.echo(f"- {difference}")
 
     preflight_check(model, auto_approve=auto_approve)
+    # Materialize files before the Tanka diff so the preview reflects exactly
+    # what will be applied after confirmation.
     write_spec_json(env_path, model)
     write_main_jsonnet(model, str(env_path))
 
@@ -234,13 +277,20 @@ def perform_deploy(
 
     live = infer_live_deployment(model.k8s_context, model.namespace)
     if live.active:
+        # The current strategy is intentionally hard redeploy only. Purging
+        # known STELAR resources avoids merging incompatible old Kubernetes
+        # objects with newly generated manifests.
         purge_namespace(model.k8s_context, model.namespace)
 
+    # Namespace annotations are written after the purge so live-state inference
+    # can recognize the deployment even if some resources are still starting.
     annotate_namespace(model)
     apply_secrets(model)
     apply_generated_secrets(model)
 
     _run_command(["tk", "apply", str(env_path), "--auto-approve", "always"])
+    # Persist only after tk apply succeeds. This keeps model.yaml as the last
+    # successful desired state rather than the last attempted desired state.
     save_stored_model(env_path, model)
     typer.echo(f"Stored deployment model written to {env_path / 'model.yaml'}.")
     if effective_wait:
@@ -264,6 +314,8 @@ def wait_for_ready(
 ) -> None:
     """Poll inferred status until the deployment is ready, degraded, or timed out."""
     deadline = time.time() + timeout_seconds
+    # Keep watch output readable in non-interactive logs by suppressing repeated
+    # identical progress lines.
     last_line = ""
 
     typer.echo(
@@ -274,6 +326,9 @@ def wait_for_ready(
     while time.time() < deadline:
         snapshot, warnings = collect_inferred_status(context_name, namespace)
         if snapshot is None:
+            # A deployment can briefly disappear during a hard redeploy while
+            # old resources are being purged and new resources have not been
+            # applied yet. Keep polling until timeout instead of failing early.
             latest = f"No active STELAR deployment found in {context_name}/{namespace}."
             if latest != last_line:
                 typer.echo(latest)
@@ -292,6 +347,8 @@ def wait_for_ready(
 
         if warnings:
             for warning in warnings:
+                # Warnings usually come from best-effort live inference. They
+                # are informational unless the derived status becomes Degraded.
                 warning_line = f"Warning: {warning}"
                 if warning_line != last_line:
                     typer.echo(warning_line)
@@ -302,6 +359,8 @@ def wait_for_ready(
             return
 
         if snapshot.phase == "Degraded":
+            # Degraded is treated as terminal for wait mode because at least one
+            # job failed or a pod reached a known unrecoverable waiting reason.
             typer.echo("Deployment entered a degraded state while waiting for readiness.")
             typer.echo(format_status(snapshot))
             raise typer.Exit(1)
@@ -329,6 +388,8 @@ def verify_deployment(model: PlatformModel) -> None:
 
     failed = False
     for result in results:
+        # Print every result before exiting so an operator gets the full failure
+        # set from one run instead of fixing checks one at a time.
         status = "PASS" if result.ok else "FAIL"
         typer.echo(f"{status} {result.label}: {result.detail}")
         failed = failed or not result.ok
@@ -350,6 +411,8 @@ def teardown_target(
     if delete_env and env_path is None:
         raise typer.BadParameter("--delete-env requires --env.")
 
+    # Build the confirmation text from the exact selected actions so destructive
+    # flags are visible in the prompt.
     actions = ["purge deployment resources"]
     if delete_namespace:
         actions.append("delete the namespace")
@@ -365,12 +428,16 @@ def teardown_target(
     purge_namespace(context_name, namespace)
 
     if env_path is not None:
+        # Removing the stored model prevents a future deploy from comparing
+        # against a desired state that no longer has corresponding live objects.
         model_path = stored_model_path(env_path)
         if model_path.exists():
             model_path.unlink()
             typer.echo(f"Removed stored model {model_path}.")
 
     if delete_namespace:
+        # Namespace deletion can take a long time if finalizers are present.
+        # stelarctl starts deletion and returns instead of blocking indefinitely.
         _run_command(
             [
                 "kubectl",
@@ -385,6 +452,8 @@ def teardown_target(
             check=False,
         )
     else:
+        # When the namespace survives teardown, clear the metadata that would
+        # otherwise make future live inference look more authoritative than it is.
         clear_namespace_annotations(context_name, namespace)
 
     if delete_env and env_path is not None and env_path.exists():
@@ -400,6 +469,8 @@ def preflight_check(model: PlatformModel, *, auto_approve: bool = False) -> None
         raise typer.BadParameter(f"Kubernetes context '{model.k8s_context}' not found in kubeconfig.")
 
     if active_context and active_context["name"] != model.k8s_context:
+        # Tanka uses the kubeconfig context as part of its apply path. Align the
+        # active kubectl context with the model before running tk commands.
         _run_command(["kubectl", "config", "use-context", model.k8s_context])
 
     config.load_kube_config(context=model.k8s_context)
@@ -413,6 +484,8 @@ def preflight_check(model: PlatformModel, *, auto_approve: bool = False) -> None
     except ApiException as exc:
         if exc.status != 404:
             raise
+        # Namespace creation is the only preflight mutation. It is safe under
+        # --yes because all later destructive changes still target that namespace.
         create_ns = True if auto_approve else typer.confirm(
             f"Namespace '{model.namespace}' does not exist on context '{model.k8s_context}'. Create it?",
             default=True,
@@ -424,6 +497,8 @@ def preflight_check(model: PlatformModel, *, auto_approve: bool = False) -> None
     storage_classes = {
         item.metadata.name for item in storage_api.list_storage_class().items
     }
+    # Validate both classes separately so the error can point back to the exact
+    # model field that needs to be changed.
     for field_name, value in {
         "infrastructure.storage.dynamic_class": model.infrastructure.storage.dynamic_class,
         "infrastructure.storage.provisioning_class": model.infrastructure.storage.provisioning_class,
@@ -440,6 +515,9 @@ def preflight_check(model: PlatformModel, *, auto_approve: bool = False) -> None
         )
 
     if model.infrastructure.tls.mode == "cert-manager":
+        # The generated ingress manifests reference a ClusterIssuer by name. If
+        # it is absent or not Ready, deployment would apply successfully but TLS
+        # certificates would never become valid.
         try:
             issuer = custom_api.get_cluster_custom_object(
                 group="cert-manager.io",
@@ -463,6 +541,9 @@ def annotate_namespace(model: PlatformModel) -> None:
     """Record STELAR metadata on the namespace for later live-state inference."""
     config.load_kube_config(context=model.k8s_context)
     core_api = client.CoreV1Api()
+    # These annotations are hints, not the only source of truth. live.py still
+    # checks actual workloads so an annotated but empty namespace is not treated
+    # as an active deployment.
     body = {
         "metadata": {
             "annotations": {
@@ -499,6 +580,9 @@ def clear_namespace_annotations(context_name: str, namespace: str) -> None:
 
 def purge_namespace(context_name: str, namespace: str) -> None:
     """Delete known STELAR namespaced resources while keeping the namespace."""
+    # The resource list is intentionally namespaced and STELAR-scoped by usage:
+    # it removes resource kinds the generated manifests own without deleting the
+    # namespace object itself. --all assumes the namespace is dedicated to STELAR.
     resources = [
         "deployments.apps",
         "statefulsets.apps",
