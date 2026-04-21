@@ -4,6 +4,27 @@ The knowledge layer comprises: (a) a data catalog that offers automatically enha
 
 ![alt text](https://github.com/stelar-eu/klms-deploy/blob/main/misc/klms_architecture.jpg?raw=true)
 
+## Deployment CLI
+
+This repository includes `stelarctl`, the operator-facing CLI for validating
+STELAR platform models, generating Tanka environments, deploying KLMS, checking
+live status, managing secrets, and tearing deployments down.
+
+Start with the command reference in
+[stelarctl/DOCS.md](stelarctl/DOCS.md). For implementation-level deployment
+flow and state-comparison rules, see
+[stelarctl/ARCHITECTURE.txt](stelarctl/ARCHITECTURE.txt).
+
+Common commands:
+
+```bash
+./bin/stelarctl validate stelarctl/example_models/minikube.yaml
+./bin/stelarctl generate stelarctl/example_models/minikube.yaml --env environments/minikube.dev
+./bin/stelarctl deploy stelarctl/example_models/minikube.yaml --env environments/minikube.dev --wait
+./bin/stelarctl status --env environments/minikube.dev --watch
+./bin/stelarctl teardown --env environments/minikube.dev
+```
+
 ## KLMS core components
 
 * [STELAR API](https://github.com/stelar-eu/data-api). The main entry point to the KLMS system, exposing RESTful endpoints for managing and searching resources in the KLMS. Houses the core services of the KLMS, including user management, dataset management, metadata extraction, and search functionalities, task and workflow invocation. Exposes a GUI for interacting with the KLMS system, the STELAR KLMS Console, supporting the full spectrum of KLMS functionalities.

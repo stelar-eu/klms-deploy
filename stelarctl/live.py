@@ -1,3 +1,5 @@
+"""Infer STELAR deployment metadata from live Kubernetes resources."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -21,6 +23,8 @@ FULL_WORKLOADS = {"ontop", "quay", "visualizer", "previewer"}
 
 @dataclass(frozen=True)
 class LiveDeployment:
+    """Best-effort reconstruction of a deployment from cluster state."""
+
     context: str
     namespace: str
     active: bool
@@ -29,6 +33,7 @@ class LiveDeployment:
 
 
 def infer_live_deployment(context_name: str, namespace: str) -> LiveDeployment:
+    """Infer whether STELAR is active and reconstruct a comparable model."""
     config.load_kube_config(context=context_name)
 
     core_api = client.CoreV1Api()
@@ -62,6 +67,8 @@ def infer_live_deployment(context_name: str, namespace: str) -> LiveDeployment:
     if tier not in {"core", "full"}:
         tier = _infer_tier_from_workloads(workload_names)
 
+    # Namespace annotations alone are not enough: teardown can leave the
+    # namespace alive, so active deployment detection is based on resources.
     has_stelar_resources = bool(workload_names & (CORE_WORKLOADS | FULL_WORKLOADS)) or any(
         ingress.metadata.name in {"stelar", "kc", "s3", "reg"} for ingress in ingresses
     ) or any(
@@ -114,6 +121,7 @@ def infer_live_deployment(context_name: str, namespace: str) -> LiveDeployment:
 
 
 def _infer_tier_from_workloads(workload_names: set[str]) -> str | None:
+    """Infer `core` or `full` from known workload names."""
     if workload_names & FULL_WORKLOADS:
         return "full"
     if workload_names & CORE_WORKLOADS:
@@ -125,6 +133,7 @@ def _infer_network(
     ingress_by_name: dict[str, Any],
     warnings: list[str],
 ) -> tuple[str, dict[str, str], str, str, str | None, str]:
+    """Infer DNS, scheme, TLS mode, issuer, and ingress class from ingresses."""
     primary = ingress_by_name.get("stelar")
     kc = ingress_by_name.get("kc")
     s3 = ingress_by_name.get("s3")
@@ -164,6 +173,7 @@ def _infer_network(
 
 
 def _subdomain_from_ingress(ingress: Any, root: str, fallback: str) -> str:
+    """Return the subdomain prefix for an ingress host under `root`."""
     if ingress is None or not ingress.spec.rules:
         return fallback
     host = ingress.spec.rules[0].host
@@ -179,6 +189,7 @@ def _infer_app_config(
     root: str,
     primary_subdomain: str,
 ) -> dict[str, Any]:
+    """Infer application config values from ConfigMaps and workload presence."""
     by_name = {item.metadata.name: item for item in configmaps}
     api_config = by_name.get("api-config-map")
     data = api_config.data if api_config and api_config.data else {}
@@ -197,6 +208,7 @@ def _infer_app_config(
 
 
 def _infer_storage(pvcs: list[Any]) -> dict[str, str]:
+    """Infer storage classes from PVCs, returning empty values when absent."""
     classes = sorted(
         {
             pvc.spec.storage_class_name
@@ -226,6 +238,7 @@ def _infer_secret_names(
     tier: str,
     llm_enabled: bool,
 ) -> list[dict[str, Any]]:
+    """Infer model secret names from workload environment references."""
     deploys = {item.metadata.name: item for item in deployments}
     states = {item.metadata.name: item for item in statefulsets}
 
@@ -254,6 +267,7 @@ def _infer_secret_names(
 
 
 def _secret_name_from_env(resource: Any, env_name: str) -> str | None:
+    """Read a secret name from a container environment variable reference."""
     if resource is None:
         return None
     containers = resource.spec.template.spec.containers or []

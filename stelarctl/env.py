@@ -1,3 +1,5 @@
+"""Helpers for the Tanka environment files managed by `stelarctl`."""
+
 from __future__ import annotations
 
 import json
@@ -18,18 +20,22 @@ SPEC_FILENAME = "spec.json"
 
 
 def ensure_env_dir(env_path: Path) -> None:
+    """Create the environment directory if it does not already exist."""
     env_path.mkdir(parents=True, exist_ok=True)
 
 
 def stored_model_path(env_path: Path) -> Path:
+    """Return the path where the last successful desired model is stored."""
     return env_path / MODEL_FILENAME
 
 
 def spec_path(env_path: Path) -> Path:
+    """Return the path to the generated Tanka environment spec."""
     return env_path / SPEC_FILENAME
 
 
 def load_stored_model(env_path: Path) -> PlatformModel | None:
+    """Load the stored desired model for an environment, if one exists."""
     path = stored_model_path(env_path)
     if not path.exists():
         return None
@@ -37,6 +43,7 @@ def load_stored_model(env_path: Path) -> PlatformModel | None:
 
 
 def save_stored_model(env_path: Path, model: PlatformModel) -> Path:
+    """Persist the desired model after a successful deploy."""
     ensure_env_dir(env_path)
     path = stored_model_path(env_path)
     with path.open("w", encoding="utf-8") as handle:
@@ -45,6 +52,7 @@ def save_stored_model(env_path: Path, model: PlatformModel) -> Path:
 
 
 def write_spec_json(env_path: Path, model: PlatformModel) -> Path:
+    """Write Tanka `spec.json` from the validated platform model."""
     ensure_env_dir(env_path)
     path = spec_path(env_path)
     payload = {
@@ -78,6 +86,7 @@ def write_spec_json(env_path: Path, model: PlatformModel) -> Path:
 
 
 def resolve_env_target(env_path: Path) -> tuple[str, str]:
+    """Read `spec.json` and return the single `(context, namespace)` target."""
     path = spec_path(env_path)
     if not path.exists():
         raise FileNotFoundError(f"spec.json not found in environment directory: {env_path}")

@@ -1,3 +1,5 @@
+"""Post-deploy verification checks against stable in-cluster service endpoints."""
+
 from __future__ import annotations
 
 import ast
@@ -15,6 +17,8 @@ except ImportError:
 
 @dataclass(frozen=True)
 class VerificationCheck:
+    """Definition of one HTTP check made through the Kubernetes service proxy."""
+
     label: str
     service: str
     path: str
@@ -25,6 +29,8 @@ class VerificationCheck:
 
 @dataclass(frozen=True)
 class VerificationResult:
+    """Outcome of a deploy verification check."""
+
     label: str
     ok: bool
     detail: str
@@ -66,6 +72,7 @@ def run_verification_checks(
     *,
     request_timeout: tuple[int, int] = (5, 20),
 ) -> list[VerificationResult]:
+    """Run service-proxy checks in the target namespace."""
     config.load_kube_config(context=context_name)
     core_api = client.CoreV1Api()
 
@@ -108,6 +115,7 @@ def run_verification_checks(
 
 
 def _body_to_text(body: Any) -> str:
+    """Convert Kubernetes client response bodies into searchable text."""
     if isinstance(body, str):
         return body
     try:
@@ -117,6 +125,7 @@ def _body_to_text(body: Any) -> str:
 
 
 def _ckan_status_ok(body: Any) -> bool:
+    """Validate the CKAN status API response."""
     parsed = _body_to_mapping(body)
     if parsed is not None:
         return parsed.get("success") is True
@@ -124,6 +133,7 @@ def _ckan_status_ok(body: Any) -> bool:
 
 
 def _keycloak_ready_ok(body: Any) -> bool:
+    """Validate the Keycloak readiness response."""
     parsed = _body_to_mapping(body)
     if parsed is not None:
         return parsed.get("status") == "UP"
@@ -131,6 +141,7 @@ def _keycloak_ready_ok(body: Any) -> bool:
 
 
 def _body_to_mapping(body: Any) -> dict[str, Any] | None:
+    """Parse JSON-like response bodies into mappings when possible."""
     if isinstance(body, dict):
         return body
     if not isinstance(body, str):

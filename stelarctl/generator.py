@@ -1,3 +1,5 @@
+"""Generate the `main.jsonnet` entry point for a Tanka environment."""
+
 import textwrap
 from pathlib import Path
 
@@ -8,16 +10,19 @@ except ImportError:
 
 
 def _cluster_issuer(model: PlatformModel) -> str:
+    """Return the Jsonnet literal for the configured cert-manager issuer."""
     if model.infrastructure.tls.mode == "cert-manager":
         return f"'{model.infrastructure.tls.issuer}'"
     return "null"
 
 
 def _insecure_minio(model: PlatformModel) -> str:
+    """Return the MinIO client TLS flag expected by existing Jsonnet libraries."""
     return "false" if model.infrastructure.tls.mode != "none" else "true"
 
 
 def _secret_name(model: PlatformModel, name: str) -> str:
+    """Resolve a required logical secret name from the platform model."""
     match = next((s for s in model.secrets if s.name == name), None)
     if match is None:
         raise ValueError(f"Secret '{name}' not found in platform model")
@@ -25,6 +30,7 @@ def _secret_name(model: PlatformModel, name: str) -> str:
 
 
 def generate_main_jsonnet(model: PlatformModel) -> str:
+    """Render `main.jsonnet` for the supplied validated platform model."""
     dns = model.dns
     config = model.config
     infra = model.infrastructure
@@ -126,6 +132,7 @@ def generate_main_jsonnet(model: PlatformModel) -> str:
 
 
 def write_main_jsonnet(model: PlatformModel, env_path: str) -> Path:
+    """Write generated Jsonnet into the requested environment directory."""
     path = Path(env_path) / "main.jsonnet"
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", encoding="utf-8") as f:

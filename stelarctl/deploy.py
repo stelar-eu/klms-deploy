@@ -1,3 +1,5 @@
+"""Deployment planning, apply, readiness waiting, and teardown orchestration."""
+
 from __future__ import annotations
 
 import subprocess
@@ -42,6 +44,8 @@ except ImportError:
 
 @dataclass(frozen=True)
 class DeployDecision:
+    """Result of comparing the input model with stored and live deployment state."""
+
     action: str
     reason: str
     differences: list[str]
@@ -57,6 +61,13 @@ DEFAULT_WAIT_POLL_INTERVAL_SECONDS = 5
 
 
 def plan_deploy(input_model: PlatformModel, env_path: Path) -> DeployDecision:
+    """Decide whether a deploy is fresh, a no-op, or a hard redeploy.
+
+    The comparison uses the stored model when possible because it preserves
+    secret values. When the stored model is absent or has drifted from the live
+    cluster, the inferred live model becomes the baseline and secret values are
+    treated as unverifiable.
+    """
     stored_model = load_stored_model(env_path)
     live = infer_live_deployment(input_model.k8s_context, input_model.namespace)
 
@@ -94,6 +105,8 @@ def plan_deploy(input_model: PlatformModel, env_path: Path) -> DeployDecision:
 
     live_drift = []
     if live.model is not None:
+        # Secret values cannot be recovered from Kubernetes, so live drift can
+        # only compare non-secret fields and secret names.
         stored_vs_live = compare_models(
             stored_model,
             live.model,
@@ -150,6 +163,7 @@ def perform_deploy(
     wait_timeout: int = DEFAULT_WAIT_TIMEOUT_SECONDS,
     wait_interval: int = DEFAULT_WAIT_POLL_INTERVAL_SECONDS,
 ) -> DeployDecision:
+    """Run the full deploy workflow and return the planning decision used."""
     effective_wait = wait or verify
     if verify and not wait:
         typer.echo("Verification requested; waiting for readiness before running checks.")
@@ -208,6 +222,7 @@ def perform_deploy(
     write_spec_json(env_path, model)
     write_main_jsonnet(model, str(env_path))
 
+    # Show operators the Tanka-level delta before the destructive confirmation.
     typer.echo("Tanka diff preview:")
     _run_command(["tk", "diff", str(env_path), "--with-prune"], check=False)
 
@@ -247,6 +262,7 @@ def wait_for_ready(
     timeout_seconds: int = DEFAULT_WAIT_TIMEOUT_SECONDS,
     poll_interval: int = DEFAULT_WAIT_POLL_INTERVAL_SECONDS,
 ) -> None:
+    """Poll inferred status until the deployment is ready, degraded, or timed out."""
     deadline = time.time() + timeout_seconds
     last_line = ""
 
@@ -302,6 +318,7 @@ def wait_for_ready(
 
 
 def verify_deployment(model: PlatformModel) -> None:
+    """Run post-deploy service checks and exit non-zero on the first failed set."""
     checks = verification_checks_for_model(model)
     if not checks:
         typer.echo("No deploy verification checks are defined for this deployment.")
@@ -329,6 +346,7 @@ def teardown_target(
     delete_env: bool = False,
     auto_approve: bool = False,
 ) -> None:
+    """Purge deployment resources and optionally delete the namespace or env dir."""
     if delete_env and env_path is None:
         raise typer.BadParameter("--delete-env requires --env.")
 
@@ -375,6 +393,7 @@ def teardown_target(
 
 
 def preflight_check(model: PlatformModel, *, auto_approve: bool = False) -> None:
+    """Validate cluster prerequisites before writing or applying manifests."""
     contexts, active_context = config.list_kube_config_contexts()
     context_names = {item["name"] for item in contexts}
     if model.k8s_context not in context_names:
@@ -441,6 +460,7 @@ def preflight_check(model: PlatformModel, *, auto_approve: bool = False) -> None
 
 
 def annotate_namespace(model: PlatformModel) -> None:
+    """Record STELAR metadata on the namespace for later live-state inference."""
     config.load_kube_config(context=model.k8s_context)
     core_api = client.CoreV1Api()
     body = {
@@ -456,6 +476,7 @@ def annotate_namespace(model: PlatformModel) -> None:
 
 
 def clear_namespace_annotations(context_name: str, namespace: str) -> None:
+    """Remove STELAR namespace annotations left after resource teardown."""
     config.load_kube_config(context=context_name)
     core_api = client.CoreV1Api()
     try:
@@ -477,6 +498,7 @@ def clear_namespace_annotations(context_name: str, namespace: str) -> None:
 
 
 def purge_namespace(context_name: str, namespace: str) -> None:
+    """Delete known STELAR namespaced resources while keeping the namespace."""
     resources = [
         "deployments.apps",
         "statefulsets.apps",
@@ -509,6 +531,7 @@ def purge_namespace(context_name: str, namespace: str) -> None:
 
 
 def _run_command(command: list[str], *, check: bool = True) -> subprocess.CompletedProcess[str]:
+    """Run an external command, echo captured output, and optionally fail fast."""
     result = subprocess.run(command, text=True, capture_output=True)
     if result.stdout:
         typer.echo(result.stdout.rstrip())

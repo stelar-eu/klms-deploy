@@ -1,3 +1,10 @@
+"""Typer command definitions for the `stelarctl` executable.
+
+This module keeps CLI concerns small: parse command-line arguments, resolve a
+target deployment, load the platform model, and delegate real work to the
+deployment, environment, status, and secret modules.
+"""
+
 from __future__ import annotations
 
 import time
@@ -28,10 +35,12 @@ app = typer.Typer(name="stelarctl", help="STELAR platform deployment tool")
 
 
 def _load(model_path: Path) -> PlatformModel:
+    """Load and validate a platform model from a CLI path argument."""
     return load_model(str(model_path), PlatformModel)
 
 
 def _clear_screen():
+    """Clear the terminal before rendering the next watch-mode status frame."""
     typer.echo("\033[2J\033[H", nl=False)
 
 
@@ -40,11 +49,14 @@ def _resolve_status_target(
     context_name: str | None,
     namespace: str | None,
 ) -> tuple[str, str]:
+    """Resolve the Kubernetes context and namespace used by status-like commands."""
     if env is not None:
         return resolve_env_target(env)
     if context_name and namespace:
         return context_name, namespace
 
+    # Fall back to kubeconfig only after explicit `--env` and direct
+    # `--context/--namespace` targets have been considered.
     contexts, active = config.list_kube_config_contexts()
     if not active:
         raise typer.BadParameter("No active Kubernetes context found. Provide --env or --context/--namespace.")
@@ -62,6 +74,7 @@ def _resolve_target(
     context_name: str | None,
     namespace: str | None,
 ) -> tuple[str, str]:
+    """Resolve the Kubernetes context and namespace used by teardown."""
     return _resolve_status_target(env, context_name, namespace)
 
 

@@ -1,3 +1,5 @@
+"""Live readiness calculation and formatting for STELAR deployments."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -25,6 +27,8 @@ FAILING_WAITING_REASONS = {
 
 @dataclass(frozen=True)
 class ExpectedResource:
+    """A Kubernetes resource expected for a STELAR tier."""
+
     kind: str
     name: str
     label: str
@@ -32,6 +36,8 @@ class ExpectedResource:
 
 @dataclass(frozen=True)
 class ResourceStatus:
+    """Readiness summary for a long-running component."""
+
     kind: str
     name: str
     label: str
@@ -41,6 +47,8 @@ class ResourceStatus:
 
 @dataclass(frozen=True)
 class JobStatus:
+    """Completion summary for an initialization job."""
+
     name: str
     label: str
     completed: bool
@@ -50,6 +58,8 @@ class JobStatus:
 
 @dataclass(frozen=True)
 class StatusSnapshot:
+    """Point-in-time deployment readiness snapshot."""
+
     context: str
     namespace: str
     tier: str
@@ -95,6 +105,7 @@ FULL_JOBS = [
 
 
 def expected_components_for_model(model: PlatformModel) -> list[ExpectedResource]:
+    """Return long-running components expected for a validated model."""
     components = list(CORE_COMPONENTS)
     if model.tier == "full":
         components.extend(FULL_COMPONENTS)
@@ -104,6 +115,7 @@ def expected_components_for_model(model: PlatformModel) -> list[ExpectedResource
 
 
 def expected_jobs_for_model(model: PlatformModel) -> list[ExpectedResource]:
+    """Return initialization jobs expected for a validated model."""
     jobs = list(CORE_JOBS)
     if model.tier == "full":
         jobs.extend(FULL_JOBS)
@@ -116,6 +128,7 @@ def calculate_progress(
     components_ready: int,
     components_total: int,
 ) -> int:
+    """Combine job and component readiness into a single percentage."""
     jobs_ratio = 1.0 if jobs_total == 0 else jobs_completed / jobs_total
     components_ratio = 1.0 if components_total == 0 else components_ready / components_total
     overall = (jobs_ratio * JOB_WEIGHT) + (components_ratio * COMPONENT_WEIGHT)
@@ -123,6 +136,7 @@ def calculate_progress(
 
 
 def render_bar(percent: int, width: int = 24) -> str:
+    """Render a bounded ASCII progress bar."""
     bounded = max(0, min(100, percent))
     filled = round(width * bounded / 100)
     return "[" + "#" * filled + "-" * (width - filled) + f"] {bounded}%"
@@ -134,6 +148,7 @@ def derive_phase(
     component_statuses: list[ResourceStatus],
     pod_failures: list[str],
 ) -> str:
+    """Convert readiness and failure signals into a user-facing phase."""
     if any(job.failed for job in job_statuses) or pod_failures:
         return "Degraded"
     if percent == 100 and all(component.ready for component in component_statuses):
@@ -144,6 +159,7 @@ def derive_phase(
 
 
 def format_status(snapshot: StatusSnapshot) -> str:
+    """Format a status snapshot for terminal output."""
     lines = [
         f"Context: {snapshot.context}",
         f"Namespace: {snapshot.namespace}",
@@ -164,6 +180,7 @@ def format_status(snapshot: StatusSnapshot) -> str:
 
 
 def collect_status(model: PlatformModel) -> StatusSnapshot:
+    """Collect status for the components expected by the supplied model."""
     from kubernetes import client, config
 
     config.load_kube_config(context=model.k8s_context)
@@ -233,6 +250,7 @@ def collect_status(model: PlatformModel) -> StatusSnapshot:
 
 
 def collect_inferred_status(context_name: str, namespace: str) -> tuple[StatusSnapshot | None, list[str]]:
+    """Infer a live model, then collect status for that inferred model."""
     live = infer_live_deployment(context_name, namespace)
     if not live.active or live.model is None:
         return None, live.warnings
@@ -244,6 +262,7 @@ def _component_status(
     deployments: dict[str, Any],
     statefulsets: dict[str, Any],
 ) -> ResourceStatus:
+    """Dispatch component readiness calculation by Kubernetes resource kind."""
     if resource.kind == "deployment":
         deployment = deployments.get(resource.name)
         if deployment is None:
@@ -257,6 +276,7 @@ def _component_status(
 
 
 def _deployment_status(resource: ExpectedResource, deployment: Any) -> ResourceStatus:
+    """Evaluate whether a Deployment has observed and rolled out its spec."""
     spec = deployment.spec
     status = deployment.status
     replicas = spec.replicas or 0
@@ -288,6 +308,7 @@ def _deployment_status(resource: ExpectedResource, deployment: Any) -> ResourceS
 
 
 def _statefulset_status(resource: ExpectedResource, statefulset: Any) -> ResourceStatus:
+    """Evaluate whether a StatefulSet has observed and rolled out its spec."""
     spec = statefulset.spec
     status = statefulset.status
     replicas = spec.replicas or 0
@@ -318,6 +339,7 @@ def _statefulset_status(resource: ExpectedResource, statefulset: Any) -> Resourc
 
 
 def _job_status(resource: ExpectedResource, jobs: dict[str, Any]) -> JobStatus:
+    """Evaluate completion or failure for an expected Kubernetes Job."""
     job = jobs.get(resource.name)
     if job is None:
         return JobStatus(resource.name, resource.label, False, False, "missing job")
@@ -338,6 +360,7 @@ def _job_status(resource: ExpectedResource, jobs: dict[str, Any]) -> JobStatus:
 
 
 def _job_has_condition(job: Any, kind: str, value: str) -> bool:
+    """Return whether a Kubernetes Job has a condition with a given status."""
     for condition in job.status.conditions or []:
         if condition.type == kind and condition.status == value:
             return True
@@ -345,6 +368,7 @@ def _job_has_condition(job: Any, kind: str, value: str) -> bool:
 
 
 def _pod_failures(pods: list[Any]) -> list[str]:
+    """Return pod waiting reasons that should mark deployment status degraded."""
     failures: list[str] = []
     for pod in pods:
         pod_name = pod.metadata.name

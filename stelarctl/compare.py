@@ -1,3 +1,5 @@
+"""Model comparison helpers used by deployment planning."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -11,6 +13,8 @@ except ImportError:
 
 @dataclass(frozen=True)
 class ComparisonResult:
+    """Flat difference list plus a convenience equality flag."""
+
     differences: list[str]
     equal: bool
 
@@ -22,6 +26,7 @@ def compare_models(
     include_secret_values: bool,
     ignore_fields: set[str] | None = None,
 ) -> ComparisonResult:
+    """Compare two platform models with optional secret-value comparison."""
     left_flat = _flatten(_normalize_model(left, include_secret_values=include_secret_values))
     right_flat = _flatten(_normalize_model(right, include_secret_values=include_secret_values))
 
@@ -39,6 +44,7 @@ def compare_models(
 
 
 def _normalize_model(model: PlatformModel, *, include_secret_values: bool) -> dict[str, Any]:
+    """Normalize a model into comparable data, masking secret values when needed."""
     payload = model.model_dump(exclude_none=True)
     payload.pop("secrets", None)
     normalized_secrets: dict[str, Any] = {}
@@ -52,6 +58,7 @@ def _normalize_model(model: PlatformModel, *, include_secret_values: bool) -> di
 
 
 def _flatten(value: Any, prefix: str = "") -> dict[str, Any]:
+    """Flatten nested dictionaries into dot-separated keys for readable diffs."""
     if isinstance(value, dict):
         flattened: dict[str, Any] = {}
         for key, nested_value in value.items():

@@ -1,3 +1,5 @@
+"""Kubernetes Secret management for model-defined and generated secrets."""
+
 import base64
 import random
 import string
@@ -11,6 +13,7 @@ except ImportError:
 
 
 def _random_string(length: int, chunk_size: int = 8, separator: str = "-") -> str:
+    """Generate a chunked random alphanumeric value for generated secrets."""
     characters = string.ascii_letters + string.digits
     raw = "".join(random.choices(characters, k=length))
     chunks = [raw[i:i + chunk_size] for i in range(0, length, chunk_size)]
@@ -18,6 +21,7 @@ def _random_string(length: int, chunk_size: int = 8, separator: str = "-") -> st
 
 
 def _encode(data: dict) -> dict:
+    """Base64-encode secret data for the Kubernetes API."""
     return {
         k: base64.b64encode(v.encode("utf-8")).decode("utf-8")
         for k, v in data.items()
@@ -25,6 +29,7 @@ def _encode(data: dict) -> dict:
 
 
 def _apply_secret(v1: client.CoreV1Api, name: str, namespace: str, data: dict):
+    """Create or replace an Opaque secret in the target namespace."""
     secret = {
         "apiVersion": "v1",
         "kind": "Secret",
