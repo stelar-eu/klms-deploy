@@ -1,0 +1,8 @@
+kubernetes
+PyYAML
+typer
+jsonnet >= 0.20.0
+pydantic
+
+# Development dependencies
+pytest
