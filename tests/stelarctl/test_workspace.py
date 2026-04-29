@@ -25,7 +25,7 @@ def test_check_path(tmp_path):
     # Create a valid workspace directory
     valid_workspace = tmp_path / "valid_workspace"
     valid_workspace.mkdir()
-    (valid_workspace / "jsonnetfile.yaml").touch()
+    (valid_workspace / "jsonnetfile.json").touch()
 
     # Should not raise an error
     Workspace.check_path(valid_workspace)
@@ -38,7 +38,7 @@ def test_check_path(tmp_path):
     with pytest.raises(ValueError):
         Workspace.check_path(non_dir_path)
 
-    # Test with a directory missing jsonnetfile.yaml
+    # Test with a directory missing jsonnetfile.json
     missing_jsonnetfile = tmp_path / "missing_jsonnetfile"
     missing_jsonnetfile.mkdir()
     with pytest.raises(ValueError):

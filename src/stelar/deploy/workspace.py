@@ -72,8 +72,8 @@ class Workspace:
         """
         if not path.is_dir():
             raise ValueError(f"Workspace path {path} is not a directory")
-        if not (path/"jsonnetfile.yaml").exists():
-            raise ValueError(f"Workspace path {path} does not contain a jsonnetfile.yaml")
+        if not (path/"jsonnetfile.json").exists():
+            raise ValueError(f"Workspace path {path} does not contain jsonnetfile.json")
         
 
     def __init__(self, path: PathSpec | None = None):
