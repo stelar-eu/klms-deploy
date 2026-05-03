@@ -247,3 +247,39 @@ def test_validation_subfeature_group_extra_field():
     with pytest.raises(ValueError):
         FeatureModel.model_validate(model_subfeature_group_extra_field) 
 
+
+def test_feature_path_names(his_model):
+    # Test that the path names of the features in the HIS model are correct
+    assert his_model.root.path_names == ["his"]
+    
+    for sfg in his_model.root.subfeatures:
+        for feature in sfg.members:
+            assert feature.path_names == ["his", feature.name]
+
+def test_feature_fullnames(his_model):
+    # Test that the full names of the features in the HIS model are correct
+    assert his_model.root.fullname == "his"
+    
+    for sfg in his_model.root.subfeatures:
+        for feature in sfg.members:
+            assert feature.fullname == f"his.{feature.name}"
+
+def test_feature_model_features(his_model):
+    # Test that the features property of the feature model returns all features
+    features = his_model.features
+    assert len(features) == 15
+    names = [f.name for f in features]
+    expected_names = [
+        "his", 
+            "supervision", 
+                "flood", "fire", "intrusion", 
+            "control", 
+                "lighting", "temperature", "appliances", 
+            "services", 
+                "video_on_demand", 
+                "internet_access",
+                    "powerline", "wifi", "ADSL"
+        ]
+    for name in expected_names:
+        assert name in names, f"Feature {name} not found in features"
+

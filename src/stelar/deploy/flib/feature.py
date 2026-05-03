@@ -4,7 +4,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Literal, Self
+from typing import Iterator, Literal, Self
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -37,6 +37,29 @@ class Feature(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
+    @property
+    def children(self) -> Iterator[Feature]:
+        """Get the child features of this feature."""
+        for group in self.subfeatures:
+            for subfeature in group.members:
+                yield subfeature
+
+    @property
+    def path_names(self) -> list[str]:
+        """Get the path names from the root to this feature."""
+        path = []
+        cur = self
+        while cur is not None:
+            path.append(cur.name)
+            cur = cur.parent
+        path.reverse()
+        return path
+
+    @property
+    def fullname(self) -> str:
+        """Get the full name of this feature, which is the path names joined by dots."""
+        return ".".join(self.path_names)
+
 class SubfeatureGroup(BaseModel):
     """A subfeature group is a group of features that are sibling-subfeatures of some parent feature,
        with a common relationship.
@@ -61,6 +84,7 @@ class SubfeatureGroup(BaseModel):
     members: list[Feature] = Field(default_factory=list, repr=False)
 
     model_config = ConfigDict(extra="forbid")
+
 
 class FeatureModel(BaseModel):
     """A feature model consists of a feature tree and additional relationships."""
@@ -90,6 +114,18 @@ class FeatureModel(BaseModel):
 
         _rebuild(self.root, None, self)
         return self
+
+    @property
+    def features(self) -> list[Feature]:
+        """Get all features in the feature model."""
+        result = []
+        def _dfs(feature: Feature, result: list[Feature]):
+            result.append(feature)
+            for group in feature.subfeatures:
+                for subfeature in group.members:
+                    _dfs(subfeature, result)
+        _dfs(self.root, result)
+        return result
 
 
 Feature.model_rebuild()
