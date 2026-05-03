@@ -1,3 +1,4 @@
+// Core RBAC constructor for the stelarapi component.
 local rbac = import "../../../util/rbac.libsonnet";
 
 {

@@ -1,3 +1,4 @@
+// Static local model for the ontop component.
 {
   images: {
     ONTOP_IMAGE: 'petroud/stelar-tuc:ontop',

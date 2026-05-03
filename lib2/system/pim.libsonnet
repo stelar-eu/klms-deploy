@@ -1,3 +1,4 @@
+// Shared static model used by deployment-wide lib2 resources.
 {
   namespace: 'stelar-lab',
 

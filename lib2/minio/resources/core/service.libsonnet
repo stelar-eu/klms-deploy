@@ -1,3 +1,4 @@
+// Core Service constructor for the minio component.
 local statefulset = import "statefulset.libsonnet";
 local svcs = import "../../../util/services.libsonnet";
 

@@ -1,3 +1,4 @@
+// Persistent volume helpers shared across stateful lib2 components.
 local k = import "k.libsonnet";
 
 local pvc = k.core.v1.persistentVolumeClaim;

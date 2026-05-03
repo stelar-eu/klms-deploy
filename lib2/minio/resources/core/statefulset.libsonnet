@@ -1,3 +1,4 @@
+// Core StatefulSet constructor for the minio component.
 local k = import "../../../util/k.libsonnet";
 local pim = import "../../pim.libsonnet";
 

@@ -1,3 +1,4 @@
+// Miscellaneous helper functions shared across lib2 Jsonnet code.
 {
   // Shared logic for generating TLS secret names based on subdomain and root
   get_secret_name(subdomain, root):: (

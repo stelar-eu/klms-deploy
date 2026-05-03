@@ -1,3 +1,4 @@
+// Static local model for the minio component.
 {
   images: {
     MINIO_IMAGE: 'quay.io/minio/minio:RELEASE.2025-04-22T22-12-26Z-cpuv1',

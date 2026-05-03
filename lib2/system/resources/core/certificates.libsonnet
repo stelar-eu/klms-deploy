@@ -1,3 +1,4 @@
+// Core certificate constructor for deployment-wide lib2 resources.
 local cert = import "../../../util/certificate.libsonnet";
 local utils = import "../../../util/utils.libsonnet";
 

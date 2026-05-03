@@ -1,3 +1,4 @@
+// Service helper constructors shared across lib2 components.
 /*
     Service configuration and generation
 

@@ -1,3 +1,4 @@
+// Core Deployment constructor for the stelarapi component.
 local podinit = import "../../../util/podinit.libsonnet";
 local images = import "../../../util/imgutil.libsonnet";
 local k = import "../../../util/k.libsonnet";

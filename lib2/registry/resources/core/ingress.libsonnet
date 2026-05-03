@@ -1,3 +1,4 @@
+// Core Ingress constructor for the registry component.
 local stelar_ingress = import "../../../util/stelar_ingress.libsonnet";
 
 {

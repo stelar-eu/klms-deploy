@@ -1,3 +1,4 @@
+// Certificate helper constructors shared across lib2 resources.
 /*
     Code related to cert-manager resources
  */

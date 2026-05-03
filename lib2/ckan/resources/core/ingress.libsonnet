@@ -1,3 +1,4 @@
+// Core Ingress constructor for the ckan component.
 local stelar_ingress = import "../../../util/stelar_ingress.libsonnet";
 
 {

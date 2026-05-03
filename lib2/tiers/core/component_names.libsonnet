@@ -1,3 +1,5 @@
+// Static tier metadata for the core deployment. Each item carries the stable
+// component name plus the entrypoint that will receive that component's PSM.
 [
   {
     name: "system",

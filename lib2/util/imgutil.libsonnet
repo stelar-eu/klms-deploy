@@ -1,3 +1,4 @@
+// Image naming helpers shared across lib2 component PIMs and resources.
 /*
     Code related to image management
  */

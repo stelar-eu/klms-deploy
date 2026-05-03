@@ -1,3 +1,4 @@
+// RBAC helper constructors shared across component and system resources.
 /*
     Utilities to quickly create RBAC objects.
 

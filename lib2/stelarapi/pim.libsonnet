@@ -1,3 +1,4 @@
+// Static local model for the stelarapi component.
 {
   images: {
     API_IMAGE: 'petroud/stelar-api:prod',

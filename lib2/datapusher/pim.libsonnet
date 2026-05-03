@@ -1,3 +1,4 @@
+// Static local model for the datapusher component.
 {
   images: {
     DATAPUSHER_IMAGE: 'ckan/ckan-base-datapusher:0.0.20',

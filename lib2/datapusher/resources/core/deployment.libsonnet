@@ -1,3 +1,4 @@
+// Core Deployment constructor for the datapusher component.
 local k = import "../../../util/k.libsonnet";
 local pim = import "../../pim.libsonnet";
 

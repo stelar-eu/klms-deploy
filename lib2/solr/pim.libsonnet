@@ -1,3 +1,4 @@
+// Static local model for the solr component.
 {
   images: {
     SOLR_IMAGE: 'ckan/ckan-solr:2.10-solr9-spatial',

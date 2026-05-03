@@ -1,3 +1,4 @@
+// Static local model for the registry component.
 {
   images: {
     REGISTRY_IMAGE: 'petroud/stelar-tuc:registry',

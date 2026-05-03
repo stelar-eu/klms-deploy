@@ -1,3 +1,4 @@
+// Standard port constants reused by shared helper code.
 /**
     Ports used by the core component services.
 

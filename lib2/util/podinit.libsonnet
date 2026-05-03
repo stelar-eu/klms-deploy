@@ -1,3 +1,4 @@
+// Init-container helpers shared across component bootstrap and wait jobs.
 /**********************************************888
 
     Utilities for generating initContainers for pods

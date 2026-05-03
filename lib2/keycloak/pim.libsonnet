@@ -1,3 +1,4 @@
+// Static local model for the keycloak component.
 {
   images: {
     KEYCLOAK_IMAGE: 'petroud/stelar-tuc:keycloak',

@@ -1,3 +1,4 @@
+// Shared manifest transform helpers for lib2 composition.
 {
     transform(config, components): [
         component.manifest(config),

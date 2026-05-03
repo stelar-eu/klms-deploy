@@ -1,3 +1,5 @@
+// Static imported entrypoints for the current core tier. This list exists for
+// the direct-entrypoint environment path.
 [
   import "../../system/entrypoint.libsonnet",
   import "../../db/entrypoint.libsonnet",

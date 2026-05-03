@@ -1,3 +1,4 @@
+// Static local model for the db component.
 {
   images: {
     POSTGIS_IMAGE: 'petroud/stelar-tuc:postgres',

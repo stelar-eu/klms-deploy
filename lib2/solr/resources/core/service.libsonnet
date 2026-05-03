@@ -1,3 +1,4 @@
+// Core Service constructor for the solr component.
 local pim = import "../../pim.libsonnet";
 local system_pim = import "../../../system/pim.libsonnet";
 local svcs = import "../../../util/services.libsonnet";

@@ -1,3 +1,4 @@
+// Core init-job constructor for the stelarapi component.
 local k = import "../../../util/k.libsonnet";
 local podinit = import "../../../util/podinit.libsonnet";
 local images = import "../../../util/imgutil.libsonnet";

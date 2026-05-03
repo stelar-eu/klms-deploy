@@ -1,3 +1,4 @@
+// Core Deployment constructor for the ckan component.
 local k = import "../../../util/k.libsonnet";
 local pim = import "../../pim.libsonnet";
 local system_pim = import "../../../system/pim.libsonnet";

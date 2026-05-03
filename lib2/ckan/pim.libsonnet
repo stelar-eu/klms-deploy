@@ -1,3 +1,4 @@
+// Static local model for the ckan component.
 {
   images: {
     CKAN_IMAGE: 'petroud/stelar-tuc:ckan',

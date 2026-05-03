@@ -1,3 +1,4 @@
+// Core init-job constructor for the ontop component.
 local k = import "../../../util/k.libsonnet";
 local pim = import "../../pim.libsonnet";
 local system_pim = import "../../../system/pim.libsonnet";

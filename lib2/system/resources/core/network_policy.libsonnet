@@ -1,3 +1,4 @@
+// Core network-policy constructor for deployment-wide lib2 resources.
 local k = import "../../../util/k.libsonnet";
 local pim = import "../../pim.libsonnet";
 

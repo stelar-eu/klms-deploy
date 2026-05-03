@@ -1,3 +1,4 @@
+// Static local model for the redis component.
 {
   images: {
     REDIS_IMAGE: 'redis:7',

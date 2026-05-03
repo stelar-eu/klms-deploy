@@ -1,3 +1,4 @@
+// Core PersistentVolumeClaim constructor for the db component.
 local pim = import "../../pim.libsonnet";
 local system_pim = import "../../../system/pim.libsonnet";
 local pvol = import "../../../util/pvolumes.libsonnet";

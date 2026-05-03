@@ -1,3 +1,4 @@
+// Ingress helper constructors shared across lib2 components.
 local k = import "k.libsonnet";
 local utils = import "utils.libsonnet";
 
