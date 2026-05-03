@@ -1,11 +1,11 @@
-local solr_pvc = import "resources/core/pvc.libsonnet";
-local solr_statefulset = import "resources/core/statefulset.libsonnet";
-local solr_service = import "resources/core/service.libsonnet";
+local tier_selector = import "../util/tier_selector.libsonnet";
+local core = import "resources/core/tier.libsonnet";
+local full = import "resources/full/tier.libsonnet";
+local tiers = {
+  core: core,
+  full: full,
+};
 
 {
-  manifest(_config): {
-    pvc: solr_pvc.new(),
-    statefulset: solr_statefulset.new(),
-    service: solr_service.new(),
-  },
+  manifest(config): tier_selector.render_selected_tier(config, tiers),
 }

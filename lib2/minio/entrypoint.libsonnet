@@ -1,13 +1,11 @@
-local minio_configmap = import "resources/core/configmap.libsonnet";
-local minio_pvc = import "resources/core/pvc.libsonnet";
-local minio_statefulset = import "resources/core/statefulset.libsonnet";
-local minio_service = import "resources/core/service.libsonnet";
+local tier_selector = import "../util/tier_selector.libsonnet";
+local core = import "resources/core/tier.libsonnet";
+local full = import "resources/full/tier.libsonnet";
+local tiers = {
+  core: core,
+  full: full,
+};
 
 {
-  manifest(config): {
-    configmap: minio_configmap.new(config),
-    pvc: minio_pvc.new(),
-    statefulset: minio_statefulset.new(config),
-    service: minio_service.new(config),
-  },
+  manifest(config): tier_selector.render_selected_tier(config, tiers),
 }

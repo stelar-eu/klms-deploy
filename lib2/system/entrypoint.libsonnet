@@ -1,11 +1,11 @@
-local network_policy = import "resources/core/network_policy.libsonnet";
-local certificates = import "resources/core/certificates.libsonnet";
-local initrbac = import "resources/core/initrbac.libsonnet";
+local tier_selector = import "../util/tier_selector.libsonnet";
+local core = import "resources/core/tier.libsonnet";
+local full = import "resources/full/tier.libsonnet";
+local tiers = {
+  core: core,
+  full: full,
+};
 
 {
-  manifest(config): {
-    networkpolicy: network_policy.new(),
-    certificates: certificates.new(config),
-    initrbac: initrbac.new(),
-  },
+  manifest(config): tier_selector.render_selected_tier(config, tiers),
 }

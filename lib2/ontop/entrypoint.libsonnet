@@ -1,11 +1,11 @@
-local ontop_deployment = import "resources/core/deployment.libsonnet";
-local ontop_service = import "resources/core/service.libsonnet";
-local ontop_initjob = import "resources/core/initjob.libsonnet";
+local tier_selector = import "../util/tier_selector.libsonnet";
+local core = import "resources/core/tier.libsonnet";
+local full = import "resources/full/tier.libsonnet";
+local tiers = {
+  core: core,
+  full: full,
+};
 
 {
-  manifest(config): {
-    deployment: ontop_deployment.new(config),
-    service: ontop_service.new(config),
-    initjob: ontop_initjob.new(config),
-  },
+  manifest(config): tier_selector.render_selected_tier(config, tiers),
 }

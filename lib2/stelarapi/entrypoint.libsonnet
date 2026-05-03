@@ -1,15 +1,11 @@
-local api_configmap = import "resources/core/configmap.libsonnet";
-local api_deployment = import "resources/core/deployment.libsonnet";
-local api_service = import "resources/core/service.libsonnet";
-local api_rbac = import "resources/core/rbac.libsonnet";
-local api_initjob = import "resources/core/initjob.libsonnet";
+local tier_selector = import "../util/tier_selector.libsonnet";
+local core = import "resources/core/tier.libsonnet";
+local full = import "resources/full/tier.libsonnet";
+local tiers = {
+  core: core,
+  full: full,
+};
 
 {
-  manifest(config): {
-    configmap: api_configmap.new(config),
-    deployment: api_deployment.new(config),
-    service: api_service.new(config),
-    rbac: api_rbac.new(),
-    initjob: api_initjob.new(config),
-  },
+  manifest(config): tier_selector.render_selected_tier(config, tiers),
 }

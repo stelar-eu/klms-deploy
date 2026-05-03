@@ -1,9 +1,11 @@
-local redis_deployment = import "resources/core/deployment.libsonnet";
-local redis_service = import "resources/core/service.libsonnet";
+local tier_selector = import "../util/tier_selector.libsonnet";
+local core = import "resources/core/tier.libsonnet";
+local full = import "resources/full/tier.libsonnet";
+local tiers = {
+  core: core,
+  full: full,
+};
 
 {
-  manifest(_config): {
-    deployment: redis_deployment.new(),
-    service: redis_service.new(),
-  },
+  manifest(config): tier_selector.render_selected_tier(config, tiers),
 }
