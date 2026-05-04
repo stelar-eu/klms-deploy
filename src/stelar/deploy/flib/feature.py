@@ -4,17 +4,29 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Iterator, Literal, Self
+from typing import Iterable, Iterator, Literal, Self, Any
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator, JsonValue
 
-AttrValue = str | int | float | bool | None
+
+REGEX_IDENTIFIER = r"^[a-zA-Z_][a-zA-Z0-9_]*$"
+
+
+def _duplicate_names(names: Iterable[str]) -> bool:
+    """Check if the names in the iterable are unique."""
+    seen = set()
+    for name in names:
+        if name in seen:
+            return True
+        seen.add(name)
+    return False
+
 
 class Feature(BaseModel):
     """A feature is a basic building block of a feature model."""
 
     # Names are feature identifiers.
-    name: str
+    name: str = Field(pattern=REGEX_IDENTIFIER)
     
     # tags are used to categorize features. A feature can have multiple tags, and a tag can be associated with multiple features.
     tags: set[str] = Field(default_factory=set, repr=False)
@@ -22,8 +34,10 @@ class Feature(BaseModel):
     # Descriptions provide additional information about a feature.
     description: str = Field(default="", repr=False)
     
-    # Attributes are key-value pairs that provide additional information about a feature.
-    attr: dict[str, AttrValue] = Field(default_factory=dict, repr=False)
+    # Attributes are key-value pairs that provide additional information 
+    # about a feature. In the feature model, attributes are defined 
+    # by a name and a JSON schema.
+    attr: dict[str, JsonValue] = Field(default_factory=dict, repr=False)
 
     # Subfeatures are orgainized in groups.
     subfeatures: list[SubfeatureGroup] = Field(default_factory=list, repr=False)
@@ -36,6 +50,22 @@ class Feature(BaseModel):
     parent: Feature | None = Field(default=None, repr=False, exclude=True)
 
     model_config = ConfigDict(extra="forbid")
+
+    @model_validator(mode="after")
+    def check_subfeature_groups(self) -> Self:
+        """Check if the subfeature groups of this feature are valid."""
+        if _duplicate_names(group.group_name 
+                            for group in self.subfeatures 
+                            if group.group_name is not None):
+            raise ValueError(f"Group names are not unique within the feature {self.name}.")
+        return self
+
+    @model_validator(mode="after")
+    def check_children_names(self) -> Self:
+        """Check if the child feature names are unique within this feature."""
+        if _duplicate_names(child.name for child in self.children):
+            raise ValueError(f"Child feature names are not unique within feature {self.name}.")
+        return self
 
     @property
     def children(self) -> Iterator[Feature]:
@@ -70,8 +100,9 @@ class SubfeatureGroup(BaseModel):
     - alternative: exactly one feature in the group must be selected if the parent feature is selected.
     - or: at least one feature in the group must be selected if the parent feature is
        
-    A subfeature group also posesses a name, used to identify the group, or it may be None.
-    If a name is provided, it must be unique within the parent feature.
+    A subfeature group also posesses a name, used to identify the group, 
+    or it may be None. If a name is provided, it must be unique within 
+    the parent feature.
     """
 
     # the type of relationship
@@ -80,10 +111,57 @@ class SubfeatureGroup(BaseModel):
     # The name of the subfeature group.
     group_name: str | None = Field(default=None)
 
+    # default selection for this subfeature group
+    default: list[str] | None = Field(default=None, repr=False)
+
     # The features that belong to this subfeature group.
     members: list[Feature] = Field(default_factory=list, repr=False)
 
     model_config = ConfigDict(extra="forbid")
+
+    @model_validator(mode="after")
+    def check_membership(self) -> Self:
+        """Check if the members of this subfeature group are valid according to the relationship type."""
+        if self.rel in ["or", "alternative"] and len(self.members) == 0:
+            raise ValueError(f"{self.rel.capitalize()} group must have at least one member.")
+        return self
+
+    @model_validator(mode="after")
+    def check_default_selection(self) -> Self:
+        """Check if the default selection is valid according to the relationship type."""
+        if self.default is None:
+            return self
+        if self.rel == "mandatory":
+            raise ValueError("Default selection is not allowed for mandatory group.")
+        member_names = {feature.name for feature in self.members}
+        for name in self.default:
+            if name not in member_names:
+                raise ValueError(f"Default selection {name} is not a member of the subfeature group.")
+        if self.rel == "alternative" and len(self.default) != 1:
+            raise ValueError("Default selection for alternative group must contain exactly one feature.")
+        if self.rel == "or" and len(self.default) < 1:
+            raise ValueError("Default selection for or group must contain at least one feature.")
+        return self 
+
+    @model_validator(mode="after")
+    def check_group_name(self) -> Self:
+        """Check if the group name is unique within the parent feature."""
+        if self.group_name is None:
+            return self
+        parent = self.members[0].parent if self.members else None
+        if parent is None:
+            return self
+        for group in parent.subfeatures:
+            if group is not self and group.group_name == self.group_name:
+                raise ValueError(f"Group name {self.group_name} is not unique within the parent feature.")
+        return self
+
+    @model_validator(mode="after")
+    def check_member_names(self) -> Self:
+        """Check if the member names are unique within the subfeature group."""
+        if _duplicate_names(feature.name for feature in self.members):
+            raise ValueError(f"Feature names are not unique within the subfeature group.")
+        return self
 
 
 class FeatureModel(BaseModel):

@@ -129,6 +129,7 @@ root:
           - name: lighting
           - name: temperature
         - rel: optional
+          default: []
           members:
           - name: appliances
     - name: services
@@ -139,6 +140,7 @@ root:
         - name: internet_access
           subfeatures:
           - rel: alternative
+            default: [wifi]
             members:
             - name: powerline
             - name: wifi
@@ -283,3 +285,100 @@ def test_feature_model_features(his_model):
     for name in expected_names:
         assert name in names, f"Feature {name} not found in features"
 
+
+def test_feature_model_default_selection_validation():
+    # Test that invalid default selections raise validation errors
+    with pytest.raises(ValueError):
+        FeatureModel.model_validate({
+            "name": "fm",
+            "root": {
+                "name": "root",
+                "subfeatures": [
+                    {
+                        "rel": "alternative",
+                        "default": ["f3"],
+                        "members": [
+                            {"name": "f1"},
+                            {"name": "f2"}
+                        ]
+                    }
+                ]
+            }
+        })
+    with pytest.raises(ValueError):
+        FeatureModel.model_validate({
+            "name": "fm",
+            "root": {
+                "name": "root",
+                "subfeatures": [
+                    {
+                        "rel": "or",
+                        "default": [],
+                        "members": [
+                            {"name": "f1"},
+                            {"name": "f2"}
+                        ]
+                    }
+                ]
+            }
+        })
+
+def test_feature_model_alternative_group_default_validation():
+    # Test that an alternative group with multiple default 
+    # selections raises a validation error
+    with pytest.raises(ValueError):
+        FeatureModel.model_validate({
+            "name": "fm",
+            "root": {
+                "name": "root",
+                "subfeatures": [
+                    {
+                        "rel": "alternative",
+                        "default": ["f1", "f2"],
+                        "members": [
+                            {"name": "f1"},
+                            {"name": "f2"}
+                        ]
+                    } 
+                ]
+            }
+        })
+
+
+def test_feature_model_illegal_feature_name():
+    # Test that illegal feature names raise validation errors
+
+    bad_names = ["1f1", "f-1", 
+                 "f 1", "f.1", "f/1", "f\\1", "f@1", "f#1", 
+                 "f$1", "f%1", "f^1", "f&1", "f*1", "f(1)", "f)1", 
+                 "f+1", "f=1", "f{1}", "f}1", "f[1]", 
+                 "f]1", "f|1", "f<1>", "", " ", "f\n1", "f\t1"]
+    for name in bad_names:
+        with pytest.raises(ValueError):
+            FeatureModel.model_validate({
+                "name": "fm",
+                "root": {
+                    "name": name
+                }
+            })
+
+def test_feature_attribute_validation():
+    # Test that the attr field of a feature is validated correctly
+    f = Feature.model_validate({
+        "name": "f",
+        "attr": {
+            "attr1": {
+                "type": "string",
+                "default": "hello",
+            },
+            "attr2": "number",
+            "attr3": 10
+        }
+    })
+
+    from jsonschema import validate
+    from jsonschema.validators import validator_for
+
+    v = validator_for(f.attr["attr1"])
+    v.check_schema(f.attr["attr1"])
+    
