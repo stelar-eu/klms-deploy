@@ -11,7 +11,7 @@ local components = tier_components.get(active_tier);
   manifests: [
     // Tier membership stays in static Jsonnet; only the selected component PSM
     // and the shared cluster PSM change between environments.
-    component.entrypoint.manifest(component_psms[active_tier][component.name], cluster_psm)
+    component.entrypoint.manifest(component_psms[component.name], cluster_psm)
     for component in components
   ],
 }
