@@ -3,6 +3,7 @@ PyYAML
 typer
 jsonnet >= 0.20.0
 pydantic
+jsonschema
 
 # Development dependencies
 pytest
