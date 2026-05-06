@@ -7,7 +7,15 @@ from pathlib import Path
 import re
 from typing import Iterable, Iterator, Literal, Self, Any
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator, JsonValue
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    model_validator,
+    JsonValue,
+    GetCoreSchemaHandler,
+)
+from pydantic_core import CoreSchema, core_schema
 from jsonschema.validators import Draft202012Validator as JsonSchemaValidator
 
 REGEX_IDENTIFIER = r"^[a-zA-Z_][a-zA-Z0-9_]*$"
@@ -25,7 +33,19 @@ def _duplicate_names(names: Iterable[str]) -> set[str]:
 
 
 class Feature(BaseModel):
-    """A feature is a basic building block of a feature model."""
+    """A feature is a basic building block of a feature model.
+
+    Feature properties:
+    - A feature has a name that must be a valid identifier.
+    - A feature can have multiple tags.
+    - A feature can have a description.
+    - A feature can have attributes. Each attribute is specified by a name (identifier) and a JSON schema.
+    - A feature can have subfeatures. Subfeatures are organized in groups.
+
+    All members of a feature (attributes, subfeature groups, and child features) must have unique names
+    within the feature. Group names must also be unique within the feature if they are not None.
+
+    """
 
     # Names are feature identifiers.
     name: str = Field(pattern=REGEX_IDENTIFIER)
@@ -50,6 +70,10 @@ class Feature(BaseModel):
     # The parent feature of this feature. This is only set after the feature is added
     # to a feature model, and is None for the root feature.
     parent: Feature | None = Field(default=None, repr=False, exclude=True)
+
+    # The group that this feature belongs to. This is only set after the feature is added to a feature model,
+    # and is None for the root feature.
+    group: SubfeatureGroup | None = Field(default=None, repr=False, exclude=True)
 
     model_config = ConfigDict(extra="forbid")
 
@@ -123,6 +147,17 @@ class Feature(BaseModel):
         """Get the full name of this feature, which is the path names joined by dots."""
         return ".".join(self.path_names)
 
+    def members(self) -> dict[str, Feature | SubfeatureGroup]:
+        """Get the members of this feature, which include its child features and subfeature groups."""
+        result = {}
+        for group in self.subfeatures:
+            result[group.identifier] = group
+        for child in self.children:
+            result[child.name] = child
+        for attr_name in self.attributes:
+            result[attr_name] = JsonSchemaValidator(self.attributes[attr_name])
+        return result
+
 
 class SubfeatureGroup(BaseModel):
     """A subfeature group is a group of features that are sibling-subfeatures of some parent feature,
@@ -151,7 +186,34 @@ class SubfeatureGroup(BaseModel):
     # The features that belong to this subfeature group.
     members: list[Feature] = Field(default_factory=list, repr=False)
 
+    # The parent feature. This is only set after the featureis added to a feature model.
+    parent: Feature | None = Field(default=None, repr=False, exclude=True)
+
+    # The index into the subfeatures list
+    @property
+    def index(self) -> int:
+        if self.parent is None:
+            raise RuntimeError(
+                "Subfeature index cannot be determined on incomplete model."
+            )
+        return self.parent.subfeatures.index(self)
+
     model_config = ConfigDict(extra="forbid")
+
+    @property
+    def identifier(self) -> str:
+        """Get the identifier of this subfeature group, which is its name if it has one, or its index otherwise."""
+        if self.group_name is not None:
+            return self.group_name
+        else:
+            return f"[{self.index}]"
+
+    def select(self, name: str) -> Feature | None:
+        """Select a feature from this subfeature group by name."""
+        for member in self.members:
+            if member.name == name:
+                return member
+        return None
 
     @model_validator(mode="after")
     def check_membership(self) -> Self:
@@ -187,17 +249,11 @@ class SubfeatureGroup(BaseModel):
 
     @model_validator(mode="after")
     def check_group_name(self) -> Self:
-        """Check if the group name is unique within the parent feature."""
-        if self.group_name is None:
-            return self
-        parent = self.members[0].parent if self.members else None
-        if parent is None:
-            return self
-        for group in parent.subfeatures:
-            if group is not self and group.group_name == self.group_name:
-                raise ValueError(
-                    f"Group name {self.group_name} is not unique within the parent feature."
-                )
+        """Check if the group name is a valid identifier."""
+        if self.group_name is not None and not re.match(
+            REGEX_IDENTIFIER, self.group_name
+        ):
+            raise ValueError(f"Group name {self.group_name} is not a valid identifier.")
         return self
 
     @model_validator(mode="after")
@@ -234,7 +290,9 @@ class FeatureModel(BaseModel):
             feature.parent = parent
             feature.fmodel = model
             for group in feature.subfeatures:
+                group.parent = feature
                 for subfeature in group.members:
+                    subfeature.group = group
                     _rebuild(subfeature, feature, model)
 
         _rebuild(self.root, None, self)
