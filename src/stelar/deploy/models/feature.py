@@ -16,7 +16,8 @@ from pydantic import (
     GetCoreSchemaHandler,
 )
 from pydantic_core import CoreSchema, core_schema
-from jsonschema.validators import Draft202012Validator as JsonSchemaValidator
+from jsonschema.validators import Draft202012Validator as AttributeValidator
+from referencing.jsonschema import ObjectSchema as AttributeSchema
 
 REGEX_IDENTIFIER = r"^[a-zA-Z_][a-zA-Z0-9_]*$"
 
@@ -59,7 +60,7 @@ class Feature(BaseModel):
     # Attributes are key-value pairs that provide additional information
     # about a feature. In the feature model, attributes are defined
     # by a name and a JSON schema.
-    attributes: dict[str, JsonValue] = Field(default_factory=dict, repr=False)
+    attributes: dict[str, AttributeSchema] = Field(default_factory=dict, repr=False)
 
     # Subfeatures are orgainized in groups.
     subfeatures: list[SubfeatureGroup] = Field(default_factory=list, repr=False)
@@ -111,7 +112,7 @@ class Feature(BaseModel):
 
         for attr_name, attr_spec in self.attributes.items():
             try:
-                JsonSchemaValidator.check_schema(attr_spec)
+                AttributeValidator.check_schema(attr_spec)
             except Exception as e:
                 raise ValueError(
                     f"Attribute {attr_name} in feature {self.name} has an invalid JSON schema: {e}"
@@ -147,16 +148,25 @@ class Feature(BaseModel):
         """Get the full name of this feature, which is the path names joined by dots."""
         return ".".join(self.path_names)
 
-    def members(self) -> dict[str, Feature | SubfeatureGroup]:
+    def attribute_members(self) -> dict[str, AttributeValidator]:
+        """Get the attribute members of this feature."""
+        return {
+            attr_name: AttributeValidator(attr_spec)
+            for attr_name, attr_spec in self.attributes.items()
+        }
+
+    def group_members(self) -> dict[str, SubfeatureGroup]:
+        """Get the group members of this feature."""
+        return {group.identifier: group for group in self.subfeatures}
+
+    def feature_members(self) -> dict[str, Feature]:
         """Get the members of this feature, which include its child features and subfeature groups."""
-        result = {}
-        for group in self.subfeatures:
-            result[group.identifier] = group
-        for child in self.children:
-            result[child.name] = child
-        for attr_name in self.attributes:
-            result[attr_name] = JsonSchemaValidator(self.attributes[attr_name])
-        return result
+        return {feature.name: feature for feature in self.children}
+
+    def members(self) -> dict[str, Feature | SubfeatureGroup | AttributeValidator]:
+        """Get the members of this feature, which include its child features and
+        subfeature groups."""
+        return self.feature_members() | self.group_members() | self.attribute_members()
 
 
 class SubfeatureGroup(BaseModel):

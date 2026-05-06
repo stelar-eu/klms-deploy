@@ -1,5 +1,7 @@
 #
-# Products are tree-like structures that represent the selected and configured features for a deployment. They are generated from the feature model and the selected features, and they are used to generate the deployment configuration.
+# Products are tree-like structures that represent the selected and configured
+# features for a deployment. They are generated from the feature model and the
+# selected features, and they are used to generate the deployment configuration.
 # A product is a member of a product line defined by a feature model.
 #
 
@@ -13,7 +15,7 @@ from .feature import (
     Feature,
     FeatureModel,
     SubfeatureGroup,
-    JsonSchemaValidator,
+    AttributeValidator,
 )
 
 JsonObject = dict[str, Any]
@@ -42,6 +44,26 @@ class Product(BaseModel):
     )
 
 
+class ProductValidationFailure(ValueError):
+    """Raised when product validation fails."""
+
+    def __init__(self, message: str, validation_errors: dict[str, list[str]]):
+        super().__init__(message)
+        self.validation_errors = validation_errors
+
+    def __str__(self):
+        from io import StringIO
+
+        out = StringIO()
+        print(super().__str__(), file=out)
+        print("Validation errors:", file=out)
+        for feature, errors in self.validation_errors.items():
+            print(f"  {feature}:", file=out)
+            for error in errors:
+                print(f"    - {error}", file=out)
+        return out.getvalue()
+
+
 class ProductValidator:
     """A class to validate a product against a feature model."""
 
@@ -50,29 +72,38 @@ class ProductValidator:
         self.enabled_features: set[str] = set()
         self.input_product: Product | None = None
         self.fullspec: JsonObject | None = None
+        self.validation_errors: defaultdict[str, list[str]] = defaultdict(list)
 
-    def validate_structure(self, feature: Feature, tree: JsonValue):
-        """Validate that the tree structure of the product spec is consistent with the feature model,
-        without checking attribute values or group constraints."""
+    def report_error(self, feature: Feature, message: str):
+        """Report a validation error for a feature."""
+        self.validation_errors[feature.fullname].append(message)
+
+    def _validate_structure(self, feature: Feature, tree: JsonObject):
+        """Validate that the tree structure of the product spec is consistent with
+        the feature model, without checking attribute values or group constraints."""
         if not isinstance(tree, dict):
             raise ValueError(
                 f"Expected a dict for feature {feature.name}, got {type(tree)}"
             )
-        feature_members = feature.members()
+        all_members = feature.members()
 
         # check tree names exist in feature
         for key in tree:
-            if key not in feature_members:
-                raise ValueError(
-                    f"Unexpected field {key} in feature {feature.fullname}"
+            if key not in all_members:
+                self.report_error(feature, f"Unexpected field {key}")
+
+        if self.validation_errors:
+            raise ValueError(
+                (
+                    f"Validation errors for feature {feature.fullname}:"
+                    f" {self.validation_errors[feature.fullname]}"
                 )
+            )
+
+        group_members = feature.group_members()
 
         # Compute mentioned groups
-        mentioned_groups = [
-            g
-            for g in tree.keys()
-            if isinstance(feature_members.get(g), SubfeatureGroup)
-        ]
+        mentioned_groups = [g for g in tree.keys() if g in group_members]
 
         # We process each mentioned group.
         # We support two types of syntax for subfeatures.
@@ -88,7 +119,7 @@ class ProductValidator:
         # but we move the subfeature specs to the above level, so that they can be
         # processed.
         for g in mentioned_groups:
-            group = feature_members[g]
+            group: SubfeatureGroup = group_members[g]
             tg = tree[g]
             if isinstance(tg, dict):
                 # Check that all keys are feature names
@@ -96,20 +127,34 @@ class ProductValidator:
             elif isinstance(tg, list):
                 keys = set(tg)
             else:
-                raise ValueError(
-                    f"Expected a dict or list for subfeature group {group.group_name} of feature {feature.fullname}, got {type(tg)}"
+                self.report_error(
+                    feature,
+                    (
+                        f"Expected a dict or list for subfeature group {group.identifier},"
+                        f" got {type(tg)}"
+                    ),
                 )
+                keys = set()
 
             if not (keys <= set(f.name for f in group.members)):
-                raise ValueError(
-                    f"Invalid keys {keys - set(f.name for f in group.members)} in subfeature group {group.group_name} of feature {feature.fullname}"
+                self.report_error(
+                    feature,
+                    (
+                        f"Invalid keys {keys - set(f.name for f in group.members)} "
+                        f"in subfeature group {group.identifier}"
+                    ),
                 )
 
             # check that subfeatures are not configured twice
             if isinstance(tg, dict):
                 if keys.intersection(set(tree.keys())):
-                    raise ValueError(
-                        f"Subfeatures {keys.intersection(set(tree.keys()))} of group {group.group_name} in feature {feature.fullname} are configured both as subfeatures and as direct children."
+                    self.report_error(
+                        feature,
+                        (
+                            f"Subfeatures {keys.intersection(set(tree.keys()))} "
+                            f"of group {group.identifier} are configured both as "
+                            f"subfeatures and as direct children."
+                        ),
                     )
 
                 # Take out and fix the tree
@@ -117,15 +162,13 @@ class ProductValidator:
                 tree[g] = list(keys)
 
         # Finally, we recurse to all feature specs
+        feature_members = feature.feature_members()
         for key, value in tree.items():
-            member = feature_members[key]
-            if isinstance(member, Feature):
-                self.validate_structure(member, value)
+            if key in feature_members:
+                self._validate_structure(feature_members[key], value)
 
-    def select_features(self, feature: Feature, tree: JsonValue):
+    def _select_features(self, feature: Feature, tree: JsonObject):
         """Select features based on the product spec, and mark them as enabled."""
-        feature_members = feature.members()
-
         for group in feature.subfeatures:
             if group.rel == "mandatory":
                 # All members of this group are enabled, regardless of the tree value
@@ -144,22 +187,30 @@ class ProductValidator:
                     # Default selection, add the default members to the tree
                     tree[group.identifier] = group.default
                 else:
-                    # No selection from this group!! an error, unless the group is empty
+                    # No selection for this group!! an error, unless the group is empty
                     if len(group.members) > 0:
-                        raise ValueError(
-                            f"No selection for subfeature group {group.group_name} in feature {feature.fullname}"
+                        self.report_error(
+                            feature,
+                            f"No selection for subfeature group {group.identifier}",
                         )
 
         # Check that every feature in the tree is actually selected in its group
         # This can happen if a group is explicitly selected but some unselected feature
         # is actually mentioned in the tree, which is an error.
+
+        feature_members = feature.members()
+
         for key, value in tree.items():
             member = feature_members[key]
             if isinstance(member, Feature):
                 # Check that this feature is selected in its group
                 if member.name not in tree[member.group.identifier]:
-                    raise ValueError(
-                        f"Feature {member.fullname} is mentioned in the product spec but not selected in its group {group.group_name}."
+                    self.report_error(
+                        feature,
+                        (
+                            f"Feature {member.fullname} is mentioned in the product spec"
+                            f" but not selected in its group {group.identifier}."
+                        ),
                     )
 
         # We should add empty specs for selected features that are not mentioned in the tree
@@ -174,9 +225,9 @@ class ProductValidator:
         for key, value in tree.items():
             member = feature_members[key]
             if isinstance(member, Feature):
-                self.select_features(member, value)
+                self._select_features(member, value)
 
-    def select_required_features(self, feature: Feature, tree: JsonValue):
+    def _select_required_features(self, feature: Feature, tree: JsonValue):
         """Select required features based on the product spec, and mark them as enabled."""
         feature_members = feature.members()
 
@@ -188,9 +239,9 @@ class ProductValidator:
         for key, value in tree.items():
             member = feature_members[key]
             if isinstance(member, Feature):
-                self.select_required_features(member, value)
+                self._select_required_features(member, value)
 
-    def validate_groups(self, feature: Feature, tree: JsonValue):
+    def _validate_groups(self, feature: Feature, tree: JsonObject):
         """Validate that the group constraints are satisfied in the product spec."""
         feature_members = feature.members()
 
@@ -198,13 +249,22 @@ class ProductValidator:
         for group in feature.subfeatures:
             if group.rel == "alternative":
                 if len(tree[group.identifier]) != 1:
-                    raise ValueError(
-                        f"In feature {feature.fullname}, exactly one member of group {group.group_name} must be selected, but got {len(tree[group.identifier])} ({tree[group.identifier]})"
+                    self.report_error(
+                        feature,
+                        (
+                            f"Exactly one member of group {group.identifier} must be"
+                            f" selected, but got {len(tree[group.identifier])}"
+                            f" ({tree[group.identifier]})"
+                        ),
                     )
             elif group.rel == "or":
                 if len(tree[group.identifier]) == 0:
-                    raise ValueError(
-                        f"In feature {feature.fullname}, at least one member of group {group.group_name} must be selected, but got none."
+                    self.report_error(
+                        feature,
+                        (
+                            f"In feature {feature.fullname}, at least one member of group"
+                            f" {group.identifier} must be selected, but got none."
+                        ),
                     )
 
             # We do not need to check mandatory and optional groups,
@@ -214,66 +274,88 @@ class ProductValidator:
         for key, value in tree.items():
             member = feature_members[key]
             if isinstance(member, Feature):
-                self.validate_groups(member, value)
+                self._validate_groups(member, value)
 
-    def validate_attribute(
+    def _validate_attribute(
         self,
         feature: Feature,
-        validator: JsonSchemaValidator,
+        validator: AttributeValidator,
         attr_name: str,
         value: JsonValue,
     ):
         """Validate a tree against a feature attribute."""
         try:
             validator.validate(value)
-            return value
         except Exception as e:
-            raise ValueError(
-                f"Validation error for attribute {attr_name} of feature {feature.fullname}: {e}"
-            ) from e
+            self.report_error(
+                feature,
+                f"Validation error for attribute {attr_name}: {e}",
+            )
+        return value
 
-    def validate_attributes(self, feature: Feature, tree: JsonValue):
+    def _validate_attributes(self, feature: Feature, tree: JsonObject):
         """Validate that the attribute constraints are satisfied in the product spec."""
-        feature_members = feature.members()
 
         # Check attribute constraints
-        for attr_name in feature.attributes:
+        for attr_name, validator in feature.attribute_members().items():
             if attr_name in tree:
-                validator = feature_members[attr_name]
                 value = tree[attr_name]
-                self.validate_attribute(feature, validator, attr_name, value)
+                self._validate_attribute(feature, validator, attr_name, value)
             else:
                 # Check if this attribute is required (i.e., has no default value)
-                if "default" not in validator:
-                    raise ValueError(
-                        f"Missing required attribute '{attr_name}' in feature {feature.fullname}"
+                if "default" not in validator.schema:
+                    self.report_error(
+                        feature, f"Missing required attribute '{attr_name}'"
                     )
                 else:
                     # Add the default value to the tree
-                    tree[attr_name] = validator["default"]
+                    tree[attr_name] = validator.schema["default"]
 
         # Finally, we recurse to all feature specs
+        subfeatures = feature.feature_members()
         for key, value in tree.items():
-            member = feature_members[key]
-            if isinstance(member, Feature):
-                self.validate_attributes(member, value)
+            if key in subfeatures:
+                self._validate_attributes(subfeatures[key], value)
+
+    def _raise_if_errors(self):
+        """Raise a ProductValidationFailure if there are any validation errors."""
+        if self.validation_errors:
+            raise ProductValidationFailure(
+                "Product validation failed", dict(self.validation_errors)
+            )
+
+    def _prepare_validation(self):
+        """Prepare for validation by clearing the enabled features and validation errors."""
+        self.enabled_features.clear()
+        self.validation_errors.clear()
+        self.input_product = None
+        self.fullspec = None
 
     def validate(self, product: Product):
         """Validate a product against a feature model."""
 
+        self._prepare_validation()
         self.enabled_features = set()
         self.input_product = product
         root = self.feature_model.root
         spec = deepcopy(product.spec)
 
-        # First, validate names in the spec
-        self.validate_structure(root, spec)
-        self.select_features(root, spec)
-        self.select_required_features(root, spec)
-        self.validate_groups(root, spec)
-        self.validate_attributes(root, spec)
+        # Perform the validation steps.
+        self._validate_structure(root, spec)
+        self._raise_if_errors()
+
+        self._select_features(root, spec)
+        self._raise_if_errors()
+
+        self._select_required_features(root, spec)
+        self._raise_if_errors()
+
+        self._validate_groups(root, spec)
+        self._raise_if_errors()
+
+        self._validate_attributes(root, spec)
+        self._raise_if_errors()
 
         # Process the root feature, which is always enabled
         self.fullspec = {root.name: spec}
-
         return self.fullspec

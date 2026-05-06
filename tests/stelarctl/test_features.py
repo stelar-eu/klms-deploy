@@ -100,55 +100,6 @@ def test_stelar_yaml():
     check_parent_and_model(feature_model.root, None, feature_model)
 
 
-HIS_model = """
-name: HIS
-root:
-  name: his
-  subfeatures:
-  - rel: mandatory
-    members:
-    - name: supervision
-      subfeatures:
-        - rel: optional
-          members:
-          - name: flood
-        - rel: mandatory
-          members:
-          - name: fire
-          - name: intrusion
-    - name: control
-      subfeatures:
-        - rel: mandatory
-          members:
-          - name: lighting
-          - name: temperature
-        - rel: optional
-          default: []
-          members:
-          - name: appliances
-    - name: services
-      subfeatures:
-      - rel: or
-        members:
-        - name: video_on_demand
-        - name: internet_access
-          subfeatures:
-          - rel: alternative
-            default: [wifi]
-            members:
-            - name: powerline
-            - name: wifi
-            - name: ADSL
-"""
-
-
-@pytest.fixture
-def his_model():
-    import yaml
-
-    return FeatureModel.model_validate(yaml.safe_load(HIS_model))
-
-
 def test_his_model(his_model):
     assert his_model.name == "HIS"
     assert his_model.root.name == "his"
@@ -411,3 +362,59 @@ def test_feature_attribute_bad_schema():
                 },
             }
         )
+
+
+def test_feature_members(his_model):
+    # Test that the members property of a subfeature group returns the correct features
+    fmembers = his_model.root.members()
+
+    expected_names = [
+        "system_name",
+        "manufacturer",
+        "supervision",
+        "control",
+        "services",
+        "[0]",
+        "[1]",
+    ]
+
+    actual_names = fmembers.keys()
+    assert set(actual_names) == set(expected_names)
+
+
+def test_subfeature_group_name_validation():
+    fm_in = {
+        "name": "fm",
+        "root": {
+            "name": "root",
+            "subfeatures": [
+                {
+                    "rel": "mandatory",
+                    "group_name": "group1",
+                    "members": [{"name": "f1"}, {"name": "f2"}],
+                },
+                {
+                    "rel": "optional",
+                    "members": [{"name": "f3"}],
+                },
+            ],
+        },
+    }
+
+    # Test that valid group names are accepted and assigned identifiers
+    fm = FeatureModel.model_validate(fm_in)
+    assert fm.root.subfeatures[0].group_name == "group1"
+    assert fm.root.subfeatures[1].group_name is None
+    assert fm.root.subfeatures[0].identifier == "group1"
+    assert fm.root.subfeatures[1].identifier == "[1]"
+
+    # Test that non-unique group names raise validation errors
+    fm_in["root"]["subfeatures"][1]["group_name"] = "group1"
+    with pytest.raises(ValueError):
+        FeatureModel.model_validate(fm_in)
+
+    # Test that invalid group names raise validation errors
+    for bad_name in ["1group", "group-1", "group 1", "group.1"]:
+        fm_in["root"]["subfeatures"][1]["group_name"] = bad_name
+        with pytest.raises(ValueError):
+            FeatureModel.model_validate(fm_in)
