@@ -2,7 +2,12 @@ from pyexpat import model
 
 import pytest
 
-from stelar.deploy.models.feature import Feature, FeatureModel, SubfeatureGroup
+from stelar.deploy.models.feature import (
+    Feature,
+    FeatureModel,
+    SubfeatureGroup,
+    AttributeValidator,
+)
 
 
 def test_feature_model():
@@ -331,10 +336,8 @@ def test_feature_attribute_validation():
         }
     )
 
-    from jsonschema.validators import validator_for
-
-    v = validator_for(f.attributes["attr1"])
-    v.check_schema(f.attributes["attr1"])
+    for attr_name in ["attr1", "attr2", "attr3"]:
+        AttributeValidator.check_schema(f.attributes[attr_name])
 
 
 def test_feature_attribute_bad_name():

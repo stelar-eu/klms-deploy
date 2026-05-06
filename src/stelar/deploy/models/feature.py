@@ -5,19 +5,17 @@ from __future__ import annotations
 
 from pathlib import Path
 import re
-from typing import Iterable, Iterator, Literal, Self, Any
+from typing import Iterable, Iterator, Literal, Self, Optional
 
 from pydantic import (
     BaseModel,
     ConfigDict,
     Field,
     model_validator,
-    JsonValue,
-    GetCoreSchemaHandler,
 )
-from pydantic_core import CoreSchema, core_schema
+
 from jsonschema.validators import Draft202012Validator as AttributeValidator
-from referencing.jsonschema import ObjectSchema as AttributeSchema
+from referencing.jsonschema import Schema as AttributeSchema
 
 REGEX_IDENTIFIER = r"^[a-zA-Z_][a-zA-Z0-9_]*$"
 
@@ -74,7 +72,7 @@ class Feature(BaseModel):
 
     # The group that this feature belongs to. This is only set after the feature is added to a feature model,
     # and is None for the root feature.
-    group: SubfeatureGroup | None = Field(default=None, repr=False, exclude=True)
+    group: Optional[SubfeatureGroup] = Field(default=None, repr=False, exclude=True)
 
     model_config = ConfigDict(extra="forbid")
 

@@ -204,12 +204,15 @@ class ProductValidator:
             member = feature_members[key]
             if isinstance(member, Feature):
                 # Check that this feature is selected in its group
-                if member.name not in tree[member.group.identifier]:
+                if (
+                    member.group is not None
+                    and member.name not in tree[member.group.identifier]
+                ):
                     self.report_error(
                         feature,
                         (
                             f"Feature {member.fullname} is mentioned in the product spec"
-                            f" but not selected in its group {group.identifier}."
+                            f" but not selected in its group {member.group.identifier}."
                         ),
                     )
 
@@ -227,7 +230,7 @@ class ProductValidator:
             if isinstance(member, Feature):
                 self._select_features(member, value)
 
-    def _select_required_features(self, feature: Feature, tree: JsonValue):
+    def _select_required_features(self, feature: Feature, tree: JsonObject):
         """Select required features based on the product spec, and mark them as enabled."""
         feature_members = feature.members()
 
@@ -303,13 +306,13 @@ class ProductValidator:
                 self._validate_attribute(feature, validator, attr_name, value)
             else:
                 # Check if this attribute is required (i.e., has no default value)
-                if "default" not in validator.schema:
+                if isinstance(validator.schema, dict) and "default" in validator.schema:
+                    # Add the default value to the tree
+                    tree[attr_name] = validator.schema["default"]
+                else:
                     self.report_error(
                         feature, f"Missing required attribute '{attr_name}'"
                     )
-                else:
-                    # Add the default value to the tree
-                    tree[attr_name] = validator.schema["default"]
 
         # Finally, we recurse to all feature specs
         subfeatures = feature.feature_members()
