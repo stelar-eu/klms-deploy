@@ -166,6 +166,21 @@ class Feature(BaseModel):
         subfeature groups."""
         return self.feature_members() | self.group_members() | self.attribute_members()
 
+    def get(self, name: str, default: Feature | None = None) -> Feature | None:
+        """Get a subfeature by name."""
+        for group in self.subfeatures:
+            for subfeature in group.members:
+                if subfeature.name == name:
+                    return subfeature
+        return default
+
+    def subfeature(self, name: str) -> Feature:
+        """Get a subfeature by name."""
+        sf = self.get(name)
+        if sf is None:
+            raise KeyError(f"Subfeature {name} not found in feature {self.name}.")
+        return sf
+
 
 class SubfeatureGroup(BaseModel):
     """A subfeature group is a group of features that are sibling-subfeatures of some parent feature,

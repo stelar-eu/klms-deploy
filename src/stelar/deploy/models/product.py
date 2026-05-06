@@ -92,14 +92,6 @@ class ProductValidator:
             if key not in all_members:
                 self.report_error(feature, f"Unexpected field {key}")
 
-        if self.validation_errors:
-            raise ValueError(
-                (
-                    f"Validation errors for feature {feature.fullname}:"
-                    f" {self.validation_errors[feature.fullname]}"
-                )
-            )
-
         group_members = feature.group_members()
 
         # Compute mentioned groups
@@ -218,8 +210,18 @@ class ProductValidator:
 
         # We should add empty specs for selected features that are not mentioned in the tree
         for group in feature.subfeatures:
-            # Every group is now mentioned in the tree.
-            mentioned_features = tree[group.identifier]
+
+            # Every group is now mentioned in the tree,
+            # unless an error has occurred, in which case we skip
+            # this group.
+            mentioned_features = tree.get(group.identifier)
+            if mentioned_features is None:
+                self.report_error(
+                    feature,
+                    f"Subfeature group {group.identifier} not mentioned in the product spec",
+                )
+                continue
+
             for f in mentioned_features:
                 if f not in tree:
                     tree[f] = {}
