@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from pathlib import Path
 import re
-from typing import Iterable, Iterator, Literal, Self, Optional
+from typing import Iterable, Iterator, Literal, Optional
 
 from pydantic import (
     BaseModel,
@@ -16,6 +16,7 @@ from pydantic import (
 
 from jsonschema.validators import Draft202012Validator as AttributeValidator
 from referencing.jsonschema import Schema as AttributeSchema
+from graphviz import Digraph
 
 REGEX_IDENTIFIER = r"^[a-zA-Z_][a-zA-Z0-9_]*$"
 
@@ -231,6 +232,15 @@ class SubfeatureGroup(BaseModel):
         else:
             return f"[{self.index}]"
 
+    @property
+    def fullname(self) -> str:
+        """Get the full name of this subfeature group, which is the full name of its parent feature plus the group identifier."""
+        if self.parent is None:
+            raise RuntimeError(
+                "Subfeature group fullname cannot be determined on incomplete model."
+            )
+        return f"{self.parent.fullname}.{self.identifier}"
+
     def select(self, name: str) -> Feature | None:
         """Select a feature from this subfeature group by name."""
         for member in self.members:
@@ -334,6 +344,56 @@ class FeatureModel(BaseModel):
 
         _dfs(self.root, result)
         return result
+
+    def to_digraph(self) -> Digraph:
+        """Convert the feature model to a graphviz Digraph."""
+        dot = Digraph(name=self.name)
+
+        edge_arrowhead = {
+            "mandatory": "dot",
+            "optional": "odot",
+            "alternative": "inv",
+            "or": "oinv",
+        }
+
+        feature_attr = {"shape": "box"}
+        group_attr = {"shape": "ellipse", "style": "dashed"}
+
+        def _add_feature(feature: Feature):
+        
+            feature_label = f"""
+            {feature.name}
+            """
+            if feature.tags:
+                feature_label += f"""
+            <BR ALIGN="LEFT"/>
+            {"<BR ALIGN='LEFT'/>".join(feature.tags)}
+            """
+            if feature.attributes:
+                feature_label += f"""
+            <BR ALIGN="LEFT"/>
+            {"<BR ALIGN='LEFT'/>".join(feature.attributes.keys())}
+            """
+
+            feature_label = f"""<{feature_label}>"""
+            
+            dot.node(feature.fullname, label=feature.name, **feature_attr)
+
+            for group in feature.subfeatures:
+                # for each group add the group node
+                dot.node(group.fullname, label=group.identifier, **group_attr)
+                dot.edge(feature.fullname, group.fullname)
+                for subfeature in group.members:
+                    # add an edge from the group to the subfeature
+                    # arrow head is determined by the relationship type
+
+                    dot.edge(group.fullname, subfeature.fullname,
+                        arrowhead=edge_arrowhead[group.rel])
+                    _add_feature(subfeature)
+
+        _add_feature(self.root)
+   
+        return dot
 
 
 Feature.model_rebuild()

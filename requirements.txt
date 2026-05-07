@@ -4,6 +4,7 @@ typer
 jsonnet >= 0.20.0
 pydantic
 jsonschema
+graphviz>= 0.21.0
 
 # Development dependencies
 pytest

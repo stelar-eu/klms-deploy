@@ -19,6 +19,7 @@ dependencies = [
   "jsonnet >= 0.20.0",
   "pydantic",
   "jsonschema",
+  "graphviz">= 0.21.0,
 ]
 
 [project.scripts]
