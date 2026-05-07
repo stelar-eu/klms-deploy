@@ -1,0 +1,46 @@
+name: HIS
+root:
+  name: his
+  attributes:
+    system_name:
+        type: string
+    manufacturer:
+        type: string
+        default: "unknown"
+  subfeatures:
+  - rel: mandatory
+    members:
+    - name: supervision
+      subfeatures:
+        - rel: optional
+          members:
+          - name: flood
+        - rel: mandatory
+          members:
+          - name: fire
+          - name: intrusion
+    - name: control
+      subfeatures:
+        - rel: mandatory
+          members:
+          - name: lighting
+          - name: temperature
+        - rel: optional
+          default: []
+          members:
+          - name: appliances
+  - rel: optional
+    members:
+    - name: services
+      subfeatures:
+      - rel: or
+        members:
+        - name: video_on_demand
+        - name: internet_access
+          subfeatures:
+          - rel: alternative
+            default: [wifi]
+            members:
+            - name: powerline
+            - name: wifi
+            - name: ADSL

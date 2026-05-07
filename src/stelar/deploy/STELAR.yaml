@@ -1,0 +1,78 @@
+# This file is a feature model for the STELAR KLMS product line.
+name: STELAR
+root:
+  name: klms
+  subfeatures:
+
+    # Core component group. These are always included in any configuration of the product line.
+    - group_name: core_components
+      rel: mandatory
+      members:
+        - name: api
+        - name: postgres
+          subfeatures:
+            - group_name: volume
+              rel: alternative
+              members:
+                - name: hostPath
+                - name: pvc
+        - name: redis
+        - name: ckan
+        - name: solr
+          subfeatures:
+            - group_name: volume
+              rel: alternative
+              members:
+                - name: hostPath
+                - name: pvc
+        - name: keycloak
+        - name: minio
+          subfeatures:
+            - group_name: volume
+              rel: alternative
+              members:
+                - name: hostPath
+                - name: pvc
+        - name: ontop
+        - name: quay
+
+    # Optional components may or may not be included, depending 
+    # on the needs of the deployment.
+    - group_name: optional_components
+      rel: optional
+      members:
+        - name: llm_search
+        - name: sde
+        - name: airflow
+        - name: previewer
+        - name: visualizer
+
+    # This group represents mandatory features of the klms, that are 
+    # related to kubernetes 
+    - group_name: support
+      rel: mandatory
+      members:
+        - name: ingress
+          subfeatures:
+            - group_name: ingress_controller
+              rel: alternative
+              members:
+              - name: nginx
+              - name: traefik
+            - group_name: tls
+              rel: alternative
+              members:
+                - name: letsencrypt
+                - name: self_signed
+
+        - name: network_policy
+
+    # This group represents cluster components that we may use,
+    # although they are not strictly speaking mandatory.
+    - group_name: cluster
+      rel: optional
+      members:
+        - name: cert_manager
+        - name: prometheus
+        - name: grafana
+
