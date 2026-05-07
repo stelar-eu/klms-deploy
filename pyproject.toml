@@ -19,7 +19,7 @@ dependencies = [
   "jsonnet >= 0.20.0",
   "pydantic",
   "jsonschema",
-  "graphviz">= 0.21.0,
+  "graphviz >= 0.21.0",
 ]
 
 [project.scripts]
@@ -32,3 +32,7 @@ package-dir = {"" = "src"}
 where = ["src"]
 include = ["stelar*"]
 namespaces = true
+
+[tool.flake8]
+# Check that this is aligned with your other tools like Black
+max-line-length = 100

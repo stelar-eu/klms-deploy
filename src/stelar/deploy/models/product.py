@@ -9,7 +9,7 @@ from copy import deepcopy
 from typing import Any
 from collections import defaultdict
 
-from pydantic import BaseModel, JsonValue, BaseModel, Field, model_validator
+from pydantic import BaseModel, JsonValue, Field
 
 from .feature import (
     Feature,
