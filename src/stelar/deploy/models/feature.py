@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from pathlib import Path
 import re
-from typing import Iterable, Iterator, Literal, Optional, Callable
+from typing import Iterable, Iterator, Literal, Optional, Callable, Self
 
 from pydantic import (
     BaseModel,
@@ -39,18 +39,21 @@ class Feature(BaseModel):
     - A feature has a name that must be a valid identifier.
     - A feature can have multiple tags.
     - A feature can have a description.
-    - A feature can have attributes. Each attribute is specified by a name (identifier) and a JSON schema.
+    - A feature can have attributes. Each attribute is specified by a name (identifier)
+      and a JSON schema.
     - A feature can have subfeatures. Subfeatures are organized in groups.
 
-    All members of a feature (attributes, subfeature groups, and child features) must have unique names
-    within the feature. Group names must also be unique within the feature if they are not None.
+    All members of a feature (attributes, subfeature groups, and child features) must
+    have unique names within the feature. Group names must also be unique within the
+    feature if they are not None.
 
     """
 
     # Names are feature identifiers.
     name: str = Field(pattern=REGEX_IDENTIFIER)
 
-    # tags are used to categorize features. A feature can have multiple tags, and a tag can be associated with multiple features.
+    # tags are used to categorize features. A feature can have multiple tags, and a tag
+    # can be associated with multiple features.
     tags: set[str] = Field(default_factory=set, repr=False)
 
     # Descriptions provide additional information about a feature.
@@ -64,15 +67,16 @@ class Feature(BaseModel):
     # Subfeatures are orgainized in groups.
     subfeatures: list[SubfeatureGroup] = Field(default_factory=list, repr=False)
 
-    # The feature model that this feature belongs to. This is only set after the feature is added to a feature model.
+    # The feature model that this feature belongs to. This is only set after the feature
+    # is added to a feature model.
     fmodel: FeatureModel | None = Field(default=None, repr=False, exclude=True)
 
     # The parent feature of this feature. This is only set after the feature is added
     # to a feature model, and is None for the root feature.
     parent: Feature | None = Field(default=None, repr=False, exclude=True)
 
-    # The group that this feature belongs to. This is only set after the feature is added to a feature model,
-    # and is None for the root feature.
+    # The group that this feature belongs to. This is only set after the feature is
+    # added to a feature model, and is None for the root feature.
     group: Optional[SubfeatureGroup] = Field(default=None, repr=False, exclude=True)
 
     model_config = ConfigDict(extra="forbid")
@@ -159,7 +163,8 @@ class Feature(BaseModel):
         return {group.identifier: group for group in self.subfeatures}
 
     def feature_members(self) -> dict[str, Feature]:
-        """Get the members of this feature, which include its child features and subfeature groups."""
+        """Get the members of this feature, which include its child features
+        and subfeature groups."""
         return {feature.name: feature for feature in self.children}
 
     def members(self) -> dict[str, Feature | SubfeatureGroup | AttributeValidator]:
@@ -184,13 +189,14 @@ class Feature(BaseModel):
 
 
 class SubfeatureGroup(BaseModel):
-    """A subfeature group is a group of features that are sibling-subfeatures of some parent feature,
-       with a common relationship.
+    """A subfeature group is a group of features that are sibling-subfeatures of some
+      parent feature, with a common relationship.
 
     There are four types of relationships:
     - mandatory: all features in the group must be selected if the parent feature is selected.
     - optional: any feature in the group can be selected if the parent feature is selected.
-    - alternative: exactly one feature in the group must be selected if the parent feature is selected.
+    - alternative: exactly one feature in the group must be selected if the parent feature
+    is selected.
     - or: at least one feature in the group must be selected if the parent feature is
 
     A subfeature group also posesses a name, used to identify the group,
@@ -226,7 +232,8 @@ class SubfeatureGroup(BaseModel):
 
     @property
     def identifier(self) -> str:
-        """Get the identifier of this subfeature group, which is its name if it has one, or its index otherwise."""
+        """Get the identifier of this subfeature group, which is its name if it has one,
+        or its index otherwise."""
         if self.group_name is not None:
             return self.group_name
         else:
@@ -234,7 +241,8 @@ class SubfeatureGroup(BaseModel):
 
     @property
     def fullname(self) -> str:
-        """Get the full name of this subfeature group, which is the full name of its parent feature plus the group identifier."""
+        """Get the full name of this subfeature group, which is the full name of
+        its parent feature plus the group identifier."""
         if self.parent is None:
             raise RuntimeError(
                 "Subfeature group fullname cannot be determined on incomplete model."
@@ -250,7 +258,8 @@ class SubfeatureGroup(BaseModel):
 
     @model_validator(mode="after")
     def check_membership(self) -> Self:
-        """Check if the members of this subfeature group are valid according to the relationship type."""
+        """Check if the members of this subfeature group are valid according
+        to the relationship type."""
         if self.rel in ["or", "alternative"] and len(self.members) == 0:
             raise ValueError(
                 f"{self.rel.capitalize()} group must have at least one member."
@@ -294,7 +303,7 @@ class SubfeatureGroup(BaseModel):
         """Check if the member names are unique within the subfeature group."""
         if _duplicate_names(feature.name for feature in self.members):
             raise ValueError(
-                f"Feature names are not unique within the subfeature group."
+                f"Feature names are not unique within group {self.identifier}."
             )
         return self
 

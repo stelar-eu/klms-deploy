@@ -12,6 +12,7 @@ CLI runner.
 
 from __future__ import annotations
 
+from typing import Annotated
 import time
 from pathlib import Path
 
@@ -26,6 +27,15 @@ def status_command():
     typer.echo("Hello cruel world")
 
 
-if __name__=='__main__':
-    app()
+@app.command("model")
+def model_command(
+    name: Annotated[str, typer.Argument(help="The name of the model to process")],
+    address: Annotated[
+        str, typer.Option("--address", "-a", help="The address of the model to process")
+    ],
+):
+    typer.echo(f"Model {name} processed at {address}")
 
+
+if __name__ == "__main__":
+    app()
