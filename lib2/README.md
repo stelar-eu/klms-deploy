@@ -8,8 +8,9 @@ The current shape is:
 - one stable `entrypoint.libsonnet` per component
 - one local `pim.libsonnet` per component
 - one flat `resources/` directory per component
-- one shared entrypoint lookup under `lib2/util/`
+- one shared component registry under `lib2/util/`
 - a static environment template under `lib2/environment/`
+- one archive area for legacy files under `lib2/unused/`
 
 ## Component structure
 
@@ -102,8 +103,24 @@ environment-specific PSM JSON files. In that model:
 
 - the Jsonnet file is static
 - only the JSON data changes per environment
-- the component names stay in the template
-- entrypoint files are resolved through `lib2/util/component_entrypoints.libsonnet`
+- the component names come from `lib2/util/components.libsonnet`
+- entrypoint files are resolved through `lib2/util/components.libsonnet`
+
+## Shared utilities
+
+`lib2/util/` holds shared helpers used by the component entrypoints and the
+environment template.
+
+Current shared files include:
+
+- `components.libsonnet`
+  Static component registry. It exposes:
+  - `get(component_name)` to fetch a component entrypoint
+  - `get_names()` to fetch the ordered component list
+
+- `transform.libsonnet`
+  Legacy composition helper for callers that still want to render from a
+  `cluster_psm`, a component-PSM map, and a component registry.
 
 ## System component
 
@@ -125,6 +142,13 @@ lib2/system/
     initrbac.libsonnet
     network_policy.libsonnet
 ```
+
+## Unused archive
+
+`lib2/unused/` contains legacy Jsonnet files that were moved out of the active
+`lib/` tree because they do not currently have a direct `lib2` counterpart.
+
+This directory is not part of the active `lib2` rendering path.
 
 ## Notes
 
