@@ -2,32 +2,16 @@
 
 `lib2` is the refactor workspace for the deployment model and Jsonnet layout.
 
-The goal is to move away from one broad shared `pim`/`configuration` object and
-toward:
+The current shape is:
 
-- local component PIMs
-- per-environment PSM JSON data
-- tier-based composition
-- a static environment `main.jsonnet`
+- one component directory per deployable unit
+- one stable `entrypoint.libsonnet` per component
+- one local `pim.libsonnet` per component
+- one flat `resources/` directory per component
+- one shared entrypoint lookup under `lib2/util/`
+- a static environment template under `lib2/environment/`
 
-## Current structure
-
-Each component lives under its own top-level directory:
-
-```text
-lib2/
-  ckan/
-  datapusher/
-  db/
-  keycloak/
-  minio/
-  ontop/
-  redis/
-  registry/
-  solr/
-  stelarapi/
-  system/
-```
+## Component structure
 
 Each component follows this pattern:
 
@@ -36,26 +20,20 @@ Each component follows this pattern:
   entrypoint.libsonnet
   pim.libsonnet
   resources/
-    core/
-      tier.libsonnet
-      ...
-    full/
-      tier.libsonnet
+    ...
 ```
 
 ### Files
 
 - `entrypoint.libsonnet`
-  Stable component entry interface.
+  Stable component entry interface. It imports the component resources and
+  mounts them directly from `manifest(config)`.
 
 - `pim.libsonnet`
   Static component-owned model data.
 
-- `resources/<tier>/tier.libsonnet`
-  Tier-specific composition for that component.
-
-- `resources/<tier>/*.libsonnet`
-  Individual Kubernetes resource constructors.
+- `resources/*.libsonnet`
+  Individual Kubernetes resource constructors used by the entrypoint.
 
 ## PIM vs PSM
 
@@ -76,7 +54,6 @@ component, for example:
 Cluster PSM is environment data, not code. It should contain deployment-wide
 dynamic values such as:
 
-- `tier`
 - `namespace`
 - `dynamic_volume_storage_class`
 - ingress/domain information
@@ -91,57 +68,24 @@ Component PSM is environment data for one component, for example:
 - MinIO external URLs
 - feature flags
 
-## Tier selection inside components
+## Component entrypoints
 
-Each root component entrypoint imports its available tier implementations and
-delegates tier selection to `lib2/util/tier_selector.libsonnet`.
+Each root component entrypoint imports its resource files directly and mounts
+them inside `manifest(config)`.
 
-Current pattern:
+Example pattern:
 
 ```jsonnet
-local tier_selector = import "../util/tier_selector.libsonnet";
-local core = import "resources/core/tier.libsonnet";
-local full = import "resources/full/tier.libsonnet";
-
-local tiers = {
-  core: core,
-  full: full,
-};
+local deployment = import "resources/deployment.libsonnet";
+local service = import "resources/service.libsonnet";
 
 {
-  manifest(config): tier_selector.render_selected_tier(config, tiers),
+  manifest(config): {
+    deployment: deployment.new(config),
+    service: service.new(config),
+  },
 }
 ```
-
-This keeps:
-
-- one stable entrypoint per component
-- one tier registry per component
-- one shared tier-selection helper
-
-## Tier metadata for environments
-
-Static tier membership lives under:
-
-```text
-lib2/tiers/
-  core/
-    component_names.libsonnet
-    entrypoints.libsonnet
-  full/
-    component_names.libsonnet
-    entrypoints.libsonnet
-```
-
-Current use:
-
-- `component_names.libsonnet`
-  Review/template path for driving a loop from component metadata.
-
-- `entrypoints.libsonnet`
-  Static imported entrypoint list for the current environment path.
-
-`lib2/util/tier_components.libsonnet` selects the tier list to use.
 
 ## Environment template
 
@@ -152,15 +96,8 @@ environment-specific PSM JSON files. In that model:
 
 - the Jsonnet file is static
 - only the JSON data changes per environment
-
-The current review template assumes:
-
-```text
-psm/cluster.json
-psm/components/index.json
-```
-
-relative to the copied environment file.
+- the component names stay in the template
+- entrypoint files are resolved through `lib2/util/component_entrypoints.libsonnet`
 
 ## System component
 
@@ -171,11 +108,16 @@ component. Examples:
 - RBAC for init jobs
 - network policy
 
-These are still tiered through:
+These use the same flat pattern as the product components:
 
 ```text
-lib2/system/resources/core/tier.libsonnet
-lib2/system/resources/full/tier.libsonnet
+lib2/system/
+  entrypoint.libsonnet
+  pim.libsonnet
+  resources/
+    certificates.libsonnet
+    initrbac.libsonnet
+    network_policy.libsonnet
 ```
 
 ## Notes

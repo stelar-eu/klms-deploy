@@ -1,14 +1,13 @@
 // Stable root entrypoint for the solr component.
-local tier_selector = import "../util/tier_selector.libsonnet";
-local core = import "resources/core/tier.libsonnet";
-local full = import "resources/full/tier.libsonnet";
-local tiers = {
-  core: core,
-  full: full,
-};
+local solr_pvc = import "resources/pvc.libsonnet";
+local solr_statefulset = import "resources/statefulset.libsonnet";
+local solr_service = import "resources/service.libsonnet";
 
 {
-  // Root component entrypoint: select the tier implementation, then let that
-  // tier compose the concrete Kubernetes resources for this component.
-  manifest(config): tier_selector.render_selected_tier(config, tiers),
+  // Root component entrypoint: directly mount all Solr-owned resources.
+  manifest(config, _cluster_psm=null): {
+    pvc: solr_pvc.new(config),
+    statefulset: solr_statefulset.new(config),
+    service: solr_service.new(config),
+  },
 }

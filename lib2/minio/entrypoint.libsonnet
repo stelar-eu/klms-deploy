@@ -1,14 +1,15 @@
 // Stable root entrypoint for the minio component.
-local tier_selector = import "../util/tier_selector.libsonnet";
-local core = import "resources/core/tier.libsonnet";
-local full = import "resources/full/tier.libsonnet";
-local tiers = {
-  core: core,
-  full: full,
-};
+local minio_configmap = import "resources/configmap.libsonnet";
+local minio_pvc = import "resources/pvc.libsonnet";
+local minio_statefulset = import "resources/statefulset.libsonnet";
+local minio_service = import "resources/service.libsonnet";
 
 {
-  // Root component entrypoint: select the tier implementation, then let that
-  // tier compose the concrete Kubernetes resources for this component.
-  manifest(config): tier_selector.render_selected_tier(config, tiers),
+  // Root component entrypoint: directly mount all MinIO-owned resources.
+  manifest(config, _cluster_psm=null): {
+    configmap: minio_configmap.new(config),
+    pvc: minio_pvc.new(config),
+    statefulset: minio_statefulset.new(config),
+    service: minio_service.new(config),
+  },
 }

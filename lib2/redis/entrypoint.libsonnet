@@ -1,14 +1,11 @@
 // Stable root entrypoint for the redis component.
-local tier_selector = import "../util/tier_selector.libsonnet";
-local core = import "resources/core/tier.libsonnet";
-local full = import "resources/full/tier.libsonnet";
-local tiers = {
-  core: core,
-  full: full,
-};
+local redis_deployment = import "resources/deployment.libsonnet";
+local redis_service = import "resources/service.libsonnet";
 
 {
-  // Root component entrypoint: select the tier implementation, then let that
-  // tier compose the concrete Kubernetes resources for this component.
-  manifest(config): tier_selector.render_selected_tier(config, tiers),
+  // Root component entrypoint: directly mount all Redis-owned resources.
+  manifest(config, _cluster_psm=null): {
+    deployment: redis_deployment.new(config),
+    service: redis_service.new(config),
+  },
 }

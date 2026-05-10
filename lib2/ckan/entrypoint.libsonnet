@@ -1,14 +1,15 @@
 // Stable root entrypoint for the ckan component.
-local tier_selector = import "../util/tier_selector.libsonnet";
-local core = import "resources/core/tier.libsonnet";
-local full = import "resources/full/tier.libsonnet";
-local tiers = {
-  core: core,
-  full: full,
-};
+local ckan_deployment = import "resources/deployment.libsonnet";
+local ckan_service = import "resources/service.libsonnet";
+local ckan_ingress = import "resources/ingress.libsonnet";
+local ckan_initjob = import "resources/initjob.libsonnet";
 
 {
-  // Root component entrypoint: select the tier implementation, then let that
-  // tier compose the concrete Kubernetes resources for this component.
-  manifest(config): tier_selector.render_selected_tier(config, tiers),
+  // Root component entrypoint: directly mount all CKAN-owned resources.
+  manifest(config, _cluster_psm=null): {
+    deployment: ckan_deployment.new(config),
+    service: ckan_service.new(config),
+    ingress: ckan_ingress.new(config),
+    initjob: ckan_initjob.new(config),
+  },
 }

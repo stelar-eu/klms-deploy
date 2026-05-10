@@ -1,14 +1,17 @@
 // Stable root entrypoint for the stelarapi component.
-local tier_selector = import "../util/tier_selector.libsonnet";
-local core = import "resources/core/tier.libsonnet";
-local full = import "resources/full/tier.libsonnet";
-local tiers = {
-  core: core,
-  full: full,
-};
+local api_configmap = import "resources/configmap.libsonnet";
+local api_deployment = import "resources/deployment.libsonnet";
+local api_service = import "resources/service.libsonnet";
+local api_rbac = import "resources/rbac.libsonnet";
+local api_initjob = import "resources/initjob.libsonnet";
 
 {
-  // Root component entrypoint: select the tier implementation, then let that
-  // tier compose the concrete Kubernetes resources for this component.
-  manifest(config): tier_selector.render_selected_tier(config, tiers),
+  // Root component entrypoint: directly mount all STELAR API resources.
+  manifest(config, _cluster_psm=null): {
+    configmap: api_configmap.new(config),
+    deployment: api_deployment.new(config),
+    service: api_service.new(config),
+    rbac: api_rbac.new(config),
+    initjob: api_initjob.new(config),
+  },
 }
