@@ -2,6 +2,17 @@
 name: STELAR
 root:
   name: klms
+  attributes:
+    platform:
+      type: string
+      enum: [minikube, okeanos]
+      description: Target platform for the deployment.
+    k8s_context:
+      type: string
+      description: kubectl context used to target the cluster.
+    namespace:
+      type: string
+      description: Kubernetes namespace where STELAR is deployed.
   subfeatures:
 
     # Core component group. These are always included in any configuration of the product line.
@@ -9,7 +20,36 @@ root:
       rel: mandatory
       members:
         - name: api
+          attributes:
+            primary_subdomain:
+              type: string
+              description: Primary public subdomain used by the main STELAR application endpoint.
+            smtp_server:
+              type: string
+              description: SMTP server hostname consumed by the STELAR API.
+            smtp_port:
+              type: string
+              description: SMTP server port consumed by the STELAR API.
+            smtp_username:
+              type: string
+              description: SMTP username consumed by the STELAR API.
+            s3_console_url:
+              type: string
+              description: Public MinIO console URL exposed through the STELAR API.
+            smtp_password_secret_name:
+              type: string
+              default: smtpapi-secret
+              description: Secret containing the SMTP password consumed by the STELAR API.
+            session_secret_key_secret_name:
+              type: string
+              default: session-secret-key
+              description: Secret containing the session key consumed by the STELAR API.
         - name: postgres
+          attributes:
+            postgres_db_password_secret_name:
+              type: string
+              default: postgresdb-secret
+              description: Secret containing the postgres database password.
           subfeatures:
             - group_name: volume
               rel: alternative
@@ -18,6 +58,23 @@ root:
                 - name: pvc
         - name: redis
         - name: ckan
+          attributes:
+            ckan_db_password_secret_name:
+              type: string
+              default: ckandb-secret
+              description: Secret containing the CKAN database password.
+            datastore_db_password_secret_name:
+              type: string
+              default: datastoredb-secret
+              description: Secret containing the datastore database password used by CKAN.
+            ckan_admin_password_secret_name:
+              type: string
+              default: ckanadmin-secret
+              description: Secret containing the CKAN sysadmin password.
+            ckan_auth_secret_name:
+              type: string
+              default: ckan-auth-secret
+              description: Secret containing the CKAN session and JWT signing keys.
         - name: solr
           subfeatures:
             - group_name: volume
@@ -26,7 +83,27 @@ root:
                 - name: hostPath
                 - name: pvc
         - name: keycloak
+          attributes:
+            keycloak_subdomain:
+              type: string
+              description: Subdomain assigned to the Keycloak public endpoint.
+            keycloak_db_password_secret_name:
+              type: string
+              default: keycloakdb-secret
+              description: Secret containing the Keycloak database password.
+            keycloak_root_password_secret_name:
+              type: string
+              default: keycloakroot-secret
+              description: Secret containing the Keycloak admin password.
         - name: minio
+          attributes:
+            minio_subdomain:
+              type: string
+              description: Subdomain assigned to the MinIO API public endpoint.
+            minio_root_password_secret_name:
+              type: string
+              default: minioroot-secret
+              description: Secret containing the MinIO root password.
           subfeatures:
             - group_name: volume
               rel: alternative
@@ -35,6 +112,14 @@ root:
                 - name: pvc
         - name: ontop
         - name: quay
+          attributes:
+            registry_subdomain:
+              type: string
+              description: Subdomain assigned to the Quay registry public endpoint.
+            quay_db_password_secret_name:
+              type: string
+              default: quaydb-secret
+              description: Secret containing the Quay database password.
 
     # Optional components may or may not be included, depending 
     # on the needs of the deployment.
@@ -42,6 +127,18 @@ root:
       rel: optional
       members:
         - name: llm_search
+          attributes:
+            groq_api_url:
+              type: string
+              default: https://api.groq.com/
+              description: Groq API base URL used by the optional LLM search integration.
+            groq_api_model:
+              type: string
+              default: meta-llama/llama-4-scout-17b-16e-instruct
+              description: Groq model identifier used by the optional LLM search integration.
+            groq_api_key_secret_name:
+              type: string
+              description: Secret containing the Groq API key consumed when LLM search is enabled.
         - name: sde
         - name: airflow
         - name: previewer
@@ -53,6 +150,20 @@ root:
       rel: mandatory
       members:
         - name: ingress
+          attributes:
+            root_domain:
+              type: string
+              description: Root DNS domain shared by public STELAR endpoints.
+            scheme:
+              type: string
+              enum: [http, https]
+              description: Public URL scheme used for externally exposed STELAR services.
+            cluster_issuer:
+              type:
+                - string
+                - "null"
+              default: null
+              description: cert-manager ClusterIssuer used when TLS certificates are provisioned.
           subfeatures:
             - group_name: ingress_controller
               rel: alternative
@@ -75,4 +186,3 @@ root:
         - name: cert_manager
         - name: prometheus
         - name: grafana
-
