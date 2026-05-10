@@ -1,8 +1,8 @@
 
 local tk_env = import 'spec.json';
-local urllib = import "urllib.libsonnet";
-local t = import 'transform.libsonnet';
-local defaults = import 'pim.libsonnet';
+local urllib = import "unused/urllib.libsonnet";
+local t = import 'util/transform.libsonnet';
+local defaults = import 'util/pim.libsonnet';
 local secrets = import 'secrets.libsonnet';
 
 {
@@ -137,22 +137,22 @@ local secrets = import 'secrets.libsonnet';
   cluster.
   */
   components:: [
-    import 'db.libsonnet',
-    import 'redis.libsonnet',
-    import 'ontop.libsonnet',
-    import 'minio.libsonnet',
-    import 'keycloak.libsonnet',
-    import 'stelarapi.libsonnet',
-    import 'stelar_ingress.libsonnet',
-    import 'ckan.libsonnet',
-    import 'registry.libsonnet',
-    import 'visualizer.libsonnet',
-    import 'sdemanager.libsonnet',
-    import 'previewer.libsonnet',
-    import 'network.libsonnet',
-    import "llmsearch.libsonnet",
-    import "sdemanager.libsonnet",
-    import 'airflow.libsonnet',
+    import 'deployment/db.libsonnet',
+    import 'deployment/redis.libsonnet',
+    import 'deployment/ontop.libsonnet',
+    import 'deployment/minio.libsonnet',
+    import 'deployment/keycloak.libsonnet',
+    import 'deployment/stelarapi.libsonnet',
+    import 'deployment/stelar_ingress.libsonnet',
+    import 'deployment/ckan.libsonnet',
+    import 'deployment/registry.libsonnet',
+    import 'deployment/visualizer.libsonnet',
+    import 'unused/sdemanager.libsonnet',
+    import 'deployment/previewer.libsonnet',
+    import 'deployment/network.libsonnet',
+    import "deployment/llmsearch.libsonnet",
+    import "unused/sdemanager.libsonnet",
+    import 'unused/airflow.libsonnet',
   ],
   /*
   Translate to manifests. This will call the

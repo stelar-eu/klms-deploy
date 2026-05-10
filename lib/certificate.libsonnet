@@ -178,7 +178,7 @@ local dns_certificate(name, issuerRef, dnsName) = cm.Certificate {
         duration: '2160h',      // 90d
         renewBefore: '360h',    // 15d
         issuerRef: issuerRef,
-        dnsNames: if std.isArray(dnsName) then dnsName else [dnsName],
+        dnsNames: [dnsName],
         privateKey: certificate_privateKey('RSA', 2048),
         secretName: name,
         usages: [

@@ -1,4 +1,4 @@
-local cert = (import "certificate.libsonnet");
+local cert = (import "util/certificate.libsonnet");
 
 
 
