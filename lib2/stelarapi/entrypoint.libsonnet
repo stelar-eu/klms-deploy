@@ -7,11 +7,11 @@ local api_initjob = import "resources/initjob.libsonnet";
 
 {
   // Root component entrypoint: directly mount all STELAR API resources.
-  manifest(config, _cluster_psm=null): {
-    configmap: api_configmap.new(config),
-    deployment: api_deployment.new(config),
-    service: api_service.new(config),
-    rbac: api_rbac.new(config),
-    initjob: api_initjob.new(config),
+  manifest(psm): {
+    configmap: api_configmap.new(psm),
+    deployment: api_deployment.new(psm),
+    service: api_service.new(psm),
+    rbac: api_rbac.new(psm),
+    initjob: api_initjob.new(psm),
   },
 }

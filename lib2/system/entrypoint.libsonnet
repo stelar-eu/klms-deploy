@@ -6,9 +6,9 @@ local initrbac = import "resources/initrbac.libsonnet";
 {
   // System composes deployment-wide resources instead of an application
   // workload, but follows the same flat resource pattern as other components.
-  manifest(config, _cluster_psm=null): {
-    networkpolicy: network_policy.new.new(config),
-    certificates: certificates.new.new(config),
-    initrbac: initrbac.new.new(config),
+  manifest(psm): {
+    networkpolicy: network_policy.new.new(psm),
+    certificates: certificates.new.new(psm),
+    initrbac: initrbac.new.new(psm),
   },
 }

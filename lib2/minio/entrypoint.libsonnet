@@ -6,10 +6,10 @@ local minio_service = import "resources/service.libsonnet";
 
 {
   // Root component entrypoint: directly mount all MinIO-owned resources.
-  manifest(config, _cluster_psm=null): {
-    configmap: minio_configmap.new(config),
-    pvc: minio_pvc.new(config),
-    statefulset: minio_statefulset.new(config),
-    service: minio_service.new(config),
+  manifest(psm): {
+    configmap: minio_configmap.new(psm),
+    pvc: minio_pvc.new(psm),
+    statefulset: minio_statefulset.new(psm),
+    service: minio_service.new(psm),
   },
 }

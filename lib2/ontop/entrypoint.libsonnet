@@ -5,9 +5,9 @@ local ontop_initjob = import "resources/initjob.libsonnet";
 
 {
   // Root component entrypoint: directly mount all Ontop-owned resources.
-  manifest(config, _cluster_psm=null): {
-    deployment: ontop_deployment.new(config),
-    service: ontop_service.new(config),
-    initjob: ontop_initjob.new(config),
+  manifest(psm): {
+    deployment: ontop_deployment.new(psm),
+    service: ontop_service.new(psm),
+    initjob: ontop_initjob.new(psm),
   },
 }

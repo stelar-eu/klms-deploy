@@ -27,7 +27,7 @@ Each component follows this pattern:
 
 - `entrypoint.libsonnet`
   Stable component entry interface. It imports the component resources and
-  mounts them directly from `manifest(config)`.
+  mounts them directly from `manifest(psm)`.
 
 - `pim.libsonnet`
   Static component-owned model data.
@@ -59,6 +59,9 @@ dynamic values such as:
 - ingress/domain information
 - issuer information
 
+At render time it is merged with the component PSM before calling the
+component entrypoint.
+
 ### Component PSM
 
 Component PSM is environment data for one component, for example:
@@ -68,10 +71,13 @@ Component PSM is environment data for one component, for example:
 - MinIO external URLs
 - feature flags
 
+At render time it is merged with the cluster PSM and passed as the single
+`psm` argument to `manifest(psm)`.
+
 ## Component entrypoints
 
 Each root component entrypoint imports its resource files directly and mounts
-them inside `manifest(config)`.
+them inside `manifest(psm)`.
 
 Example pattern:
 
@@ -80,9 +86,9 @@ local deployment = import "resources/deployment.libsonnet";
 local service = import "resources/service.libsonnet";
 
 {
-  manifest(config): {
-    deployment: deployment.new(config),
-    service: service.new(config),
+  manifest(psm): {
+    deployment: deployment.new(psm),
+    service: service.new(psm),
   },
 }
 ```

@@ -1,7 +1,7 @@
 // Static environment template. The copied environment file is expected to
 // provide one cluster PSM plus per-component PSM data under psm/.
 local component_entrypoints = import "../util/component_entrypoints.libsonnet";
-local component_names = [
+local components = [
   "system",
   "db",
   "redis",
@@ -14,7 +14,6 @@ local component_names = [
   "ckan",
   "registry",
 ];
-local components = component_entrypoints.get_many(component_names);
 
 local cluster_psm = import "psm/cluster.json";
 local component_psms = import "psm/components/index.json";
@@ -22,8 +21,9 @@ local component_psms = import "psm/components/index.json";
 {
   manifests: [
     // Component membership is static in this template; only the selected PSM
-    // data changes between environments.
-    component.entrypoint.manifest(component_psms[component.name], cluster_psm)
+    // data changes between environments. Shared cluster data is merged into
+    // the component PSM before rendering.
+    component_entrypoints.get(component).manifest(cluster_psm + component_psms[component])
     for component in components
   ],
 }

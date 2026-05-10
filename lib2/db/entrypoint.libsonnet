@@ -5,9 +5,9 @@ local db_service = import "resources/service.libsonnet";
 
 {
   // Root component entrypoint: directly mount all database-owned resources.
-  manifest(config, _cluster_psm=null): {
-    pvc: db_pvc.new(config),
-    statefulset: db_statefulset.new(config),
-    service: db_service.new(config),
+  manifest(psm): {
+    pvc: db_pvc.new(psm),
+    statefulset: db_statefulset.new(psm),
+    service: db_service.new(psm),
   },
 }

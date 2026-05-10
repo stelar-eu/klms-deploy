@@ -4,8 +4,8 @@ local datapusher_service = import "resources/service.libsonnet";
 
 {
   // Root component entrypoint: directly mount all Datapusher-owned resources.
-  manifest(config, _cluster_psm=null): {
-    deployment: datapusher_deployment.new(config),
-    service: datapusher_service.new(config),
+  manifest(psm): {
+    deployment: datapusher_deployment.new(psm),
+    service: datapusher_service.new(psm),
   },
 }

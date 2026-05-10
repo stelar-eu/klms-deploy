@@ -6,10 +6,10 @@ local ckan_initjob = import "resources/initjob.libsonnet";
 
 {
   // Root component entrypoint: directly mount all CKAN-owned resources.
-  manifest(config, _cluster_psm=null): {
-    deployment: ckan_deployment.new(config),
-    service: ckan_service.new(config),
-    ingress: ckan_ingress.new(config),
-    initjob: ckan_initjob.new(config),
+  manifest(psm): {
+    deployment: ckan_deployment.new(psm),
+    service: ckan_service.new(psm),
+    ingress: ckan_ingress.new(psm),
+    initjob: ckan_initjob.new(psm),
   },
 }

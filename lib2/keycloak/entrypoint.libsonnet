@@ -6,10 +6,10 @@ local keycloak_initjob = import "resources/initjob.libsonnet";
 
 {
   // Root component entrypoint: directly mount all Keycloak-owned resources.
-  manifest(config, _cluster_psm=null): {
-    configmap: keycloak_configmap.new(config),
-    deployment: keycloak_deployment.new(config),
-    service: keycloak_service.new(config),
-    initjob: keycloak_initjob.new(config),
+  manifest(psm): {
+    configmap: keycloak_configmap.new(psm),
+    deployment: keycloak_deployment.new(psm),
+    service: keycloak_service.new(psm),
+    initjob: keycloak_initjob.new(psm),
   },
 }
