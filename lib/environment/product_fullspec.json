@@ -1,0 +1,199 @@
+{
+  "klms": {
+    "namespace": "stelar-lab",
+    "dynamicStorageClass": "longhorn",
+    "dynamic_volume_storage_class": "csi-hostpath-sc",
+    "SCHEME": "https",
+    "ROOT_DOMAIN": "minikube.test",
+    "CLUSTER_ISSUER": "letsencrypt-production",
+    "PRIMARY_SUBDOMAIN": "klms",
+    "optional_components": [],
+    "cluster": [],
+    "api": {
+      "SMTP_SERVER": "stelar.gr",
+      "SMTP_PORT": "465",
+      "SMTP_USERNAME": "info@stelar.gr",
+      "SMTP_PASSWORD": "smtp_pass-hd5jvyguk",
+      "SESSION_SECRET_KEY": "some-random-secret-key",
+      "PORT": 80,
+      "IMAGE": "petroud/stelar-api:prod",
+      "FLASK_ROOT": "/stelar",
+      "KEYCLOAK_CLIENT_ID": "stelarapi",
+      "SMTP_PASSWORD_SECRET_NAME": "smtpapi-secret",
+      "SESSION_SECRET_KEY_SECRET_NAME": "session-secret-key",
+      "EXEC_ENGINE": "kubernetes",
+      "INTERNAL_URL": "http://stelarapi/"
+    },
+    "postgres": {
+      "POSTGRES_DB_PASSWORD": "postgres-hd5jvyguk",
+      "CKAN_DB_PASSWORD": "ckan-hd5jvyguk",
+      "DATASTORE_DB_PASSWORD": "datastore-hd5jvyguk",
+      "KEYCLOAK_DB_PASSWORD": "keycloak-hd5jvyguk",
+      "QUAY_DB_PASSWORD": "quay_pass-hd5jvyguk",
+      "volume": [
+        "pvc"
+      ],
+      "pvc": {},
+      "PORT": 5432,
+      "IMAGE": "petroud/stelar-tuc:postgres",
+      "POSTGRES_HOST": "db",
+      "POSTGRES_DEFAULT_DB": "postgres",
+      "POSTGRES_USER": "postgres",
+      "POSTGRES_DB_PASSWORD_SECRET_NAME": "postgresdb-secret",
+      "CKAN_DB_USER": "ckan",
+      "CKAN_DB_PASSWORD_SECRET_NAME": "ckandb-secret",
+      "STELAR_DB": "stelar",
+      "DATASTORE_DB": "datastore",
+      "DATASTORE_READONLY_USER": "datastore_ro",
+      "DATASTORE_DB_PASSWORD_SECRET_NAME": "datastoredb-secret",
+      "KEYCLOAK_DB_USER": "keycloak",
+      "KEYCLOAK_DB_SCHEMA": "keycloak",
+      "KEYCLOAK_DB_PASSWORD_SECRET_NAME": "keycloakdb-secret",
+      "QUAY_DB_USER": "quay",
+      "QUAY_DB": "quay",
+      "QUAY_DB_PASSWORD_SECRET_NAME": "quaydb-secret",
+      "PGDATA": "/var/lib/postgresql/data/pgdata"
+    },
+    "ckan": {
+      "CKAN_ADMIN_PASSWORD": "stelar1234-hd5jvyguk",
+      "CKAN_SESSION_KEY": "7VxT9GM0-E6fXATAz-W9OZn5a6-n9Fcu35Y-3WROk5Fw",
+      "CKAN_JWT_KEY": "string:KwpacUHA8SnRsji5MVZoADDJTjGismnhEP3T3ubtrNf",
+      "PORT": 5000,
+      "IMAGE": "petroud/stelar-tuc:ckan",
+      "CKANEXT__KEYCLOAK__BUTTON_STYLE": "",
+      "CKANEXT__KEYCLOAK__ENABLE_CKAN_INTERNAL_LOGIN": "True",
+      "CKAN_VERSION": "2.10.0",
+      "CKAN_PORT": "5000",
+      "CKAN_PORT_HOST": "5000",
+      "CKAN__ROOT_PATH": "/dc",
+      "CKAN_SITE_ID": "default",
+      "CKAN_SYSADMIN_NAME": "admin",
+      "CKAN_SYSADMIN_EMAIL": "info@stelar.gr",
+      "CKAN_SMTP_SERVER": "smtp.corporateict.domain:25",
+      "CKAN_SMTP_STARTTLS": "True",
+      "CKAN_SMTP_USER": "user",
+      "CKAN_SMTP_PASSWORD": "pass",
+      "CKAN_SMTP_MAIL_FROM": "ckan@localhost",
+      "CKAN_ADMIN_PASSWORD_SECRET_NAME": "ckanadmin-secret",
+      "CKAN_AUTH_SECRET_NAME": "ckan-auth-secret",
+      "CKAN_STORAGE_PATH": "/var/lib/ckan",
+      "CKAN__PLUGINS": "envvars image_view text_view recline_view datastore datapusher keycloak resource_proxy geo_view spatial_metadata spatial_query",
+      "CKANEXT__SPATIAL__COMMON_MAP__TYPE": "custom",
+      "CKANEXT__SPATIAL__COMMON_MAP__CUSTOM__URL": "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+      "CKANEXT__SPATIAL__COMMON_MAP__ATTRIBUTION": "&copy; <a href=\"https://www.openstreetmap.org/copyright\">OpenStreetMap</a> contributors",
+      "TZ": "UTC",
+      "CKAN__DATAPUSHER__CALLBACK_URL_BASE": "http://ckan:5000",
+      "DATAPUSHER_REWRITE_URL": "http://ckan:5000"
+    },
+    "solr": {
+      "volume": [
+        "pvc"
+      ],
+      "pvc": {},
+      "PORT": 8983,
+      "SOLR_IMAGE_VERSION": "2.10-solr9-spatial",
+      "CKAN_SOLR_URL": "http://solr:8983/solr/ckan",
+      "TEST_CKAN_SOLR_URL": "http://solr:8983/solr/ckan"
+    },
+    "keycloak": {
+      "SUBDOMAIN": "kc",
+      "KEYCLOAK_ROOT_PASSWORD": "stelar1234-hd5jvyguk",
+      "PORT": 8080,
+      "IMAGE": "petroud/stelar-tuc:keycloak",
+      "INIT_IMAGE": "petroud/stelar-tuc:kcinit",
+      "KEYCLOAK_ROOT_PASSWORD_SECRET_NAME": "keycloakroot-secret",
+      "DB_TYPE": "postgres",
+      "KEYCLOAK_ADMIN": "admin",
+      "JDBC_PARAMS": "useSsl=false",
+      "KC_HTTP_ENABLED": "true",
+      "KC_HEALTH_ENABLED": "true",
+      "REALM": "master",
+      "KC_API_CLIENT_NAME": "stelar-api",
+      "KC_MINIO_CLIENT_NAME": "minio",
+      "KC_CKAN_CLIENT_NAME": "ckan",
+      "KC_HOSTNAME_BACKCHANNEL_DYNAMIC": "true"
+    },
+    "minio": {
+      "API_SUBDOMAIN": "minio",
+      "API_DOMAIN": "https://minio.minikube.test",
+      "CONSOLE_DOMAIN": "https://klms.minikube.test/s3",
+      "S3_CONSOLE_URL": "https://klms.minikube.test/s3",
+      "INSECURE_MC_CLIENT": "false",
+      "MINIO_ROOT_PASSWORD": "stelartuc-hd5jvyguk",
+      "volume": [
+        "pvc"
+      ],
+      "pvc": {},
+      "CONSOLE_PORT": 9001,
+      "API_PORT": 9000,
+      "IMAGE": "quay.io/minio/minio:RELEASE.2025-04-22T22-12-26Z-cpuv1",
+      "MINIO_ROOT_USER": "root",
+      "MINIO_ROOT_PASSWORD_SECRET_NAME": "minioroot-secret",
+      "MINIO_BROWSER_REDIRECT": "true"
+    },
+    "quay": {
+      "SUBDOMAIN": "img",
+      "PORT": 8080,
+      "IMAGE": "petroud/stelar-tuc:registry",
+      "INIT_IMAGE": "petroud/stelar-tuc:registry-init",
+      "QUAY_PULLERS_ROLE": "pullers",
+      "QUAY_PUSHERS_ROLE": "pushers",
+      "KC_ROLES_CLAIM": "groups",
+      "MINIO_BUCKET": "registry"
+    },
+    "ingress": {
+      "ingress_controller": [
+        "nginx"
+      ],
+      "tls": [
+        "letsencrypt"
+      ],
+      "nginx": {},
+      "letsencrypt": {}
+    },
+    "core_components": [
+      "api",
+      "postgres",
+      "redis",
+      "ckan",
+      "datapusher",
+      "solr",
+      "keycloak",
+      "minio",
+      "ontop",
+      "quay"
+    ],
+    "support": [
+      "ingress",
+      "network_policy"
+    ],
+    "redis": {
+      "PORT": 6379,
+      "IMAGE": "redis:7",
+      "CKAN__HARVEST__MQ__TYPE": "redis",
+      "CKAN__HARVEST__MQ__HOSTNAME": "redis",
+      "CKAN__HARVEST__MQ__PORT": "6379",
+      "CKAN__HARVEST__MQ__REDIS_DB": "1",
+      "CKAN_REDIS_URL": "redis://redis:6379/1",
+      "TEST_CKAN_REDIS_URL": "redis://redis:6379/1",
+      "REDIS_HOST": "redis",
+      "REDIS_USER": "",
+      "REDIS_PORT": "6379",
+      "REDIS_PROTO": "redis",
+      "REDIS_DB": "4",
+      "REDIS_CELERY_DB": "5",
+      "QUAY_REDIS_HOSTNAME": "redis"
+    },
+    "datapusher": {
+      "PORT": 8800,
+      "DATAPUSHER_VERSION": "0.0.20",
+      "CKAN_DATAPUSHER_URL": "http://datapusher:8800",
+      "DATAPUSHER_REWRITE_RESOURCES": "True"
+    },
+    "ontop": {
+      "PORT": 8080,
+      "IMAGE": "petroud/stelar-tuc:ontop"
+    },
+    "network_policy": {}
+  }
+}

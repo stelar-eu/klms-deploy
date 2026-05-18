@@ -3,6 +3,8 @@
 #
 from __future__ import annotations
 
+from collections.abc import Mapping
+from html import escape
 from pathlib import Path
 import re
 from typing import Iterable, Iterator, Literal, Optional, Callable, Self
@@ -457,12 +459,13 @@ def render_feature(
     group_attr = {"shape": "ellipse", "style": "dashed"}
 
     br = '<BR ALIGN="LEFT"/>\n'
+    attribute_labels = _format_attribute_labels(feature)
 
     feature_label = f"""\
 <<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0">
 <TR><TD><B>{feature.name}</B></TD></TR>
 <TR><TD ALIGN="LEFT">{br.join(feature.tags)}</TD></TR>
-<TR><TD ALIGN="LEFT">{br.join(feature.attributes.keys())}</TD></TR>
+<TR><TD ALIGN="LEFT">{br.join(attribute_labels)}</TD></TR>
 </TABLE>>"""
 
     dot.node(feature.fullname, label=feature_label, **feature_attr)
@@ -482,3 +485,23 @@ def render_feature(
             child_renderer(dot, subfeature, child_renderer)
 
     return dot
+
+
+def _format_attribute_labels(feature: Feature) -> list[str]:
+    """Render feature attribute names for Graphviz HTML labels.
+
+    Attributes with fixed defaults are underlined and rendered before attributes
+    without defaults. In both groups, the model's original attribute order is kept.
+    """
+
+    defaulted: list[str] = []
+    non_defaulted: list[str] = []
+
+    for attr_name, attr_spec in feature.attributes.items():
+        label = escape(attr_name)
+        if isinstance(attr_spec, Mapping) and "default" in attr_spec:
+            defaulted.append(f"<U>{label}</U>")
+        else:
+            non_defaulted.append(label)
+
+    return defaulted + non_defaulted

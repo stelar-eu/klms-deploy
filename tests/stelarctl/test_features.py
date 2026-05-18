@@ -226,6 +226,30 @@ def test_feature_model_features(his_model):
         assert name in names, f"Feature {name} not found in features"
 
 
+def test_render_feature_underlines_default_attributes_first():
+    feature = Feature(
+        name="svc",
+        attributes={
+            "REQUIRED_A": {"type": "string"},
+            "DEFAULT_B": {"type": "string", "default": "b"},
+            "REQUIRED_C": {"type": "string"},
+            "DEFAULT_D": {"type": "integer", "default": 1},
+        },
+    )
+
+    dot = FeatureModel(name="fm", root=feature).to_digraph()
+    source = dot.source
+
+    default_b = source.index("<U>DEFAULT_B</U>")
+    default_d = source.index("<U>DEFAULT_D</U>")
+    required_a = source.index("REQUIRED_A")
+    required_c = source.index("REQUIRED_C")
+
+    assert default_b < default_d
+    assert default_d < required_a
+    assert required_a < required_c
+
+
 def test_feature_model_default_selection_validation():
     # Test that invalid default selections raise validation errors
     with pytest.raises(ValueError):

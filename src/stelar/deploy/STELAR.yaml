@@ -3,16 +3,22 @@ name: STELAR
 root:
   name: klms
   attributes:
-    platform:
-      type: string
-      enum: [minikube, okeanos]
-      description: Target platform for the deployment.
-    k8s_context:
-      type: string
-      description: kubectl context used to target the cluster.
     namespace:
       type: string
-      description: Kubernetes namespace where STELAR is deployed.
+    dynamicStorageClass:
+      type: string
+    dynamic_volume_storage_class:
+      type: string
+    SCHEME:
+      type: string
+    ROOT_DOMAIN:
+      type: string
+    CLUSTER_ISSUER:
+      type:
+        - string
+        - "null"
+    PRIMARY_SUBDOMAIN:
+      type: string
   subfeatures:
 
     # Core component group. These are always included in any configuration of the product line.
@@ -21,35 +27,109 @@ root:
       members:
         - name: api
           attributes:
-            primary_subdomain:
+            SMTP_SERVER:
               type: string
-              description: Primary public subdomain used by the main STELAR application endpoint.
-            smtp_server:
+            SMTP_PORT:
               type: string
-              description: SMTP server hostname consumed by the STELAR API.
-            smtp_port:
+            SMTP_USERNAME:
               type: string
-              description: SMTP server port consumed by the STELAR API.
-            smtp_username:
+            SMTP_PASSWORD:
               type: string
-              description: SMTP username consumed by the STELAR API.
-            s3_console_url:
+            SESSION_SECRET_KEY:
               type: string
-              description: Public MinIO console URL exposed through the STELAR API.
-            smtp_password_secret_name:
+            PORT:
+              type: integer
+              default: 80
+            IMAGE:
               type: string
-              default: smtpapi-secret
-              description: Secret containing the SMTP password consumed by the STELAR API.
-            session_secret_key_secret_name:
+              default: "petroud/stelar-api:prod"
+            FLASK_ROOT:
               type: string
-              default: session-secret-key
-              description: Secret containing the session key consumed by the STELAR API.
+              default: "/stelar"
+            KEYCLOAK_CLIENT_ID:
+              type: string
+              default: "stelarapi"
+            SMTP_PASSWORD_SECRET_NAME:
+              type: string
+              default: "smtpapi-secret"
+            SESSION_SECRET_KEY_SECRET_NAME:
+              type: string
+              default: "session-secret-key"
+            EXEC_ENGINE:
+              type: string
+              default: "kubernetes"
+            INTERNAL_URL:
+              type: string
+              default: "http://stelarapi/"
         - name: postgres
           attributes:
-            postgres_db_password_secret_name:
+            POSTGRES_DB_PASSWORD:
               type: string
-              default: postgresdb-secret
-              description: Secret containing the postgres database password.
+            CKAN_DB_PASSWORD:
+              type: string
+            DATASTORE_DB_PASSWORD:
+              type: string
+            KEYCLOAK_DB_PASSWORD:
+              type: string
+            QUAY_DB_PASSWORD:
+              type: string
+            PORT:
+              type: integer
+              default: 5432
+            IMAGE:
+              type: string
+              default: "petroud/stelar-tuc:postgres"
+            POSTGRES_HOST:
+              type: string
+              default: "db"
+            POSTGRES_DEFAULT_DB:
+              type: string
+              default: "postgres"
+            POSTGRES_USER:
+              type: string
+              default: "postgres"
+            POSTGRES_DB_PASSWORD_SECRET_NAME:
+              type: string
+              default: "postgresdb-secret"
+            CKAN_DB_USER:
+              type: string
+              default: "ckan"
+            CKAN_DB_PASSWORD_SECRET_NAME:
+              type: string
+              default: "ckandb-secret"
+            STELAR_DB:
+              type: string
+              default: "stelar"
+            DATASTORE_DB:
+              type: string
+              default: "datastore"
+            DATASTORE_READONLY_USER:
+              type: string
+              default: "datastore_ro"
+            DATASTORE_DB_PASSWORD_SECRET_NAME:
+              type: string
+              default: "datastoredb-secret"
+            KEYCLOAK_DB_USER:
+              type: string
+              default: "keycloak"
+            KEYCLOAK_DB_SCHEMA:
+              type: string
+              default: "keycloak"
+            KEYCLOAK_DB_PASSWORD_SECRET_NAME:
+              type: string
+              default: "keycloakdb-secret"
+            QUAY_DB_USER:
+              type: string
+              default: "quay"
+            QUAY_DB:
+              type: string
+              default: "quay"
+            QUAY_DB_PASSWORD_SECRET_NAME:
+              type: string
+              default: "quaydb-secret"
+            PGDATA:
+              type: string
+              default: "/var/lib/postgresql/data/pgdata"
           subfeatures:
             - group_name: volume
               rel: alternative
@@ -57,25 +137,166 @@ root:
                 - name: hostPath
                 - name: pvc
         - name: redis
+          attributes:
+            PORT:
+              type: integer
+              default: 6379
+            IMAGE:
+              type: string
+              default: "redis:7"
+            CKAN__HARVEST__MQ__TYPE:
+              type: string
+              default: "redis"
+            CKAN__HARVEST__MQ__HOSTNAME:
+              type: string
+              default: "redis"
+            CKAN__HARVEST__MQ__PORT:
+              type: string
+              default: "6379"
+            CKAN__HARVEST__MQ__REDIS_DB:
+              type: string
+              default: "1"
+            CKAN_REDIS_URL:
+              type: string
+              default: "redis://redis:6379/1"
+            TEST_CKAN_REDIS_URL:
+              type: string
+              default: "redis://redis:6379/1"
+            REDIS_HOST:
+              type: string
+              default: "redis"
+            REDIS_USER:
+              type: string
+              default: ""
+            REDIS_PORT:
+              type: string
+              default: "6379"
+            REDIS_PROTO:
+              type: string
+              default: "redis"
+            REDIS_DB:
+              type: string
+              default: "4"
+            REDIS_CELERY_DB:
+              type: string
+              default: "5"
+            QUAY_REDIS_HOSTNAME:
+              type: string
+              default: "redis"
         - name: ckan
           attributes:
-            ckan_db_password_secret_name:
+            CKAN_ADMIN_PASSWORD:
               type: string
-              default: ckandb-secret
-              description: Secret containing the CKAN database password.
-            datastore_db_password_secret_name:
+            CKAN_SESSION_KEY:
               type: string
-              default: datastoredb-secret
-              description: Secret containing the datastore database password used by CKAN.
-            ckan_admin_password_secret_name:
+            CKAN_JWT_KEY:
               type: string
-              default: ckanadmin-secret
-              description: Secret containing the CKAN sysadmin password.
-            ckan_auth_secret_name:
+            PORT:
+              type: integer
+              default: 5000
+            IMAGE:
               type: string
-              default: ckan-auth-secret
-              description: Secret containing the CKAN session and JWT signing keys.
+              default: "petroud/stelar-tuc:ckan"
+            CKANEXT__KEYCLOAK__BUTTON_STYLE:
+              type: string
+              default: ""
+            CKANEXT__KEYCLOAK__ENABLE_CKAN_INTERNAL_LOGIN:
+              type: string
+              default: "True"
+            CKAN_VERSION:
+              type: string
+              default: "2.10.0"
+            CKAN_PORT:
+              type: string
+              default: "5000"
+            CKAN_PORT_HOST:
+              type: string
+              default: "5000"
+            CKAN__ROOT_PATH:
+              type: string
+              default: "/dc"
+            CKAN_SITE_ID:
+              type: string
+              default: "default"
+            CKAN_SYSADMIN_NAME:
+              type: string
+              default: "admin"
+            CKAN_SYSADMIN_EMAIL:
+              type: string
+              default: "info@stelar.gr"
+            CKAN_SMTP_SERVER:
+              type: string
+              default: "smtp.corporateict.domain:25"
+            CKAN_SMTP_STARTTLS:
+              type: string
+              default: "True"
+            CKAN_SMTP_USER:
+              type: string
+              default: "user"
+            CKAN_SMTP_PASSWORD:
+              type: string
+              default: "pass"
+            CKAN_SMTP_MAIL_FROM:
+              type: string
+              default: "ckan@localhost"
+            CKAN_ADMIN_PASSWORD_SECRET_NAME:
+              type: string
+              default: "ckanadmin-secret"
+            CKAN_AUTH_SECRET_NAME:
+              type: string
+              default: "ckan-auth-secret"
+            CKAN_STORAGE_PATH:
+              type: string
+              default: "/var/lib/ckan"
+            CKAN__PLUGINS:
+              type: string
+              default: "envvars image_view text_view recline_view datastore datapusher keycloak resource_proxy geo_view spatial_metadata spatial_query"
+            CKANEXT__SPATIAL__COMMON_MAP__TYPE:
+              type: string
+              default: "custom"
+            CKANEXT__SPATIAL__COMMON_MAP__CUSTOM__URL:
+              type: string
+              default: "https://tile.openstreetmap.org/{z}/{x}/{y}.png"
+            CKANEXT__SPATIAL__COMMON_MAP__ATTRIBUTION:
+              type: string
+              default: "&copy; <a href=\"https://www.openstreetmap.org/copyright\">OpenStreetMap</a> contributors"
+            TZ:
+              type: string
+              default: "UTC"
+            CKAN__DATAPUSHER__CALLBACK_URL_BASE:
+              type: string
+              default: "http://ckan:5000"
+            DATAPUSHER_REWRITE_URL:
+              type: string
+              default: "http://ckan:5000"
+        - name: datapusher
+          attributes:
+            PORT:
+              type: integer
+              default: 8800
+            DATAPUSHER_VERSION:
+              type: string
+              default: "0.0.20"
+            CKAN_DATAPUSHER_URL:
+              type: string
+              default: "http://datapusher:8800"
+            DATAPUSHER_REWRITE_RESOURCES:
+              type: string
+              default: "True"
         - name: solr
+          attributes:
+            PORT:
+              type: integer
+              default: 8983
+            SOLR_IMAGE_VERSION:
+              type: string
+              default: "2.10-solr9-spatial"
+            CKAN_SOLR_URL:
+              type: string
+              default: "http://solr:8983/solr/ckan"
+            TEST_CKAN_SOLR_URL:
+              type: string
+              default: "http://solr:8983/solr/ckan"
           subfeatures:
             - group_name: volume
               rel: alternative
@@ -84,26 +305,84 @@ root:
                 - name: pvc
         - name: keycloak
           attributes:
-            keycloak_subdomain:
+            SUBDOMAIN:
               type: string
-              description: Subdomain assigned to the Keycloak public endpoint.
-            keycloak_db_password_secret_name:
+            KEYCLOAK_ROOT_PASSWORD:
               type: string
-              default: keycloakdb-secret
-              description: Secret containing the Keycloak database password.
-            keycloak_root_password_secret_name:
+            PORT:
+              type: integer
+              default: 8080
+            IMAGE:
               type: string
-              default: keycloakroot-secret
-              description: Secret containing the Keycloak admin password.
+              default: "petroud/stelar-tuc:keycloak"
+            INIT_IMAGE:
+              type: string
+              default: "petroud/stelar-tuc:kcinit"
+            KEYCLOAK_ROOT_PASSWORD_SECRET_NAME:
+              type: string
+              default: "keycloakroot-secret"
+            DB_TYPE:
+              type: string
+              default: "postgres"
+            KEYCLOAK_ADMIN:
+              type: string
+              default: "admin"
+            JDBC_PARAMS:
+              type: string
+              default: "useSsl=false"
+            KC_HTTP_ENABLED:
+              type: string
+              default: "true"
+            KC_HEALTH_ENABLED:
+              type: string
+              default: "true"
+            REALM:
+              type: string
+              default: "master"
+            KC_API_CLIENT_NAME:
+              type: string
+              default: "stelar-api"
+            KC_MINIO_CLIENT_NAME:
+              type: string
+              default: "minio"
+            KC_CKAN_CLIENT_NAME:
+              type: string
+              default: "ckan"
+            KC_HOSTNAME_BACKCHANNEL_DYNAMIC:
+              type: string
+              default: "true"
         - name: minio
           attributes:
-            minio_subdomain:
+            API_SUBDOMAIN:
               type: string
-              description: Subdomain assigned to the MinIO API public endpoint.
-            minio_root_password_secret_name:
+            API_DOMAIN:
               type: string
-              default: minioroot-secret
-              description: Secret containing the MinIO root password.
+            CONSOLE_DOMAIN:
+              type: string
+            S3_CONSOLE_URL:
+              type: string
+            INSECURE_MC_CLIENT:
+              type: string
+            MINIO_ROOT_PASSWORD:
+              type: string
+            CONSOLE_PORT:
+              type: integer
+              default: 9001
+            API_PORT:
+              type: integer
+              default: 9000
+            IMAGE:
+              type: string
+              default: "quay.io/minio/minio:RELEASE.2025-04-22T22-12-26Z-cpuv1"
+            MINIO_ROOT_USER:
+              type: string
+              default: "root"
+            MINIO_ROOT_PASSWORD_SECRET_NAME:
+              type: string
+              default: "minioroot-secret"
+            MINIO_BROWSER_REDIRECT:
+              type: string
+              default: "true"
           subfeatures:
             - group_name: volume
               rel: alternative
@@ -111,65 +390,217 @@ root:
                 - name: hostPath
                 - name: pvc
         - name: ontop
+          attributes:
+            PORT:
+              type: integer
+              default: 8080
+            IMAGE:
+              type: string
+              default: "petroud/stelar-tuc:ontop"
         - name: quay
           attributes:
-            registry_subdomain:
+            SUBDOMAIN:
               type: string
-              description: Subdomain assigned to the Quay registry public endpoint.
-            quay_db_password_secret_name:
+            PORT:
+              type: integer
+              default: 8080
+            IMAGE:
               type: string
-              default: quaydb-secret
-              description: Secret containing the Quay database password.
+              default: "petroud/stelar-tuc:registry"
+            INIT_IMAGE:
+              type: string
+              default: "petroud/stelar-tuc:registry-init"
+            QUAY_PULLERS_ROLE:
+              type: string
+              default: "pullers"
+            QUAY_PUSHERS_ROLE:
+              type: string
+              default: "pushers"
+            KC_ROLES_CLAIM:
+              type: string
+              default: "groups"
+            MINIO_BUCKET:
+              type: string
+              default: "registry"
 
-    # Optional components may or may not be included, depending 
+    # Optional components may or may not be included, depending
     # on the needs of the deployment.
     - group_name: optional_components
       rel: optional
       members:
         - name: llm_search
           attributes:
-            groq_api_url:
+            GROQ_API_URL:
               type: string
-              default: https://api.groq.com/
-              description: Groq API base URL used by the optional LLM search integration.
-            groq_api_model:
+            GROQ_MODEL:
               type: string
-              default: meta-llama/llama-4-scout-17b-16e-instruct
-              description: Groq model identifier used by the optional LLM search integration.
-            groq_api_key_secret_name:
+            GROQ_API_KEY_SECRET_NAME:
               type: string
-              description: Secret containing the Groq API key consumed when LLM search is enabled.
+            GROQ_API_KEY:
+              type: string
+            PORT:
+              type: integer
+              default: 8000
+            IMAGE:
+              type: string
+              default: "petroud/semantic-dataset-search:latest"
+            INTERNAL_URL:
+              type: string
+              default: "http://llmsearch:8000"
+            LLM_OPTION:
+              type: string
+              default: "groq"
+            CHROMA_DIR:
+              type: string
+              default: "/app/chroma"
         - name: sde
+          subfeatures:
+            - group_name: components
+              rel: mandatory
+              members:
+                - name: kafka
+                  attributes:
+                    INTERNAL_PORT:
+                      type: integer
+                      default: 9092
+                    KAFKA_BROKER_1_URL:
+                      type: string
+                      default: "kafka-cluster:19092"
+                    KAFKA_BROKER_2_URL:
+                      type: string
+                      default: "kafka-cluster:29092"
+                    KAFKA_LISTENER_SECURITY_PROTOCOL_MAP:
+                      type: string
+                      default: "INTERNAL:PLAINTEXT,EXTERNAL:PLAINTEXT"
+                    KAFKA_INTER_BROKER_LISTENER_NAME:
+                      type: string
+                      default: "INTERNAL"
+                    KAFKA_MIN_INSYNC_REPLICAS:
+                      type: string
+                      default: "1"
+                    KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR:
+                      type: string
+                      default: "2"
+                - name: kafbat
+                  attributes:
+                    PORT:
+                      type: integer
+                      default: 8080
+                    AUTH_TYPE:
+                      type: string
+                      default: "OAUTH2"
+                    AUTH_OAUTH2_CLIENT_KEYCLOAK_SCOPE:
+                      type: string
+                      default: "openid"
+                    AUTH_OAUTH2_CLIENT_KEYCLOAK_USER_NAME_ATTRIBUTE:
+                      type: string
+                      default: "preferred_username"
+                    AUTH_OAUTH2_CLIENT_KEYCLOAK_CLIENT_NAME:
+                      type: string
+                      default: "STELAR SSO"
+                    AUTH_OAUTH2_CLIENT_KEYCLOAK_PROVIDER:
+                      type: string
+                      default: "keycloak"
+                    AUTH_OAUTH2_CLIENT_KEYCLOAK_CUSTOM_PARAMS_TYPE:
+                      type: string
+                      default: "oauth"
+                    KAFKA_CLUSTERS_0_NAME:
+                      type: string
+                      default: "STELAR SDE Kafka Cluster"
+                - name: zookeeper
+                  attributes:
+                    PORT:
+                      type: integer
+                      default: 2181
+                    ZOOKEEPER_TICK_TIME:
+                      type: string
+                      default: "2000"
+                - name: flink
+                  attributes:
+                    JOB_MANAGER_RPC_ADDRESS:
+                      type: string
+                      default: "localhost"
+                    JOB_MANAGER_REST_PORT:
+                      type: string
+                      default: "8081"
+                - name: sdemanager
+                  attributes:
+                    PORT:
+                      type: integer
+                      default: 8080
+                    IMAGE:
+                      type: string
+                      default: "petroud/sde-manager:latest"
+                    CONTEXT_PATH:
+                      type: string
+                      default: "sde"
         - name: airflow
+          attributes:
+            AIRFLOW__CODE_EDITOR__ENABLED:
+              type: string
+              default: "true"
+            AIRFLOW__CODE_EDITOR__GIT_ENABLED:
+              type: string
+              default: "false"
+            AIRFLOW__CODE_EDITOR__GIT_CMD:
+              type: string
+              default: "/usr/bin/git"
+            AIRFLOW__CODE_EDITOR__GIT_DEFAULT_ARGS:
+              type: string
+              default: "-c color.ui=true"
+            AIRFLOW__CODE_EDITOR__GIT_INIT_REPO:
+              type: string
+              default: "false"
+            AIRFLOW__CODE_EDITOR__ROOT_DIRECTORY:
+              type: string
+              default: "/opt/airflow/dags"
+            AIRFLOW__CODE_EDITOR__LINE_LENGTH:
+              type: string
+              default: "88"
+            AIRFLOW__CODE_EDITOR__STRING_NORMALIZATION:
+              type: string
+              default: "false"
+            AIRFLOW__CODE_EDITOR__MOUNT:
+              type: string
+              default: "name=dags,path=/opt/airflow/dags"
+            AIRFLOW__CODE_EDITOR__MOUNT1:
+              type: string
+              default: "name=logs,path=/opt/airflow/logs"
         - name: previewer
+          attributes:
+            PORT:
+              type: integer
+              default: 8080
+            IMAGE:
+              type: string
+              default: "petroud/stelar-previewer:latest"
+            CONTEXT_PATH:
+              type: string
+              default: "previewer"
         - name: visualizer
+          attributes:
+            PORT:
+              type: integer
+              default: 8080
+            IMAGE:
+              type: string
+              default: "petroud/profvisualizer:latest"
+            CONTEXT_PATH:
+              type: string
+              default: "visualizer"
 
-    # This group represents mandatory features of the klms, that are 
-    # related to kubernetes 
+    # This group represents mandatory features of the klms, that are
+    # related to kubernetes
     - group_name: support
       rel: mandatory
       members:
         - name: ingress
-          attributes:
-            root_domain:
-              type: string
-              description: Root DNS domain shared by public STELAR endpoints.
-            scheme:
-              type: string
-              enum: [http, https]
-              description: Public URL scheme used for externally exposed STELAR services.
-            cluster_issuer:
-              type:
-                - string
-                - "null"
-              default: null
-              description: cert-manager ClusterIssuer used when TLS certificates are provisioned.
           subfeatures:
             - group_name: ingress_controller
               rel: alternative
               members:
-              - name: nginx
-              - name: traefik
+                - name: nginx
+                - name: traefik
             - group_name: tls
               rel: alternative
               members:
