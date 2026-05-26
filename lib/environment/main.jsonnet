@@ -1,8 +1,8 @@
 // Static environment template. The selected components are rendered from a
 // generated product fullspec imported as one shared config object.
 
-local product_transformation = import "../util/product_transformation.libsonnet";
-local component_registry = import "../util/components.libsonnet";
+local product_transformation = import "../lib//util/product_transformation.libsonnet";
+local component_registry = import "../lib/util/components.libsonnet";
 
 local product_fullspec = import "./product_fullspec.json";
 

@@ -7,7 +7,8 @@
             else
                 product_fullspec;
         local components =
-            (if std.objectHas(root, "core_components") then root.core_components else [])
+            (if std.objectHas(root, "support") then ["system"] else [])
+            + (if std.objectHas(root, "core_components") then root.core_components else [])
             + (if std.objectHas(root, "optional_components") then root.optional_components else [])
             + (if std.objectHas(root, "cluster") then root.cluster else []);
 

@@ -11,8 +11,7 @@ local standard_annotations = {
   "nginx.ingress.kubernetes.io/proxy-connect-timeout": "60s",
 };
 
-local letsencrypt_annotations(config) = {
-  "cert-manager.io/cluster-issuer": config.CLUSTER_ISSUER,
+local https_annotations() = {
   "nginx.ingress.kubernetes.io/ssl-redirect": "true",
 };
 
@@ -32,7 +31,7 @@ local http_ingress(name, annotations, host, paths) =
 
 local https_ingress_lets_encrypt(name, annotations, host, paths, tls_name, config) =
   ing.new(name)
-  + ing.metadata.withAnnotations(standard_annotations + letsencrypt_annotations(config) + annotations)
+  + ing.metadata.withAnnotations(standard_annotations + https_annotations() + annotations)
   + ing.spec.withIngressClassName("nginx")
   + ing.spec.withRules(ingrule.withHost(host) + ingrule.http.withPaths(paths))
   + ing.spec.withTls([ingtls.withHosts([host]) + ingtls.withSecretName(tls_name)]);
