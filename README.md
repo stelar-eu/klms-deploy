@@ -11,6 +11,12 @@ workspaces, generating product fullspecs, and running cluster bootstrap
 preflight checks. See [docs/stelarctl.md](docs/stelarctl.md) for the supported
 commands and deployment workflow.
 
+The intended operator install path is:
+
+```bash
+pipx install stelar-deploy
+```
+
 ## KLMS core components
 
 * [STELAR API](https://github.com/stelar-eu/data-api). The main entry point to the KLMS system, exposing RESTful endpoints for managing and searching resources in the KLMS. Houses the core services of the KLMS, including user management, dataset management, metadata extraction, and search functionalities, task and workflow invocation. Exposes a GUI for interacting with the KLMS system, the STELAR KLMS Console, supporting the full spectrum of KLMS functionalities.

@@ -9,6 +9,26 @@ It keeps three responsibilities separate:
 - product specification expansion into `product_fullspec.json`
 - cluster preflight checks and bootstrap secrets
 
+## Installation
+
+The intended installation path for operators is `pipx`:
+
+```bash
+pipx install stelar-deploy
+stelarctl --help
+```
+
+`pipx` creates an isolated Python environment for the package and exposes the
+`stelarctl` command on the user's PATH. This is not a standalone binary; it is a
+Python console script installed in an isolated environment.
+
+For local development from this repository:
+
+```bash
+pipx install .
+stelarctl --help
+```
+
 ## Deployment workflow
 
 Run these commands from any directory, using `--workspace` when the workspace is

@@ -39,7 +39,10 @@ include = ["stelar*"]
 namespaces = true
 
 [tool.setuptools.package-data]
-"stelar.deploy" = ["templates/jsonnetfile.json"]
+"stelar.deploy" = [
+  "STELAR.yaml",
+  "templates/jsonnetfile.json",
+]
 
 [tool.flake8]
 # Check that this is aligned with your other tools like Black
