@@ -1,21 +1,14 @@
-#
-# A workspace specifies an installation of information containing (a) a set of environments
-# (b) additional jsonnet code in the ./lib and ./vendor directories.
-# The source distribution of klms-deploy is an example of a workspace.
-#
-# A workspace is the base for an execution of stelarctl, and provides
-# necessary information. The workspace is created at the beginning of execution.
-#
+"""Workspace discovery and validation helpers.
+
+A STELAR deployment workspace contains `jsonnetfile.json`, generated
+environments, and optional local Jsonnet code under `lib` and `vendor`.
+"""
 
 from __future__ import annotations
 
-from pathlib import Path
-from typing import TYPE_CHECKING, Iterable
-
-if TYPE_CHECKING:
-    pass
-
 from os import PathLike
+from pathlib import Path
+from typing import Iterable
 
 from .environ import Environment
 
@@ -26,15 +19,14 @@ PathSpec = str | PathLike
 class Workspace:
     """A workspace is a directory containing a number of STELAR environments.
 
-    A workspace is a directory containing a `jsonnetfile.yaml`.
-    Also,  optionally,  `lib` and `vendor` directories.
-    Note that the existence of `jsonnetfile.yaml` is used by Tanka to
-    determine its `<rootDir>`.
+    A workspace contains `jsonnetfile.json` and may also contain `lib` and
+    `vendor` directories. The Jsonnet bundle file is the marker used by
+    stelarctl to treat a directory as a workspace.
     """
 
     @classmethod
     def normalize_pathspec(cls, path: PathSpec | None) -> Path:
-        """Return a path-like argument as a pathlib.Path
+        """Return a path-like argument as a pathlib.Path.
 
         Parameters
         ----------
@@ -61,7 +53,7 @@ class Workspace:
     def check_path(cls, path: Path):
         """Check if the current workspace has a legal structure.
 
-        A workspace must be a directory containing a jsonnetfile.yaml.
+        A workspace must be a directory containing jsonnetfile.json.
         We may want to add more checks in the future, but this is a good start.
 
         Parameters
@@ -72,7 +64,7 @@ class Workspace:
         Raises
         ------
         ValueError
-             If the path is not a directory or does not contain a jsonnetfile.yaml.
+             If the path is not a directory or does not contain jsonnetfile.json.
         """
         if not path.is_dir():
             raise ValueError(f"Workspace path {path} is not a directory")
@@ -92,7 +84,7 @@ class Workspace:
         TypeError
             If the argument is not a string or os.PathLike object.
         ValueError
-            If the path is not a directory or does not contain a jsonnetfile.yaml.
+            If the path is not a directory or does not contain jsonnetfile.json.
         """
         self.path = self.normalize_pathspec(path)
         self.check_path(self.path)

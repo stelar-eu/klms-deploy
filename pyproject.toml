@@ -22,6 +22,11 @@ dependencies = [
   "graphviz >= 0.21.0",
 ]
 
+[project.optional-dependencies]
+test = [
+  "pytest",
+]
+
 [project.scripts]
 stelarctl = "stelar.deploy.cli:app"
 
@@ -32,6 +37,9 @@ package-dir = {"" = "src"}
 where = ["src"]
 include = ["stelar*"]
 namespaces = true
+
+[tool.setuptools.package-data]
+"stelar.deploy" = ["templates/jsonnetfile.json"]
 
 [tool.flake8]
 # Check that this is aligned with your other tools like Black

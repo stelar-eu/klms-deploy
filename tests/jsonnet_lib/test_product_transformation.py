@@ -65,6 +65,29 @@ def test_extract_components_from_bare_root_fullspec(J: JsonnetRunner):
     }
 
 
+def test_extract_components_includes_system_when_support_is_present(J: JsonnetRunner):
+    out = J(
+        """
+        local fullspec = {
+          klms: {
+            core_components: ["api", "postgres"],
+            optional_components: [],
+            cluster: [],
+            support: ["ingress", "network_policy"],
+          },
+        };
+
+        product_transformation.extract_components(fullspec)
+        """
+    )
+
+    assert out == {
+        "system": {},
+        "api": {},
+        "postgres": {},
+    }
+
+
 def test_extract_configuration_returns_unwrapped_root(J: JsonnetRunner):
     out = J(
         """
