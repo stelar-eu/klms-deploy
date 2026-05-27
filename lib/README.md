@@ -8,7 +8,7 @@ The current shape is:
 - one stable `entrypoint.libsonnet` per component
 - one flat `resources/` directory per component
 - one shared component registry under `lib/util/`
-- a static environment template under `lib/environment/`
+- static environment templates under `lib/environment_templates/`
 - one archive area for legacy files under `lib/unused/`
 
 ## Component structure
@@ -59,7 +59,7 @@ local service = import "resources/service.libsonnet";
 
 ## Environment template
 
-`lib/environment/main.jsonnet` is the target static environment template.
+`lib/environment_templates/main.jsonnet` is the target static environment template.
 
 It is intended to be copied into an environment directory and then consume a
 generated product fullspec JSON file. In that model:
@@ -114,5 +114,5 @@ This directory is not part of the active rendering path.
 ## Notes
 
 - `lib` is the active refactor tree.
-- Some review templates in `lib/environment/` are target-shape artifacts and
+- Some review templates in `lib/environment_templates/` are target-shape artifacts and
   are not necessarily the currently active deployment path.
