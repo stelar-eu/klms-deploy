@@ -10,9 +10,11 @@ import typer
 
 from .init_lake import register_init_lake_commands
 from .lakespec import register_lakespec_commands
+from .product import register_product_commands
 
 
 def register_commands(app: typer.Typer) -> None:
     """Register every command group on the root CLI app."""
+    register_product_commands(app)
     register_lakespec_commands(app)
     register_init_lake_commands(app)
