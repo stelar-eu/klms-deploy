@@ -7,6 +7,16 @@ from typing import Annotated
 
 import typer
 
+from ..cli_help import (
+    CONTEXT_SETTINGS,
+    INIT_MANUAL_TLS_EPILOG,
+    INIT_MANUAL_TLS_HELP,
+    INIT_MINIMAL_EPILOG,
+    INIT_MINIMAL_HELP,
+    PRODUCT_EPILOG,
+    PRODUCT_HELP,
+    show_help_on_no_args,
+)
 from ..operations import (
     MANUAL_TLS_FILE_NAME,
     CommandError,
@@ -29,9 +39,25 @@ from ..operations.minimal_product import (
 
 def register_product_commands(app: typer.Typer) -> None:
     """Register product generation commands."""
-    product_app = typer.Typer(help="Create and manage product specifications")
-    product_app.command("init-minimal")(init_minimal_product_command)
-    product_app.command("init-manual-tls")(init_manual_tls_command)
+    product_app = typer.Typer(
+        help=PRODUCT_HELP,
+        epilog=PRODUCT_EPILOG,
+        invoke_without_command=True,
+        callback=show_help_on_no_args,
+        context_settings=CONTEXT_SETTINGS,
+    )
+    product_app.command(
+        "init-minimal",
+        help=INIT_MINIMAL_HELP,
+        epilog=INIT_MINIMAL_EPILOG,
+        short_help="Generate a minimal product",
+    )(init_minimal_product_command)
+    product_app.command(
+        "init-manual-tls",
+        help=INIT_MANUAL_TLS_HELP,
+        epilog=INIT_MANUAL_TLS_EPILOG,
+        short_help="Write manual TLS template",
+    )(init_manual_tls_command)
     register_lakespec_commands(product_app)
     app.add_typer(product_app, name="product")
 

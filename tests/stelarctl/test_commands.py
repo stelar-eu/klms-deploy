@@ -1975,6 +1975,70 @@ def test_root_cli_help_only_lists_implemented_commands():
     assert "model" not in result.stdout
 
 
+def test_root_cli_help_documents_current_workflow():
+    result = runner.invoke(app, ["--help"])
+
+    assert result.exit_code == 0
+    assert "product generate" in result.stdout
+    assert "init-lake cluster" in result.stdout
+    assert "init-manual-tls" in result.stdout
+
+
+def test_root_cli_short_help_alias_is_available():
+    result = runner.invoke(app, ["-h"])
+
+    assert result.exit_code == 0
+    assert "Usage:" in result.stdout
+    assert "product" in result.stdout
+
+
+def test_root_cli_without_args_shows_help():
+    result = runner.invoke(app, [])
+
+    assert result.exit_code == 0
+    assert "Usage:" in result.stdout
+    assert "product" in result.stdout
+    assert "init-lake" in result.stdout
+
+
+def test_product_cli_help_documents_tls_modes():
+    result = runner.invoke(app, ["product", "init-minimal", "--help"])
+
+    assert result.exit_code == 0
+    assert "INSECURE_MC_CLIENT" in result.stdout
+    assert "cert_manager" in result.stdout
+    assert "manual_tls" in result.stdout
+    assert "not" in result.stdout
+    assert "generated" in result.stdout
+
+
+def test_product_manual_tls_help_documents_required_environment_file():
+    result = runner.invoke(app, ["product", "init-manual-tls", "--help"])
+
+    assert result.exit_code == 0
+    assert "environments/<env>/manual_tls.yaml" in result.stdout
+    assert "tls.crt" in result.stdout
+    assert "product_fullspec.json" in result.stdout
+
+
+def test_product_generate_help_documents_fullspec_validation():
+    result = runner.invoke(app, ["product", "generate", "--help"])
+
+    assert result.exit_code == 0
+    assert "minio.INSECURE_MC_CLIENT" in result.stdout
+    assert "manual_tls" in result.stdout
+    assert "cert_manager" in result.stdout
+
+
+def test_init_lake_cluster_help_documents_preflight_and_tls_behavior():
+    result = runner.invoke(app, ["init-lake", "cluster", "--help"])
+
+    assert result.exit_code == 0
+    assert "--skip-preflight" in result.stdout
+    assert "manual_tls" in result.stdout
+    assert "cert-manager" in result.stdout
+
+
 class FakeProductValidator:
     def __init__(self, feature_model):
         self.feature_model = feature_model

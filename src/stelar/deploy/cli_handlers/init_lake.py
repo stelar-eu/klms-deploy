@@ -7,6 +7,18 @@ from typing import Annotated
 
 import typer
 
+from ..cli_help import (
+    CONTEXT_SETTINGS,
+    INIT_LAKE_CLUSTER_EPILOG,
+    INIT_LAKE_CLUSTER_HELP,
+    INIT_LAKE_ENVIRONMENT_EPILOG,
+    INIT_LAKE_ENVIRONMENT_HELP,
+    INIT_LAKE_EPILOG,
+    INIT_LAKE_HELP,
+    INIT_LAKE_WORKSPACE_EPILOG,
+    INIT_LAKE_WORKSPACE_HELP,
+    show_help_on_no_args,
+)
 from .progress import (
     TyperClusterProgress,
     TyperLakeEnvironmentProgress,
@@ -23,10 +35,31 @@ from ..operations import (
 
 def register_init_lake_commands(app: typer.Typer) -> None:
     """Register `init-lake` and its subcommands on the root CLI app."""
-    init_lake_app = typer.Typer(help="Initialize lake workspaces, environments, and clusters")
-    init_lake_app.command("workspace")(init_lake_workspace_command)
-    init_lake_app.command("environment")(init_lake_environment_command)
-    init_lake_app.command("cluster")(init_lake_cluster_command)
+    init_lake_app = typer.Typer(
+        help=INIT_LAKE_HELP,
+        epilog=INIT_LAKE_EPILOG,
+        invoke_without_command=True,
+        callback=show_help_on_no_args,
+        context_settings=CONTEXT_SETTINGS,
+    )
+    init_lake_app.command(
+        "workspace",
+        help=INIT_LAKE_WORKSPACE_HELP,
+        epilog=INIT_LAKE_WORKSPACE_EPILOG,
+        short_help="Initialize a workspace root",
+    )(init_lake_workspace_command)
+    init_lake_app.command(
+        "environment",
+        help=INIT_LAKE_ENVIRONMENT_HELP,
+        epilog=INIT_LAKE_ENVIRONMENT_EPILOG,
+        short_help="Create an environment directory",
+    )(init_lake_environment_command)
+    init_lake_app.command(
+        "cluster",
+        help=INIT_LAKE_CLUSTER_HELP,
+        epilog=INIT_LAKE_CLUSTER_EPILOG,
+        short_help="Prepare cluster metadata and secrets",
+    )(init_lake_cluster_command)
     app.add_typer(init_lake_app, name="init-lake")
 
 

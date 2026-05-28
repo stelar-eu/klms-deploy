@@ -8,13 +8,19 @@ from typing import Annotated
 
 import typer
 
+from ..cli_help import PRODUCT_GENERATE_EPILOG, PRODUCT_GENERATE_HELP
 from ..operations import CommandError, product_to_fullspec
 from ..models.product import ProductValidationFailure
 
 
 def register_lakespec_commands(app: typer.Typer) -> None:
     """Register fullspec generation commands on a Typer app."""
-    app.command("generate")(generate_lakespec_command)
+    app.command(
+        "generate",
+        help=PRODUCT_GENERATE_HELP,
+        epilog=PRODUCT_GENERATE_EPILOG,
+        short_help="Generate product fullspec",
+    )(generate_lakespec_command)
 
 
 def generate_lakespec_command(

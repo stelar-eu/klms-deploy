@@ -3,14 +3,9 @@
 from __future__ import annotations
 
 from .common import CommandError, JsonObject
+from .manual_tls import MANUAL_TLS_SECRET_FIELDS
 
 TLS_MODES = {"no_tls", "cert_manager", "manual_tls", "self_signed"}
-MANUAL_TLS_SECRET_FIELDS = (
-    "PRIMARY_TLS_SECRET_NAME",
-    "KEYCLOAK_TLS_SECRET_NAME",
-    "MINIO_API_TLS_SECRET_NAME",
-    "REGISTRY_TLS_SECRET_NAME",
-)
 
 
 def validate_fullspec_scheme_tls_consistency(
