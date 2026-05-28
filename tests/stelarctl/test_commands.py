@@ -1,5 +1,6 @@
 import base64
 import json
+import re
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -47,6 +48,11 @@ MAIN_JSONNET_TEMPLATE = (
 )
 SPEC_JSON_TEMPLATE = '{\n  "apiVersion": "tanka.dev/v1alpha1",\n  "spec": {}\n}\n'
 runner = CliRunner()
+ANSI_ESCAPE_RE = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
+
+
+def plain_help(output: str) -> str:
+    return ANSI_ESCAPE_RE.sub("", output)
 
 
 def read_jsonnetfile(workspace: Path) -> dict:
@@ -2016,9 +2022,10 @@ def test_product_manual_tls_help_documents_required_environment_file():
     result = runner.invoke(app, ["product", "init-manual-tls", "--help"])
 
     assert result.exit_code == 0
-    assert "environments/<env>/manual_tls.yaml" in result.stdout
-    assert "tls.crt" in result.stdout
-    assert "product_fullspec.json" in result.stdout
+    output = plain_help(result.stdout)
+    assert "environments/<env>/manual_tls.yaml" in output
+    assert "tls.crt" in output
+    assert "product_fullspec.json" in output
 
 
 def test_product_generate_help_documents_fullspec_validation():
@@ -2034,9 +2041,10 @@ def test_init_lake_cluster_help_documents_preflight_and_tls_behavior():
     result = runner.invoke(app, ["init-lake", "cluster", "--help"])
 
     assert result.exit_code == 0
-    assert "--skip-preflight" in result.stdout
-    assert "manual_tls" in result.stdout
-    assert "cert-manager" in result.stdout
+    output = plain_help(result.stdout)
+    assert "--skip-preflight" in output
+    assert "manual_tls" in output
+    assert "cert-manager" in output
 
 
 class FakeProductValidator:
