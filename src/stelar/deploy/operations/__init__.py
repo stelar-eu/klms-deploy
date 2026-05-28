@@ -15,9 +15,17 @@ from .common import (
 from .lake_environment import init_lake_environment
 from .lake_workspace import init_lake_workspace
 from .lakespec import product_to_fullspec
+from .minimal_product import (
+    build_minimal_product,
+    generate_minimal_secret_values,
+    infer_storage_classes_from_cluster,
+)
 
 __all__ = [
     "CommandError",
+    "build_minimal_product",
+    "generate_minimal_secret_values",
+    "infer_storage_classes_from_cluster",
     "init_lake_cluster",
     "init_lake_environment",
     "init_lake_workspace",
