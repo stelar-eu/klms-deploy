@@ -605,6 +605,16 @@ root:
                   attributes:
                     ClusterIssuer:
                       type: string
+                - name: manual_tls
+                  attributes:
+                    PRIMARY_TLS_SECRET_NAME:
+                      type: string
+                    KEYCLOAK_TLS_SECRET_NAME:
+                      type: string
+                    MINIO_API_TLS_SECRET_NAME:
+                      type: string
+                    REGISTRY_TLS_SECRET_NAME:
+                      type: string
                 - name: self_signed
 
         - name: network_policy

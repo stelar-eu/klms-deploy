@@ -95,6 +95,10 @@ def generate_minimal_secret_values() -> MinimalSecretValues:
 def build_minimal_product(config: MinimalProductConfig) -> JsonObject:
     """Build the minimal product spec accepted by the feature model."""
     scheme = _normalized_scheme(config.scheme)
+    insecure_minio_client = _normalized_minio_insecure_value(
+        scheme,
+        config.insecure_minio_client,
+    )
     ingress: JsonObject = {"ingress_controller": ["nginx"], "tls": ["no_tls"]}
     if scheme == "https":
         if not config.cluster_issuer:
@@ -158,7 +162,7 @@ def build_minimal_product(config: MinimalProductConfig) -> JsonObject:
             "API_DOMAIN": minio_api_domain,
             "CONSOLE_DOMAIN": f"{primary_domain}/s3",
             "S3_CONSOLE_URL": f"{primary_domain}/s3/login",
-            "INSECURE_MC_CLIENT": config.insecure_minio_client,
+            "INSECURE_MC_CLIENT": insecure_minio_client,
             "MINIO_ROOT_PASSWORD": config.secrets.minio_root_password,
             "MINIO_ROOT_PASSWORD_SECRET_NAME": "minioroot-secret",
         },
@@ -369,6 +373,14 @@ def _normalized_scheme(scheme: str) -> str:
     if scheme not in {"http", "https"}:
         raise CommandError("Scheme must be either http or https")
     return scheme
+
+
+def _normalized_minio_insecure_value(scheme: str, value: str) -> str:
+    if scheme == "http":
+        return "true"
+    if value not in {"true", "false"}:
+        raise CommandError("Insecure MinIO client must be either true or false")
+    return value
 
 
 def _ensure_parent_dir(path: Path) -> None:

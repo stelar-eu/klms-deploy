@@ -92,7 +92,9 @@ stelarctl product init-minimal [OUTPUT] [--generate-secret-values]
 
 Interactively creates a minimal product spec. The minimal product selects the
 required core components, PVC storage, nginx ingress, and no optional
-components.
+components. It supports `http` with `no_tls` and `https` with `cert_manager`;
+it does not generate manual TLS products. When `http` is selected,
+`INSECURE_MC_CLIENT` is forced to `true` and is not prompted.
 
 Use `--generate-secret-values` to let `stelarctl` generate the required secret
 values. Generated values are also written to a sidecar file named after the
@@ -101,6 +103,17 @@ product, for example `product.secrets.yaml`; store that file securely.
 Use `--infer-storage-from-cluster` when the current Kubernetes user is allowed
 to read StorageClasses and you want the command to prefill storage class names
 from the active or selected kubectl context.
+
+### product init-manual-tls
+
+```bash
+stelarctl product init-manual-tls manual_tls.yaml
+```
+
+Writes a sample manual TLS secret input file. The command does not create any
+certificate directories or README files. Edit each endpoint value to point to a
+directory that contains `tls.crt` and `tls.key`, then place the file at
+`environments/ENV/manual_tls.yaml` before running `init-lake cluster`.
 
 ### product generate
 
@@ -116,7 +129,15 @@ environments/ENV/product.json
 environments/ENV/product_fullspec.json
 ```
 
-The fullspec is also printed to stdout for inspection.
+The TLS mode is selected under `ingress.tls`. Use `no_tls` with `SCHEME: http`
+and `minio.INSECURE_MC_CLIENT: "true"`. For HTTPS, use `cert_manager`,
+`manual_tls`, or `self_signed`. When using
+`manual_tls`, provide the Kubernetes TLS secret names under `ingress.manual_tls`:
+`PRIMARY_TLS_SECRET_NAME`, `KEYCLOAK_TLS_SECRET_NAME`, `MINIO_API_TLS_SECRET_NAME`,
+and `REGISTRY_TLS_SECRET_NAME`. When `manual_tls` is selected,
+`environments/ENV/manual_tls.yaml` is required. `init-lake cluster` validates
+the referenced `tls.crt`/`tls.key` PEM files and applies matching Kubernetes TLS
+Secrets.
 
 ### init-lake cluster
 

@@ -150,6 +150,7 @@ def write_generated_lake_files(
             "dynamicStorageClass": dynamic_storage_class,
             "dynamic_volume_storage_class": provisioning_storage_class,
             "SCHEME": scheme,
+            "minio": {"INSECURE_MC_CLIENT": "true" if scheme == "http" else "false"},
             "ingress": ingress,
         }
     }
@@ -212,6 +213,8 @@ def set_cluster_preflight(
 
         def read_namespaced_secret(self, name, namespace):
             calls["read_secrets"].append((namespace, name))
+            if missing == "secret_read_forbidden":
+                forbidden()
             if missing == "secret_read_error":
                 raise cluster_commands.ApiException(status=500, reason="Server Error")
             if name not in existing_secrets:
@@ -222,6 +225,8 @@ def set_cluster_preflight(
             name = body["metadata"]["name"]
             if missing == "secret_conflict":
                 raise cluster_commands.ApiException(status=409, reason="Conflict")
+            if missing == "secret_create_forbidden":
+                forbidden()
             if missing == "secret_create_error":
                 raise cluster_commands.ApiException(status=500, reason="Server Error")
             calls["created_secrets"].append((namespace, name, body))
@@ -376,6 +381,97 @@ def decoded_secret_data(secret: dict) -> dict[str, str]:
         key: base64.b64decode(value).decode("utf-8")
         for key, value in secret["data"].items()
     }
+
+
+TLS_CERT_PEM = """-----BEGIN CERTIFICATE-----
+MIIDDzCCAfegAwIBAgIUMyX14VqDvk6k/uvGexOAodHEy4wwDQYJKoZIhvcNAQEL
+BQAwFzEVMBMGA1UEAwwMZXhhbXBsZS50ZXN0MB4XDTI2MDUyODE2NTYzM1oXDTI2
+MDUyOTE2NTYzM1owFzEVMBMGA1UEAwwMZXhhbXBsZS50ZXN0MIIBIjANBgkqhkiG
+9w0BAQEFAAOCAQ8AMIIBCgKCAQEAqWSnlrJhiQt83guiWlbxYCw95VQXFxlwpiVQ
+FscNIEJNEG6uFHAgVwtkSjfFrX6jl+UJX4Hg/U/sDxNVNH8Gw6pybn/k0UIBs5E+
+1DBcVdFgLD719CzOK9IuThuHMOte9vR8i14qlvWWrmmutwWLwUFRxXW2PShl6KsO
+Zfso0cC196h/WgLsSyStCHdQe6PqPVE/7MzQJMxQEhnUB2YAReKenH3VnYw9QKeJ
+3e3ZtnihB6VQMO9i953Gg5Cxdcngu8iPEEaU37KvfZzTRUESH59Tgz0m6JYa7SSf
+MHDKdx3wPiZ/WmpiGTyJJBtATpZIdn8IoGg5OMrwuQbrPNEJfQIDAQABo1MwUTAd
+BgNVHQ4EFgQUIrnFDiBpW8fmK2yyHroBeYFsZrcwHwYDVR0jBBgwFoAUIrnFDiBp
+W8fmK2yyHroBeYFsZrcwDwYDVR0TAQH/BAUwAwEB/zANBgkqhkiG9w0BAQsFAAOC
+AQEAHMBOpvVpj6/MZp2m8rI7Yw+zFzQhqomhhdg90tYy7GAT8AlXY0PqfGA7iMKi
+JPNg6dNWpA/E+HBPh3AJT3jGz4F0olbNV5i+hhm/Xa6Fu39JTF2D2ZfYFSxv3fFc
+wH8tkre+09RRqYkuLe6Ny8l4xDYpBLYX2fo6iFj3UxKaACixnQXx4iHX6iORMWD9
+r9hWKTA0E4YFVFCa2DMZ/y+ZDKxQIohL1I1MuzxAmGc+ygoIRXhFC/Bnvm9oYLCe
+iUlKDYLSbU3fsf5D9QmcrbwlsfKZOfPyJRlpYftKCbvTU51J4/lqqZ4FnzZ2Cx2y
+pTnWBJd/FBAzvqmOT6SdXRgRIg==
+-----END CERTIFICATE-----
+"""
+TLS_KEY_PEM = """-----BEGIN PRIVATE KEY-----
+MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQCpZKeWsmGJC3ze
+C6JaVvFgLD3lVBcXGXCmJVAWxw0gQk0Qbq4UcCBXC2RKN8WtfqOX5QlfgeD9T+wP
+E1U0fwbDqnJuf+TRQgGzkT7UMFxV0WAsPvX0LM4r0i5OG4cw61729HyLXiqW9Zau
+aa63BYvBQVHFdbY9KGXoqw5l+yjRwLX3qH9aAuxLJK0Id1B7o+o9UT/szNAkzFAS
+GdQHZgBF4p6cfdWdjD1Ap4nd7dm2eKEHpVAw72L3ncaDkLF1yeC7yI8QRpTfsq99
+nNNFQRIfn1ODPSbolhrtJJ8wcMp3HfA+Jn9aamIZPIkkG0BOlkh2fwigaDk4yvC5
+Bus80Ql9AgMBAAECggEALSOdZRLz2sks5R7EjL5OZApmFA5seMNWuW+IAAna/ZWt
+Y4ua5+dZNtjaSMzD6I+umHN4I/NAOUBq7zl/oxWWf92T0M5T809blLZHv9ODR3sb
+3a6JbB/kcNj5beb4B5kxHS3ZYmodf0zCcofG/w6DR2RYnf3YKkPxpCaxF4vuPLZm
+r0TWa0cLOHre3EFWxLQSsp3dSmgfMrg7qYnIZ2cjIJ7IYuO5ZlmU2tZEaA0AvQg4
+lC05O4yywWhHHxoiLSbbWhpJcj/lwr0aFunyYKbTVlYOWBD/J/us/3ZtbKImS15V
+z0olIS97fHkGNoRxRImbQvduhFAwuNnlw89HC+pPIQKBgQDZroXA3znVfQM5T0XI
+TB6RNyibYcFCT6ytdd0i9/PUSSFcbAkKbKOX8Dh2fnviGe2Y/w/oiKWaEcoTZ7Hg
+LGBICHyzCeULlGvuxhNtfmwjIMMMi+FJPk2IDRS5gboU8MJgCUR6g7Lt6l3WnGCt
+ejbaYecIZYyi5fODwPTjSGJZwwKBgQDHNhYc4VEG3Q1KkxPvh259KZDln7j4+bhY
+HjWgggZ7JeN8kKyrJV9koj4RZ2YchYtNCn39KkDlqBk7nrmfzzPDI1LX+KQHNAPW
+lmhO/P4ncaWtmte21aG+OBTeP+ZlHTdPRh9JRoY/0qE1aPcWglvqM79/w7sHl0nm
+uowRLB2bvwKBgD4g+pnm3GnbaV0lDASz/RFzTcqzZuZXOTC08C232UbgrH3lc9se
+0L5f2K2xQghxYAgH3HGA9sr3gtZxBSq3X6+PhI/RJidc8EVREWBx8clA44qkLeOq
+vZQ0L5MWvJaXdNLWMk5JYntXJftH3KwGsrs3sCoMWcxwl0UmgH6SPUfjAoGBAIUX
+nJR08JZ+Tyf4tYP9XpMelyDiokktRb0RidCPrlbOTHrniYTadi4cuw0ToMQDcLrq
+/JuMhEkrEpijhe7AFxwTWIDULHpnhPz0BgJnwkGGCyO+ZMpRVjto6oBF/t6lM1Oy
+TKq/BGhVh8DQPOx78X66TgHFOgprSENvdK7wY2OvAoGAXuHPHr9o+BGhparM/zyU
+k0OPK01pdnEBwL/5xRgtf+okaghvWIn9IH2VQjLXspZUsTrks6ZPstsBG/veU8dk
+HMewtyYdIfVntS+Uez6b9vp792Dofu9H/ehgLInBfpDsk+lST7ge0QqFXJOeoCnD
+PQ1vDR3zeA0+a3pp5dch4h4=
+-----END PRIVATE KEY-----
+"""
+
+def configure_manual_tls_fullspec(environment_dir: Path) -> None:
+    fullspec = read_json(environment_dir / "product_fullspec.json")
+    fullspec["klms"]["ingress"] = {
+        "tls": ["manual_tls"],
+        "manual_tls": {
+            "PRIMARY_TLS_SECRET_NAME": "klms-manual-tls",
+            "KEYCLOAK_TLS_SECRET_NAME": "kc-manual-tls",
+            "MINIO_API_TLS_SECRET_NAME": "minio-manual-tls",
+            "REGISTRY_TLS_SECRET_NAME": "img-manual-tls",
+        },
+    }
+    write_json(environment_dir / "product_fullspec.json", fullspec)
+
+
+def write_manual_tls_input(
+    environment_dir: Path,
+    *,
+    omit_key_for: str | None = None,
+    registry_directory: str = "./certs/registry",
+) -> None:
+    manual_tls = {
+        "manual_tls": {
+            "primary": "./certs/primary",
+            "keycloak": "./certs/keycloak",
+            "minio_api": "./certs/minio-api",
+            "registry": registry_directory,
+        }
+    }
+    (environment_dir / "manual_tls.yaml").write_text(
+        f"{json.dumps(manual_tls)}\n",
+        encoding="utf-8",
+    )
+
+    for endpoint_name, directory in manual_tls["manual_tls"].items():
+        cert_dir = environment_dir / directory
+        cert_dir.mkdir(parents=True, exist_ok=True)
+        (cert_dir / "tls.crt").write_text(TLS_CERT_PEM, encoding="utf-8")
+        if endpoint_name != omit_key_for:
+            (cert_dir / "tls.key").write_text(TLS_KEY_PEM, encoding="utf-8")
 
 
 class RecordingClusterProgress:
@@ -986,7 +1082,199 @@ def test_init_lake_cluster_rejects_https_without_tls_mode(tmp_path, monkeypatch)
     write_json(environment_dir / "product_fullspec.json", fullspec)
     set_cluster_preflight(monkeypatch)
 
-    with pytest.raises(CommandError, match="SCHEME https.*cert_manager or self_signed"):
+    with pytest.raises(CommandError, match="SCHEME https.*manual_tls"):
+        init_lake_cluster("dev", workspace)
+
+
+def test_init_lake_cluster_accepts_manual_tls_without_cert_manager_preflight(
+    tmp_path,
+    monkeypatch,
+):
+    workspace = make_workspace(tmp_path / "workspace")
+    init_lake_environment("dev", workspace)
+    environment_dir = write_generated_lake_files(workspace, scheme="https")
+    fullspec = read_json(environment_dir / "product_fullspec.json")
+    fullspec["klms"]["ingress"] = {
+        "tls": ["manual_tls"],
+        "manual_tls": {
+            "PRIMARY_TLS_SECRET_NAME": "klms-manual-tls",
+            "KEYCLOAK_TLS_SECRET_NAME": "kc-manual-tls",
+            "MINIO_API_TLS_SECRET_NAME": "minio-manual-tls",
+            "REGISTRY_TLS_SECRET_NAME": "img-manual-tls",
+        },
+    }
+    write_json(environment_dir / "product_fullspec.json", fullspec)
+    write_manual_tls_input(environment_dir)
+    calls = set_cluster_preflight(monkeypatch)
+
+    init_lake_cluster("dev", workspace)
+
+    assert calls["storage_classes"] == ["fast-storage", "provisioning-storage"]
+    assert "crds" not in calls
+    assert "deployments" not in calls
+    assert "cluster_issuer" not in calls
+
+
+def test_init_lake_cluster_requires_manual_tls_environment_file(
+    tmp_path,
+    monkeypatch,
+):
+    workspace = make_workspace(tmp_path / "workspace")
+    init_lake_environment("dev", workspace)
+    environment_dir = write_generated_lake_files(workspace, scheme="https")
+    configure_manual_tls_fullspec(environment_dir)
+    product_spec = read_product_spec(environment_dir)
+    set_cluster_preflight(
+        monkeypatch,
+        existing_secrets=secret_names_from_product_spec(product_spec),
+    )
+
+    with pytest.raises(
+        CommandError,
+        match="manual_tls.yaml.*stelarctl product init-manual-tls",
+    ):
+        init_lake_cluster("dev", workspace)
+
+
+def test_init_lake_cluster_applies_manual_tls_secrets_from_environment_file(
+    tmp_path,
+    monkeypatch,
+):
+    workspace = make_workspace(tmp_path / "workspace")
+    init_lake_environment("dev", workspace)
+    environment_dir = write_generated_lake_files(workspace, scheme="https")
+    configure_manual_tls_fullspec(environment_dir)
+    write_manual_tls_input(environment_dir)
+    calls = set_cluster_preflight(monkeypatch)
+
+    init_lake_cluster("dev", workspace)
+
+    created_secrets = {
+        secret_name: body
+        for _, secret_name, body in calls["created_secrets"]
+    }
+    for secret_name in {
+        "klms-manual-tls",
+        "kc-manual-tls",
+        "minio-manual-tls",
+        "img-manual-tls",
+    }:
+        assert created_secrets[secret_name]["type"] == "kubernetes.io/tls"
+        assert decoded_secret_data(created_secrets[secret_name]) == {
+            "tls.crt": TLS_CERT_PEM,
+            "tls.key": TLS_KEY_PEM,
+        }
+
+
+def test_init_lake_cluster_rejects_invalid_manual_tls_directory_value(
+    tmp_path,
+    monkeypatch,
+):
+    workspace = make_workspace(tmp_path / "workspace")
+    init_lake_environment("dev", workspace)
+    environment_dir = write_generated_lake_files(workspace, scheme="https")
+    configure_manual_tls_fullspec(environment_dir)
+    manual_tls = {
+        "manual_tls": {
+            "primary": "./certs/primary",
+            "keycloak": "./certs/keycloak",
+            "minio_api": "./certs/minio-api",
+            "registry": {"directory": "./certs/registry"},
+        }
+    }
+    (environment_dir / "manual_tls.yaml").write_text(
+        f"{json.dumps(manual_tls)}\n",
+        encoding="utf-8",
+    )
+    product_spec = read_product_spec(environment_dir)
+    set_cluster_preflight(
+        monkeypatch,
+        existing_secrets=secret_names_from_product_spec(product_spec),
+    )
+
+    with pytest.raises(CommandError, match="manual_tls.registry"):
+        init_lake_cluster("dev", workspace)
+
+
+def test_init_lake_cluster_rejects_invalid_manual_tls_secret_files(
+    tmp_path,
+    monkeypatch,
+):
+    workspace = make_workspace(tmp_path / "workspace")
+    init_lake_environment("dev", workspace)
+    environment_dir = write_generated_lake_files(workspace, scheme="https")
+    configure_manual_tls_fullspec(environment_dir)
+    write_manual_tls_input(environment_dir, omit_key_for="registry")
+    product_spec = read_product_spec(environment_dir)
+    set_cluster_preflight(
+        monkeypatch,
+        existing_secrets=secret_names_from_product_spec(product_spec),
+    )
+
+    with pytest.raises(CommandError, match="tls.key.*does not exist"):
+        init_lake_cluster("dev", workspace)
+
+
+def test_init_lake_cluster_rejects_invalid_manual_tls_pem_base64(
+    tmp_path,
+    monkeypatch,
+):
+    workspace = make_workspace(tmp_path / "workspace")
+    init_lake_environment("dev", workspace)
+    environment_dir = write_generated_lake_files(workspace, scheme="https")
+    configure_manual_tls_fullspec(environment_dir)
+    write_manual_tls_input(environment_dir)
+    (environment_dir / "certs" / "registry" / "tls.crt").write_text(
+        "-----BEGIN CERTIFICATE-----\nnot valid base64!\n-----END CERTIFICATE-----\n",
+        encoding="utf-8",
+    )
+    product_spec = read_product_spec(environment_dir)
+    set_cluster_preflight(
+        monkeypatch,
+        existing_secrets=secret_names_from_product_spec(product_spec),
+    )
+
+    with pytest.raises(CommandError, match="invalid PEM base64"):
+        init_lake_cluster("dev", workspace)
+
+
+def test_init_lake_cluster_reports_manual_tls_secret_create_forbidden(
+    tmp_path,
+    monkeypatch,
+):
+    workspace = make_workspace(tmp_path / "workspace")
+    init_lake_environment("dev", workspace)
+    environment_dir = write_generated_lake_files(workspace, scheme="https")
+    configure_manual_tls_fullspec(environment_dir)
+    write_manual_tls_input(environment_dir)
+    product_spec = read_product_spec(environment_dir)
+    set_cluster_preflight(
+        monkeypatch,
+        existing_secrets=secret_names_from_product_spec(product_spec),
+        missing="secret_create_forbidden",
+    )
+
+    with pytest.raises(CommandError, match="not authorized to create manual TLS Secret"):
+        init_lake_cluster("dev", workspace)
+
+
+def test_init_lake_cluster_requires_manual_tls_secret_names(tmp_path, monkeypatch):
+    workspace = make_workspace(tmp_path / "workspace")
+    init_lake_environment("dev", workspace)
+    environment_dir = write_generated_lake_files(workspace, scheme="https")
+    fullspec = read_json(environment_dir / "product_fullspec.json")
+    fullspec["klms"]["ingress"] = {
+        "tls": ["manual_tls"],
+        "manual_tls": {
+            "PRIMARY_TLS_SECRET_NAME": "klms-manual-tls",
+            "KEYCLOAK_TLS_SECRET_NAME": "kc-manual-tls",
+            "MINIO_API_TLS_SECRET_NAME": "minio-manual-tls",
+        },
+    }
+    write_json(environment_dir / "product_fullspec.json", fullspec)
+    set_cluster_preflight(monkeypatch)
+
+    with pytest.raises(CommandError, match="REGISTRY_TLS_SECRET_NAME"):
         init_lake_cluster("dev", workspace)
 
 
@@ -1697,6 +1985,7 @@ class FakeProductValidator:
                 "namespace": product.spec["namespace"],
                 "generated": True,
                 "SCHEME": "http",
+                "minio": {"INSECURE_MC_CLIENT": "true"},
                 "ingress": {"tls": ["no_tls"], "no_tls": {}},
             }
         }
@@ -1722,10 +2011,26 @@ class HttpWithTlsProductValidator:
             "klms": {
                 "namespace": product.spec["namespace"],
                 "SCHEME": "http",
+                "minio": {"INSECURE_MC_CLIENT": "true"},
                 "ingress": {
                     "tls": ["cert_manager"],
                     "cert_manager": {"ClusterIssuer": "letsencrypt-production"},
                 },
+            }
+        }
+
+
+class HttpWithSecureMinioProductValidator:
+    def __init__(self, feature_model):
+        self.feature_model = feature_model
+
+    def validate(self, product):
+        return {
+            "klms": {
+                "namespace": product.spec["namespace"],
+                "SCHEME": "http",
+                "minio": {"INSECURE_MC_CLIENT": "false"},
+                "ingress": {"tls": ["no_tls"], "no_tls": {}},
             }
         }
 
@@ -1739,6 +2044,7 @@ class HttpsNoTlsProductValidator:
             "klms": {
                 "namespace": product.spec["namespace"],
                 "SCHEME": "https",
+                "minio": {"INSECURE_MC_CLIENT": "false"},
                 "ingress": {"tls": ["no_tls"], "no_tls": {}},
             }
         }
@@ -1775,6 +2081,7 @@ def test_generate_lakespec_cli_writes_files_and_prints_fullspec(
             "namespace": "test",
             "generated": True,
             "SCHEME": "http",
+            "minio": {"INSECURE_MC_CLIENT": "true"},
             "ingress": {"tls": ["no_tls"], "no_tls": {}},
         }
     }
@@ -1784,6 +2091,7 @@ def test_generate_lakespec_cli_writes_files_and_prints_fullspec(
             "namespace": "test",
             "generated": True,
             "SCHEME": "http",
+            "minio": {"INSECURE_MC_CLIENT": "true"},
             "ingress": {"tls": ["no_tls"], "no_tls": {}},
         }
     }
@@ -1876,6 +2184,7 @@ def test_product_to_fullspec_writes_product_and_fullspec(tmp_path, monkeypatch):
             "namespace": "test",
             "generated": True,
             "SCHEME": "http",
+            "minio": {"INSECURE_MC_CLIENT": "true"},
             "ingress": {"tls": ["no_tls"], "no_tls": {}},
         }
     }
@@ -1897,7 +2206,8 @@ def test_product_to_fullspec_writes_product_and_fullspec(tmp_path, monkeypatch):
     ("validator", "message"),
     [
         (HttpWithTlsProductValidator, "SCHEME http.*ingress.tls no_tls"),
-        (HttpsNoTlsProductValidator, "SCHEME https.*cert_manager or self_signed"),
+        (HttpsNoTlsProductValidator, "SCHEME https.*manual_tls"),
+        (HttpWithSecureMinioProductValidator, "SCHEME http.*INSECURE_MC_CLIENT"),
     ],
 )
 def test_product_to_fullspec_rejects_scheme_tls_mismatch(

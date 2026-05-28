@@ -4,7 +4,13 @@ from __future__ import annotations
 
 from .common import CommandError, JsonObject
 
-TLS_MODES = {"no_tls", "cert_manager", "self_signed"}
+TLS_MODES = {"no_tls", "cert_manager", "manual_tls", "self_signed"}
+MANUAL_TLS_SECRET_FIELDS = (
+    "PRIMARY_TLS_SECRET_NAME",
+    "KEYCLOAK_TLS_SECRET_NAME",
+    "MINIO_API_TLS_SECRET_NAME",
+    "REGISTRY_TLS_SECRET_NAME",
+)
 
 
 def validate_fullspec_scheme_tls_consistency(
@@ -48,8 +54,38 @@ def validate_config_scheme_tls_consistency(
         raise CommandError(
             f"{source} with SCHEME http must select ingress.tls no_tls"
         )
+    if scheme == "http":
+        _validate_http_minio_insecure(config, source=source)
     if scheme == "https" and tls_mode == "no_tls":
         raise CommandError(
-            f"{source} with SCHEME https must select cert_manager or self_signed "
-            "in ingress.tls"
+            f"{source} with SCHEME https must select cert_manager, manual_tls, "
+            "or self_signed in ingress.tls"
         )
+
+    if tls_mode == "manual_tls":
+        _validate_manual_tls_config(ingress, source=source)
+
+
+def _validate_http_minio_insecure(config: JsonObject, *, source: str) -> None:
+    minio = config.get("minio")
+    if not isinstance(minio, dict):
+        raise CommandError(f"{source} with SCHEME http must define minio")
+    if minio.get("INSECURE_MC_CLIENT") != "true":
+        raise CommandError(
+            f"{source} with SCHEME http must define "
+            "minio.INSECURE_MC_CLIENT as true"
+        )
+
+
+def _validate_manual_tls_config(ingress: JsonObject, *, source: str) -> None:
+    manual_tls = ingress.get("manual_tls")
+    if not isinstance(manual_tls, dict):
+        raise CommandError(f"{source} must define ingress.manual_tls as an object")
+
+    for field_name in MANUAL_TLS_SECRET_FIELDS:
+        value = manual_tls.get(field_name)
+        if not isinstance(value, str) or not value:
+            raise CommandError(
+                f"{source} must define ingress.manual_tls.{field_name} "
+                "as a non-empty string"
+            )

@@ -98,7 +98,9 @@ environments/dev/spec.json
 
 ### Create a product spec
 
-For a minimal deployment, use the interactive generator:
+For a minimal deployment, use the interactive generator. It supports `http`
+with `no_tls` and `https` with `cert_manager`; it does not generate manual TLS
+products. When `http` is selected, `INSECURE_MC_CLIENT` is forced to `true`:
 
 ```bash
 stelarctl product init-minimal product.yaml --generate-secret-values
@@ -134,6 +136,19 @@ This writes:
 environments/dev/product.json
 environments/dev/product_fullspec.json
 ```
+
+For manually provisioned TLS, select `ingress.tls: [manual_tls]` in the product
+and provide the four `ingress.manual_tls` secret-name attributes for the primary,
+Keycloak, MinIO API, and registry hosts. To create the required input file that
+lets `init-lake cluster` apply those secrets, run:
+
+```bash
+stelarctl product init-manual-tls environments/dev/manual_tls.yaml
+```
+
+Edit each endpoint value in that file to point to a directory containing
+`tls.crt` and `tls.key`. The command only writes the YAML sample; it does not
+create certificate directories.
 
 ### Prepare cluster metadata and secrets
 

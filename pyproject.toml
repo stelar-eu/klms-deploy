@@ -42,6 +42,7 @@ namespaces = true
 "stelar.deploy" = [
   "STELAR.yaml",
   "templates/jsonnetfile.json",
+  "templates/manual_tls.yaml",
 ]
 
 [tool.flake8]

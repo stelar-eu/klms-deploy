@@ -15,6 +15,7 @@ from stelar.deploy.models.product import (
 )
 from stelar.deploy.operations import minimal_product
 from stelar.deploy.operations.minimal_product import (
+    CommandError,
     InferredStorageClasses,
     MinimalProductConfig,
     build_generated_secret_report,
@@ -62,6 +63,7 @@ def test_build_minimal_product_validates_against_feature_model():
     assert klms["ingress"]["ingress_controller"] == ["nginx"]
     assert klms["ingress"]["tls"] == ["cert_manager"]
     assert klms["ingress"]["cert_manager"]["ClusterIssuer"] == "letsencrypt-prod"
+    assert "manual_tls" not in klms["ingress"]
     assert klms["minio"]["API_DOMAIN"] == "https://minio.example.test"
     assert klms["minio"]["CONSOLE_DOMAIN"] == "https://klms.example.test/s3"
 
@@ -76,6 +78,24 @@ def test_build_minimal_product_uses_no_tls_for_http():
     assert "CLUSTER_ISSUER" not in klms
     assert klms["ingress"]["tls"] == ["no_tls"]
     assert "cert_manager" not in klms["ingress"]
+    assert klms["minio"]["INSECURE_MC_CLIENT"] == "true"
+
+
+def test_build_minimal_product_forces_insecure_minio_for_http():
+    product = build_minimal_product(
+        minimal_config(
+            scheme="http",
+            cluster_issuer="ignored",
+            insecure_minio_client="false",
+        )
+    )
+
+    assert product["spec"]["minio"]["INSECURE_MC_CLIENT"] == "true"
+
+
+def test_build_minimal_product_rejects_invalid_https_insecure_minio_value():
+    with pytest.raises(CommandError, match="Insecure MinIO client"):
+        build_minimal_product(minimal_config(insecure_minio_client="maybe"))
 
 
 def test_feature_model_rejects_multiple_tls_modes():
@@ -84,6 +104,40 @@ def test_feature_model_rejects_multiple_tls_modes():
     product["spec"]["ingress"]["self_signed"] = {}
 
     with pytest.raises(ProductValidationFailure, match="Exactly one member of group tls"):
+        ProductValidator(feature_model).validate(Product.model_validate(product))
+
+
+def test_feature_model_accepts_manual_tls_secret_names():
+    product = build_minimal_product(minimal_config())
+    product["spec"]["ingress"].pop("cert_manager")
+    product["spec"]["ingress"]["tls"] = ["manual_tls"]
+    product["spec"]["ingress"]["manual_tls"] = {
+        "PRIMARY_TLS_SECRET_NAME": "klms-manual-tls",
+        "KEYCLOAK_TLS_SECRET_NAME": "kc-manual-tls",
+        "MINIO_API_TLS_SECRET_NAME": "minio-manual-tls",
+        "REGISTRY_TLS_SECRET_NAME": "img-manual-tls",
+    }
+
+    fullspec = ProductValidator(feature_model).validate(Product.model_validate(product))
+
+    assert fullspec["klms"]["ingress"]["tls"] == ["manual_tls"]
+    assert fullspec["klms"]["ingress"]["manual_tls"] == {
+        "PRIMARY_TLS_SECRET_NAME": "klms-manual-tls",
+        "KEYCLOAK_TLS_SECRET_NAME": "kc-manual-tls",
+        "MINIO_API_TLS_SECRET_NAME": "minio-manual-tls",
+        "REGISTRY_TLS_SECRET_NAME": "img-manual-tls",
+    }
+
+
+def test_feature_model_requires_manual_tls_secret_names():
+    product = build_minimal_product(minimal_config())
+    product["spec"]["ingress"].pop("cert_manager")
+    product["spec"]["ingress"]["tls"] = ["manual_tls"]
+    product["spec"]["ingress"]["manual_tls"] = {
+        "PRIMARY_TLS_SECRET_NAME": "klms-manual-tls",
+    }
+
+    with pytest.raises(ProductValidationFailure, match="KEYCLOAK_TLS_SECRET_NAME"):
         ProductValidator(feature_model).validate(Product.model_validate(product))
 
 
@@ -209,6 +263,8 @@ def test_product_init_minimal_cli_generates_product_and_secret_report(tmp_path):
     assert product["spec"]["dynamic_volume_storage_class"] == "csi-hostpath-sc"
     assert product["spec"]["cluster"] == []
     assert product["spec"]["optional_components"] == []
+    assert product["spec"]["ingress"]["tls"] == ["cert_manager"]
+    assert "manual_tls" not in product["spec"]["ingress"]
     assert secret_report["secrets"]["minio"]["MINIO_ROOT_PASSWORD"] == product[
         "spec"
     ]["minio"]["MINIO_ROOT_PASSWORD"]
@@ -246,7 +302,6 @@ def test_product_init_minimal_cli_can_infer_storage_from_cluster(tmp_path, monke
             "kc\n"
             "minio\n"
             "img\n"
-            "true\n"
             "smtp.example.test\n"
             "465\n"
             "operator\n"
@@ -261,6 +316,36 @@ def test_product_init_minimal_cli_can_infer_storage_from_cluster(tmp_path, monke
     assert product["spec"]["dynamic_volume_storage_class"] == "fast-storage"
     assert "CLUSTER_ISSUER" not in product["spec"]
     assert product["spec"]["ingress"]["tls"] == ["no_tls"]
+    assert "manual_tls" not in product["spec"]["ingress"]
+    assert product["spec"]["minio"]["INSECURE_MC_CLIENT"] == "true"
+
+
+def test_product_init_manual_tls_cli_writes_sample_without_creating_cert_dirs(
+    tmp_path,
+):
+    output = tmp_path / "manual_tls.yaml"
+
+    result = runner.invoke(app, ["product", "init-manual-tls", str(output)])
+
+    assert result.exit_code == 0, result.output
+    assert "Wrote manual TLS sample" in result.output
+    assert "tls.crt" in result.output
+    assert "tls.key" in result.output
+    data = yaml.safe_load(output.read_text(encoding="utf-8"))
+    assert data["manual_tls"]["primary"] == "./certs/primary"
+    assert data["manual_tls"]["registry"] == "./certs/registry"
+    assert not (tmp_path / "certs").exists()
+
+
+def test_product_init_manual_tls_cli_rejects_existing_file(tmp_path):
+    output = tmp_path / "manual_tls.yaml"
+    output.write_text("existing", encoding="utf-8")
+
+    result = runner.invoke(app, ["product", "init-manual-tls", str(output)])
+
+    assert result.exit_code != 0
+    assert "already exists" in result.output
+    assert output.read_text(encoding="utf-8") == "existing"
 
 
 def test_product_init_minimal_rejects_same_product_and_secret_report_path(tmp_path):

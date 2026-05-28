@@ -7,7 +7,11 @@ from typing import Annotated
 
 import typer
 
-from ..operations import CommandError
+from ..operations import (
+    MANUAL_TLS_FILE_NAME,
+    CommandError,
+    write_manual_tls_sample,
+)
 from .lakespec import register_lakespec_commands
 from ..operations.minimal_product import (
     InferredStorageClasses,
@@ -27,6 +31,7 @@ def register_product_commands(app: typer.Typer) -> None:
     """Register product generation commands."""
     product_app = typer.Typer(help="Create and manage product specifications")
     product_app.command("init-minimal")(init_minimal_product_command)
+    product_app.command("init-manual-tls")(init_manual_tls_command)
     register_lakespec_commands(product_app)
     app.add_typer(product_app, name="product")
 
@@ -114,6 +119,35 @@ def init_minimal_product_command(
         raise typer.BadParameter(str(exc)) from exc
 
 
+def init_manual_tls_command(
+    output: Annotated[
+        Path,
+        typer.Argument(
+            file_okay=True,
+            dir_okay=False,
+            resolve_path=True,
+            help="Manual TLS secret input YAML file to create",
+        ),
+    ] = Path(MANUAL_TLS_FILE_NAME),
+    force: Annotated[
+        bool,
+        typer.Option("--force", help="Overwrite an existing output file"),
+    ] = False,
+) -> None:
+    """Generate a sample manual TLS secret input file."""
+    try:
+        write_manual_tls_sample(output, force=force)
+    except CommandError as exc:
+        raise typer.BadParameter(str(exc)) from exc
+
+    typer.echo(f"Wrote manual TLS sample: {output}")
+    typer.echo(
+        "Edit each endpoint value so it points to a folder containing tls.crt "
+        "and tls.key, then place the file at environments/<env>/manual_tls.yaml "
+        "before running init-lake cluster."
+    )
+
+
 def _prompt_minimal_product_config(
     *,
     generate_secret_values: bool,
@@ -145,22 +179,34 @@ def _prompt_minimal_product_config(
         else _prompt_secret_values()
     )
 
+    namespace = _prompt_required("Kubernetes namespace", default="stelar-dev")
+    root_domain = _prompt_required("Public root domain", default="minikube")
+    primary_subdomain = _prompt_required("Primary app subdomain", default="klms")
+    keycloak_subdomain = _prompt_required("Keycloak subdomain", default="kc")
+    minio_api_subdomain = _prompt_required("MinIO API subdomain", default="minio")
+    registry_subdomain = _prompt_required("Registry subdomain", default="img")
+    insecure_minio_client = (
+        "true"
+        if scheme == "http"
+        else _prompt_choice(
+            "Insecure MinIO client",
+            ("true", "false"),
+            default="true",
+        )
+    )
+
     return MinimalProductConfig(
-        namespace=_prompt_required("Kubernetes namespace", default="stelar-dev"),
-        root_domain=_prompt_required("Public root domain", default="minikube"),
-        primary_subdomain=_prompt_required("Primary app subdomain", default="klms"),
-        keycloak_subdomain=_prompt_required("Keycloak subdomain", default="kc"),
-        minio_api_subdomain=_prompt_required("MinIO API subdomain", default="minio"),
-        registry_subdomain=_prompt_required("Registry subdomain", default="img"),
+        namespace=namespace,
+        root_domain=root_domain,
+        primary_subdomain=primary_subdomain,
+        keycloak_subdomain=keycloak_subdomain,
+        minio_api_subdomain=minio_api_subdomain,
+        registry_subdomain=registry_subdomain,
         scheme=scheme,
         cluster_issuer=cluster_issuer,
         dynamic_storage_class=dynamic_storage_class,
         provisioning_storage_class=provisioning_storage_class,
-        insecure_minio_client=_prompt_choice(
-            "Insecure MinIO client",
-            ("true", "false"),
-            default="true",
-        ),
+        insecure_minio_client=insecure_minio_client,
         smtp_server=_prompt_required("SMTP server", default="stelar.gr"),
         smtp_port=_prompt_required("SMTP port", default="465"),
         smtp_username=_prompt_required("SMTP username", default="user"),
