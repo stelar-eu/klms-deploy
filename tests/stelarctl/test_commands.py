@@ -180,6 +180,9 @@ def set_cluster_preflight(
     def not_found():
         raise cluster_commands.ApiException(status=404, reason="Not Found")
 
+    def forbidden():
+        raise cluster_commands.ApiException(status=403, reason="Forbidden")
+
     def load_kube_config(*, context):
         if missing == "load_context":
             raise RuntimeError("cannot load context")
@@ -193,6 +196,8 @@ def set_cluster_preflight(
     class CoreV1Api:
         def read_namespace(self, name):
             calls["namespace"] = name
+            if missing == "namespace_forbidden":
+                forbidden()
             if missing == "namespace":
                 not_found()
 
@@ -218,6 +223,8 @@ def set_cluster_preflight(
             calls.setdefault("ingress_controller_selectors", []).append(
                 label_selector
             )
+            if missing == "ingress_controller_forbidden":
+                forbidden()
             if missing == "ingress_controller":
                 return SimpleNamespace(items=[])
             labels = {"app.kubernetes.io/name": ingress_controller_label_name}
@@ -254,24 +261,32 @@ def set_cluster_preflight(
     class StorageV1Api:
         def read_storage_class(self, name):
             calls.setdefault("storage_classes", []).append(name)
+            if missing == "storage_class_forbidden":
+                forbidden()
             if missing == "storage_class" or name in missing_storage_classes:
                 not_found()
 
     class NetworkingV1Api:
         def read_ingress_class(self, name):
             calls["ingress_class"] = name
+            if missing == "ingress_class_forbidden":
+                forbidden()
             if missing == "ingress_class":
                 not_found()
 
     class ApiextensionsV1Api:
         def read_custom_resource_definition(self, name):
             calls.setdefault("crds", []).append(name)
+            if missing == "crd_forbidden":
+                forbidden()
             if missing == "crd":
                 not_found()
 
     class AppsV1Api:
         def read_namespaced_deployment_status(self, name, namespace):
             calls.setdefault("deployments", []).append((namespace, name))
+            if missing == "cert_manager_deployment_forbidden":
+                forbidden()
             if missing == "cert_manager_deployment":
                 not_found()
             available_replicas = 0 if missing == "cert_manager_unready" else 1
@@ -288,6 +303,8 @@ def set_cluster_preflight(
                 "plural": plural,
                 "name": name,
             }
+            if missing == "cluster_issuer_forbidden":
+                forbidden()
             if missing == "cluster_issuer":
                 not_found()
             status = "True" if issuer_ready else "False"
@@ -1334,6 +1351,57 @@ def test_init_lake_cluster_rejects_missing_cluster_issuer(tmp_path, monkeypatch)
         init_lake_cluster("dev", workspace)
 
 
+@pytest.mark.parametrize(
+    ("missing", "expected_check"),
+    [
+        ("namespace_forbidden", "Namespace 'test'"),
+        ("storage_class_forbidden", "StorageClass 'fast-storage'"),
+        ("ingress_class_forbidden", "IngressClass 'nginx'"),
+        ("ingress_controller_forbidden", "ingress-nginx controller pod discovery"),
+        ("crd_forbidden", "cert-manager CRD 'certificates.cert-manager.io'"),
+        ("cert_manager_deployment_forbidden", "cert-manager Deployment 'cert-manager'"),
+        ("cluster_issuer_forbidden", "ClusterIssuer 'letsencrypt-production'"),
+    ],
+)
+def test_init_lake_cluster_reports_forbidden_preflight_checks(
+    tmp_path,
+    monkeypatch,
+    missing,
+    expected_check,
+):
+    workspace = make_workspace(tmp_path / "workspace")
+    init_lake_environment("dev", workspace)
+    write_generated_lake_files(workspace)
+    set_cluster_preflight(monkeypatch, missing=missing)
+
+    with pytest.raises(cluster_commands.PreflightAccessError) as exc_info:
+        init_lake_cluster("dev", workspace)
+
+    message = str(exc_info.value)
+    assert expected_check in message
+    assert "does not have access" in message
+    assert "--skip-preflight" in message
+
+
+def test_init_lake_cluster_preflight_skip_bypasses_read_only_checks(
+    tmp_path,
+    monkeypatch,
+):
+    workspace = make_workspace(tmp_path / "workspace")
+    init_lake_environment("dev", workspace)
+    write_generated_lake_files(workspace)
+    calls = set_cluster_preflight(monkeypatch, missing="storage_class_forbidden")
+
+    init_lake_cluster("dev", workspace, preflight="skip")
+
+    assert "namespace" not in calls
+    assert "storage_classes" not in calls
+    assert "ingress_class" not in calls
+    assert "ingress_controller_selectors" not in calls
+    assert "crds" not in calls
+    assert calls["created_secrets"]
+
+
 def test_init_lake_cluster_skips_cert_manager_for_http(tmp_path, monkeypatch):
     workspace = make_workspace(tmp_path / "workspace")
     init_lake_environment("dev", workspace)
@@ -1514,6 +1582,54 @@ def test_init_lake_cluster_cli_accepts_initialized_environment(tmp_path, monkeyp
         in result.stdout
     )
     assert "✅ Secret 'product-postgres-secret' applied successfully." in result.stdout
+
+
+def test_init_lake_cluster_cli_reports_preflight_rbac_failure(
+    tmp_path,
+    monkeypatch,
+):
+    workspace = make_workspace(tmp_path / "workspace")
+    init_lake_environment("dev", workspace)
+    write_generated_lake_files(workspace)
+    set_cluster_preflight(monkeypatch, missing="storage_class_forbidden")
+
+    result = runner.invoke(
+        app,
+        [
+            "init-lake",
+            "cluster",
+            "dev",
+            "--workspace",
+            str(workspace),
+        ],
+    )
+
+    assert result.exit_code == 1
+    assert "Warning:" in result.output
+    assert "StorageClass 'fast-storage'" in result.output
+    assert "--skip-preflight" in result.output
+
+
+def test_init_lake_cluster_cli_accepts_preflight_skip(tmp_path, monkeypatch):
+    workspace = make_workspace(tmp_path / "workspace")
+    init_lake_environment("dev", workspace)
+    write_generated_lake_files(workspace)
+    set_cluster_preflight(monkeypatch, missing="storage_class_forbidden")
+
+    result = runner.invoke(
+        app,
+        [
+            "init-lake",
+            "cluster",
+            "dev",
+            "--workspace",
+            str(workspace),
+            "--skip-preflight",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert "🔐 Generating secret 'product-postgres-secret'..." in result.stdout
 
 
 def test_old_init_lake_environment_cli_command_is_removed():

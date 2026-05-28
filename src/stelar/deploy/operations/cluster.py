@@ -6,7 +6,7 @@ import base64
 import random
 import string
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from kubernetes import client as kube_client
 from kubernetes import config as kube_config
@@ -82,15 +82,40 @@ OPTIONAL_PRODUCT_SECRET_FIELDS = (
     ("llm_search", "GROQ_API_KEY_SECRET_NAME", "GROQ_API_KEY", "key"),
 )
 CKAN_AUTH_SECRET_NAME = "ckan-auth-secret"
+PreflightMode = Literal["strict", "skip"]
+PREFLIGHT_MODES = ("strict", "skip")
+PREFLIGHT_SKIP_HINT = (
+    "Your current Kubernetes user does not have access to perform this "
+    "read-only preflight check. Ask a cluster administrator for read access, "
+    "or rerun with --skip-preflight to bypass prerequisite checks and let "
+    "the deployment fail later if the cluster is not ready."
+)
+
+
+class PreflightAccessError(CommandError):
+    """Raised when RBAC prevents a read-only preflight check."""
+
+
+def _preflight_access_denied(check: str, exc: ApiException) -> PreflightAccessError:
+    return PreflightAccessError(
+        f"Cannot perform {check} preflight check: Kubernetes API returned "
+        f"{exc.status} {exc.reason or 'Forbidden'}. {PREFLIGHT_SKIP_HINT}"
+    )
+
+
+def _is_forbidden(exc: ApiException) -> bool:
+    return exc.status == 403
 
 
 def init_lake_cluster(
     environment: str,
     workspace_path: Path = Path("."),
     context: str | None = None,
+    preflight: PreflightMode = "strict",
     progress: ClusterProgress | None = None,
 ) -> None:
     """Initialize cluster resources for an initialized lake environment."""
+    preflight = _validate_preflight_mode(preflight)
     progress = progress or ClusterProgress()
     workspace = validate_workspace(workspace_path)
     environment_dir = complete_lake_environment_dir(workspace, environment)
@@ -116,6 +141,29 @@ def init_lake_cluster(
     cluster_issuer = _cluster_issuer_name(config, scheme)
 
     _load_kube_context(context_name)
+    if preflight == "strict":
+        _run_preflight_checks(
+            namespace,
+            storage_class_names,
+            scheme,
+            cluster_issuer,
+        )
+
+    _apply_environment_secrets(namespace, spec, progress)
+
+
+def _validate_preflight_mode(preflight: str) -> PreflightMode:
+    if preflight not in PREFLIGHT_MODES:
+        raise CommandError("Preflight mode must be one of: strict, skip")
+    return preflight  # type: ignore[return-value]
+
+
+def _run_preflight_checks(
+    namespace: str,
+    storage_class_names: list[str],
+    scheme: str,
+    cluster_issuer: str,
+) -> None:
     _validate_namespace(namespace)
     for storage_class_name in storage_class_names:
         _validate_storage_class(storage_class_name)
@@ -124,8 +172,6 @@ def init_lake_cluster(
     if scheme == "https":
         _validate_cert_manager()
         _validate_cluster_issuer(cluster_issuer)
-
-    _apply_environment_secrets(namespace, spec, progress)
 
 
 def _environment_namespace(spec_json: JsonObject) -> str:
@@ -423,8 +469,13 @@ def _validate_namespace(namespace: str) -> None:
     try:
         core_api.read_namespace(namespace)
     except ApiException as exc:
+        if _is_forbidden(exc):
+            raise _preflight_access_denied(f"Namespace {namespace!r}", exc) from exc
         if exc.status == 404:
-            raise CommandError(f"Namespace {namespace!r} does not exist") from exc
+            raise CommandError(
+                f"Namespace {namespace!r} does not exist in the selected cluster. "
+                "Create the namespace or update product.json spec.namespace."
+            ) from exc
         raise CommandError(
             f"Could not validate Namespace {namespace!r}: {exc}"
         ) from exc
@@ -435,9 +486,16 @@ def _validate_storage_class(storage_class_name: str) -> None:
     try:
         storage_api.read_storage_class(storage_class_name)
     except ApiException as exc:
+        if _is_forbidden(exc):
+            raise _preflight_access_denied(
+                f"StorageClass {storage_class_name!r}",
+                exc,
+            ) from exc
         if exc.status == 404:
             raise CommandError(
-                f"StorageClass {storage_class_name!r} does not exist"
+                f"StorageClass {storage_class_name!r} does not exist in the "
+                "selected cluster. Update product_fullspec.json storage class "
+                "fields or install the StorageClass."
             ) from exc
         raise CommandError(
             f"Could not validate StorageClass {storage_class_name!r}: {exc}"
@@ -449,9 +507,16 @@ def _validate_ingress_class(ingress_class_name: str) -> None:
     try:
         networking_api.read_ingress_class(ingress_class_name)
     except ApiException as exc:
+        if _is_forbidden(exc):
+            raise _preflight_access_denied(
+                f"IngressClass {ingress_class_name!r}",
+                exc,
+            ) from exc
         if exc.status == 404:
             raise CommandError(
-                f"IngressClass {ingress_class_name!r} does not exist"
+                f"IngressClass {ingress_class_name!r} does not exist in the "
+                "selected cluster. Install/configure the ingress class expected "
+                "by the product."
             ) from exc
         raise CommandError(
             f"Could not validate IngressClass {ingress_class_name!r}: {exc}"
@@ -464,6 +529,11 @@ def _validate_ingress_controller(ingress_class_name: str) -> None:
         try:
             pods = core_api.list_pod_for_all_namespaces(label_selector=selector)
         except ApiException as exc:
+            if _is_forbidden(exc):
+                raise _preflight_access_denied(
+                    "ingress-nginx controller pod discovery",
+                    exc,
+                ) from exc
             raise CommandError(
                 f"Could not validate ingress-nginx controller for "
                 f"IngressClass {ingress_class_name!r}: {exc}"
@@ -478,6 +548,11 @@ def _validate_ingress_controller(ingress_class_name: str) -> None:
     try:
         pods = core_api.list_pod_for_all_namespaces()
     except ApiException as exc:
+        if _is_forbidden(exc):
+            raise _preflight_access_denied(
+                "ingress-nginx controller pod discovery",
+                exc,
+            ) from exc
         raise CommandError(
             f"Could not validate ingress-nginx controller for "
             f"IngressClass {ingress_class_name!r}: {exc}"
@@ -491,7 +566,8 @@ def _validate_ingress_controller(ingress_class_name: str) -> None:
 
     raise CommandError(
         f"No Ready ingress-nginx controller pod found for "
-        f"IngressClass {ingress_class_name!r}"
+        f"IngressClass {ingress_class_name!r}. Install/start ingress-nginx or "
+        "update the product/cluster ingress setup."
     )
 
 
@@ -521,9 +597,16 @@ def _validate_cert_manager() -> None:
         try:
             apiextensions_api.read_custom_resource_definition(crd_name)
         except ApiException as exc:
+            if _is_forbidden(exc):
+                raise _preflight_access_denied(
+                    f"cert-manager CRD {crd_name!r}",
+                    exc,
+                ) from exc
             if exc.status == 404:
                 raise CommandError(
-                    f"cert-manager CRD {crd_name!r} does not exist"
+                    f"cert-manager CRD {crd_name!r} does not exist. Install "
+                    "cert-manager or generate a product that does not require "
+                    "cert-manager-managed TLS."
                 ) from exc
             raise CommandError(
                 f"Could not validate cert-manager CRD {crd_name!r}: {exc}"
@@ -537,10 +620,17 @@ def _validate_cert_manager() -> None:
                 CERT_MANAGER_NAMESPACE,
             )
         except ApiException as exc:
+            if _is_forbidden(exc):
+                raise _preflight_access_denied(
+                    f"cert-manager Deployment {deployment_name!r}",
+                    exc,
+                ) from exc
             if exc.status == 404:
                 raise CommandError(
                     f"cert-manager Deployment {deployment_name!r} does not exist "
-                    f"in namespace {CERT_MANAGER_NAMESPACE!r}"
+                    f"in namespace {CERT_MANAGER_NAMESPACE!r}. Install "
+                    "cert-manager or generate a product that does not require "
+                    "cert-manager-managed TLS."
                 ) from exc
             raise CommandError(
                 f"Could not validate cert-manager Deployment "
@@ -551,7 +641,8 @@ def _validate_cert_manager() -> None:
         available_replicas = deployment.status.available_replicas or 0
         if available_replicas < desired_replicas:
             raise CommandError(
-                f"cert-manager Deployment {deployment_name!r} is not Ready"
+                f"cert-manager Deployment {deployment_name!r} is not Ready. "
+                "Wait for cert-manager to become Ready before deploying HTTPS."
             )
 
 
@@ -565,16 +656,26 @@ def _validate_cluster_issuer(cluster_issuer: str) -> None:
             name=cluster_issuer,
         )
     except ApiException as exc:
+        if _is_forbidden(exc):
+            raise _preflight_access_denied(
+                f"ClusterIssuer {cluster_issuer!r}",
+                exc,
+            ) from exc
         if exc.status == 404:
             raise CommandError(
-                f"ClusterIssuer {cluster_issuer!r} does not exist"
+                f"ClusterIssuer {cluster_issuer!r} does not exist in the "
+                "selected cluster. Create the issuer or update the product "
+                "CLUSTER_ISSUER value."
             ) from exc
         raise CommandError(
             f"Could not validate ClusterIssuer {cluster_issuer!r}: {exc}"
         ) from exc
 
     if not _is_ready_condition_true(issuer):
-        raise CommandError(f"ClusterIssuer {cluster_issuer!r} is not Ready")
+        raise CommandError(
+            f"ClusterIssuer {cluster_issuer!r} is not Ready. Fix the issuer "
+            "before deploying HTTPS."
+        )
 
 
 def _is_ready_condition_true(resource: JsonObject) -> bool:

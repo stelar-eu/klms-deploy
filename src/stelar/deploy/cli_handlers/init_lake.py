@@ -14,6 +14,7 @@ from .progress import (
 )
 from ..operations import (
     CommandError,
+    PreflightAccessError,
     init_lake_cluster,
     init_lake_environment,
     init_lake_workspace,
@@ -103,8 +104,24 @@ def init_lake_cluster_command(
         str | None,
         typer.Option("--context", help="Kubectl context to use"),
     ] = None,
+    skip_preflight: Annotated[
+        bool,
+        typer.Option(
+            "--skip-preflight",
+            help="Skip read-only prerequisite checks before applying secrets",
+        ),
+    ] = False,
 ) -> None:
     try:
-        init_lake_cluster(env, workspace, context, progress=TyperClusterProgress())
+        init_lake_cluster(
+            env,
+            workspace,
+            context,
+            preflight="skip" if skip_preflight else "strict",
+            progress=TyperClusterProgress(),
+        )
+    except PreflightAccessError as exc:
+        typer.echo(f"Warning: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
     except CommandError as exc:
         raise typer.BadParameter(str(exc)) from exc
