@@ -4,7 +4,7 @@ The Typer layer imports from this package and should remain thin. Operation
 modules own deployment business logic and reusable helpers.
 """
 
-from .cluster import init_lake_cluster
+from .cluster import PreflightAccessError, init_lake_cluster
 from .common import (
     CommandError,
     load_product,
@@ -23,6 +23,7 @@ from .minimal_product import (
 
 __all__ = [
     "CommandError",
+    "PreflightAccessError",
     "build_minimal_product",
     "generate_minimal_secret_values",
     "infer_storage_classes_from_cluster",
