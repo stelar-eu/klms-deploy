@@ -7,7 +7,7 @@ It keeps three responsibilities separate:
 
 - workspace and environment scaffolding
 - product specification expansion into `product_fullspec.json`
-- cluster preflight checks and bootstrap secrets
+- cluster preflight checks and deployment secrets
 
 ## Installation
 
@@ -39,6 +39,7 @@ stelarctl init-lake workspace ./lake-workspace
 cd ./lake-workspace
 jb install
 stelarctl init-lake environment linode --workspace .
+stelarctl product init-minimal product.yaml --generate-secret-values
 stelarctl generate-lakespec product.yaml linode --workspace .
 stelarctl init-lake cluster linode --workspace . --context my-kube-context
 tk apply environments/linode
@@ -83,6 +84,24 @@ vendor/github.com/stelar-eu/klms-deploy/lib/environment_templates/main.jsonnet
 
 Existing `main.jsonnet` and `spec.json` files are not overwritten.
 
+### product init-minimal
+
+```bash
+stelarctl product init-minimal [OUTPUT] [--generate-secret-values]
+```
+
+Interactively creates a minimal product spec. The minimal product selects the
+required core components, PVC storage, nginx ingress, and no optional
+components.
+
+Use `--generate-secret-values` to let `stelarctl` generate the required secret
+values. Generated values are also written to a sidecar file named after the
+product, for example `product.secrets.yaml`; store that file securely.
+
+Use `--infer-storage-from-cluster` when the current Kubernetes user is allowed
+to read StorageClasses and you want the command to prefill storage class names
+from the active or selected kubectl context.
+
 ### generate-lakespec
 
 ```bash
@@ -102,12 +121,12 @@ The fullspec is also printed to stdout for inspection.
 ### init-lake cluster
 
 ```bash
-stelarctl init-lake cluster ENV --workspace WORKSPACE [--context CONTEXT]
+stelarctl init-lake cluster ENV --workspace WORKSPACE [--context CONTEXT] [--skip-preflight]
 ```
 
 Populates the environment `spec.json` with the Kubernetes context, namespace,
 and Tanka metadata, then runs cluster preflight checks and creates missing
-bootstrap secrets.
+deployment secrets.
 
 The current checks are:
 
@@ -123,14 +142,20 @@ The current checks are:
 
 Secrets are created only when missing. Existing secrets are left untouched.
 
+If a preflight check cannot run because the current Kubernetes user lacks RBAC
+access to inspect cluster resources, the command stops with a warning and tells
+the user to rerun with `--skip-preflight`. That flag skips only read-only
+preflight checks; it still loads the Kubernetes context, updates `spec.json`,
+and creates required secrets.
+
 ## Idempotency
 
 The `init-lake` commands are intended to be rerunnable:
 
 - `workspace` reuses directories and merges missing Jsonnet dependencies
 - `environment` reuses directories and does not overwrite existing files
-- `cluster` updates `spec.json`, validates the cluster, and skips existing
-  secrets
+- `cluster` updates `spec.json`, validates the cluster unless
+  `--skip-preflight` is used, and skips existing secrets
 
 The only destructive option is `init-lake workspace --force`, which rewrites
 `jsonnetfile.json`.
@@ -142,10 +167,10 @@ entrypoint module:
 
 - `src/stelar/deploy/cli.py`: stable console-script entrypoint
 - `src/stelar/deploy/cli_app.py`: Typer app construction
-- `src/stelar/deploy/cli_commands/`: CLI adapters and command registration
-- `src/stelar/deploy/commands/`: command business logic
-- `src/stelar/deploy/commands/progress.py`: no-op progress interfaces
-- `src/stelar/deploy/cli_progress.py`: Typer progress output
+- `src/stelar/deploy/cli_handlers/`: CLI adapters and command registration
+- `src/stelar/deploy/operations/`: command business logic
+- `src/stelar/deploy/operations/progress.py`: no-op progress interfaces
+- `src/stelar/deploy/cli_handlers/progress.py`: Typer progress output
 - `src/stelar/deploy/templates/jsonnetfile.json`: packaged workspace template
 
 Business logic should not print directly. Add user-facing output through a CLI
@@ -154,10 +179,17 @@ runner.
 
 To add a future command group:
 
-1. Add testable business logic under `src/stelar/deploy/commands/`.
-2. Add a Typer adapter under `src/stelar/deploy/cli_commands/`.
-3. Register the adapter in `src/stelar/deploy/cli_commands/__init__.py`.
+1. Add testable business logic under `src/stelar/deploy/operations/`.
+2. Add a Typer adapter under `src/stelar/deploy/cli_handlers/`.
+3. Register the adapter in `src/stelar/deploy/cli_handlers/__init__.py`.
 4. Keep Kubernetes, Tanka, and filesystem behavior outside the CLI adapter when
    possible.
 5. Add unit tests for business behavior and focused CLI tests for argument and
    progress output.
+
+## Legacy bootstrap script
+
+The old bootstrap script has moved to `legacy/bootstrap.py`. It is kept only for
+older installations that still depend on the previous `bootstrap.yaml` flow. New
+deployments should use `stelarctl product init-minimal`,
+`stelarctl generate-lakespec`, and `stelarctl init-lake cluster`.

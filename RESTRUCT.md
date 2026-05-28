@@ -38,7 +38,7 @@ The current structure of an installation configuration is quite ad-hoc; difficul
 To get to a more sound place, we should incorporate the concept of Feature Models. In this way, a STELAR installation is part (an
 instance of) a  [Software Product Line](https://en.wikipedia.org/wiki/Software_product_line).
 
-[Feature Models](https://en.wikipedia.org/wiki/Feature_model) will allow us to specify all aspects of a STELAR instance in a concise and uniform way. This will replace the current practice of running the *infamous* bootstrap script, and then modifying in an ad-hoc way the jsonnet templates.
+[Feature Models](https://en.wikipedia.org/wiki/Feature_model) will allow us to specify all aspects of a STELAR instance in a concise and uniform way. This replaces the previous practice of running the legacy bootstrap script, and then modifying the jsonnet templates in an ad-hoc way. The old script now lives under `legacy/bootstrap.py` for reference only.
 
 This approach will allow us to not only configure a lake core, but also (in the future) to install tools, extensions, and other optional components (e.g., flink/SDE, LLM search engines), in a concise and disciplined manner.
 

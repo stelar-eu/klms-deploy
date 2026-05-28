@@ -403,7 +403,7 @@ def write_jsonnet_file(path_to_jsonnet, yaml_data, secrets_list, insecure_minio_
 def parse_args():
     if "-f" not in sys.argv and "-sample" not in sys.argv:
         print(
-            "❌ Usage: python bootstrap.py -f <file.yaml> [-cert <cert_path> -key <key_path>] or python bootstrap.py -sample to generate a sample YAML file."
+            "❌ Usage: python legacy/bootstrap.py -f <file.yaml> [-cert <cert_path> -key <key_path>] or python legacy/bootstrap.py -sample to generate a sample YAML file."
         )
         sys.exit(1)
 

@@ -7,7 +7,7 @@ The knowledge layer comprises: (a) a data catalog that offers automatically enha
 ## Deployment CLI
 
 This repository includes `stelarctl`, a CLI for initializing KLMS lake
-workspaces, generating product fullspecs, and running cluster bootstrap
+workspaces, generating product fullspecs, and running cluster preparation
 preflight checks. See [docs/stelarctl.md](docs/stelarctl.md) for the supported
 commands and deployment workflow.
 

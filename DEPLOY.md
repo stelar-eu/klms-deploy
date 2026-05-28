@@ -36,154 +36,149 @@ approach.
 
 ## Instructions for STELAR deployment
 
-The deployment of STELAR requires some tools and is performed by the following steps
+The supported deployment flow uses `stelarctl`, Jsonnet Bundler (`jb`), Tanka
+(`tk`), and `kubectl`. The legacy bootstrap script has been moved to
+`legacy/bootstrap.py` and is kept only as historical reference for older
+installations.
 
- 1. Install Graphana Tanka and Jsonnet Bundler
- 1. Update Jsonnet packages and Helm charts
- 1. Have access to a kubernetes cluster.
- 1. DEPRECATED: Create a tanka environment.
- 1. Bootstrap a new STELAR installation and prepare the cluster.
- 1. Apply the environment to the cluster.
+The deployment flow is:
 
-The steps are outlined below.
+1. Install `stelarctl`, Tanka, Jsonnet Bundler, and `kubectl`.
+2. Initialize a lake workspace.
+3. Run `jb install` to fetch the vendored STELAR deployment library and Jsonnet dependencies.
+4. Initialize a Tanka environment in the workspace.
+5. Generate or provide a product spec.
+6. Resolve the product spec into `product_fullspec.json`.
+7. Prepare the cluster metadata and required secrets.
+8. Apply the rendered manifests with Tanka.
 
-### Install Graphana Tanka and Jsonnet Bundler
+### Install tooling
 
-Tanka is a tool for simplifying Kubernetes deployment and 
-configuration. Tanka is open-source and is being used by Graphana 
-Labs to manage their own clusters.
+Install `stelarctl` with `pipx`:
 
-Tanka can be found in the following link from Graphana Labs 
-[https://grafana.com/oss/tanka/](https://grafana.com/oss/tanka/).
-
-Tanka uses the [Jsonnet bundler](https://github.com/jsonnet-bundler/jsonnet-bundler) for 
-package management. Installation instructions for both tanka and jsonnet bundler can be found at https://tanka.dev/install.
-
-Note: besides `tanka` and `jb`, other dependencies include 
- - `kubectl` to access some Kubernetes cluster
- - `helm` to download existing charts
-
-### Update the Jsonnet packages in this repository.
-
-Once jsonnet bundler is installed, please do
-```
-user% jb update
-GET ...
-...
-
-user% tk tool charts vendor
-{ ... 
-
+```bash
+pipx install stelar-deploy
+stelarctl --help
 ```
 
-This will make sure that you have all required Jsonnet libraries, as well
-as charts.
+Tanka and Jsonnet Bundler installation instructions are available from the
+Tanka documentation: https://tanka.dev/install.
 
-### Access to a kubernetes cluster
+You also need `kubectl` configured with access to the target Kubernetes cluster.
 
-The standard tool for Kubernetes cluster access is `kubectl`. Since a user may
-have access to multiple clusters, `kubectl` configuration contains several 
-**contexts**. These contexts can be seen by the following command
-```
-user% kubectl config get-contexts
-CURRENT   NAME       CLUSTER    AUTHINFO   NAMESPACE
-*         minikube   minikube   minikube   default
-```
-In the above example, there is a single context installed. The name of this
-context is __minikube__.
+### Initialize a workspace
 
-### DEPRECATED/Use Bootstrap tool: Create a tanka environment
+A workspace is the deployable directory that contains the Jsonnet Bundler files,
+vendored libraries, and one or more deployment environments.
 
-A tanka environment customizes the STELAR release to the individual deployment. For example, you may want to create a __stelar_devel__ 
-environment as well as a __stelar_testing__ deployment on the same cluster.
-
-A simple tanka environment can be created by the following command:
-```
-user% tk env add environments/stelar/my_env --namespace stelar --server-from-context minikube
+```bash
+stelarctl init-lake workspace ./lake-workspace
+cd ./lake-workspace
+jb install
 ```
 
-This will create the environment on the Kubernetes cluster accessible
-via the __minikube__ kubectl context.
+`jb install` populates `vendor/` from `jsonnetfile.json`. The packaged template
+fetches the STELAR deployment library from the `lib` subdirectory of the
+`stelar-eu/klms-deploy` repository.
 
-### Bootstrap a new environment
+### Initialize an environment
 
-Bootstrap creates a new installation of STELAR in a kubernetes cluster.
-To do this, the __bootstrap__ tool generates a new Tanka environment and 
-also initializes the kubernetes cluster.
+Create an environment under `environments/`:
 
+```bash
+stelarctl init-lake environment dev --workspace .
+```
+
+This creates:
+
+```text
+environments/dev/main.jsonnet
+environments/dev/spec.json
+```
+
+### Create a product spec
+
+For a minimal deployment, use the interactive generator:
+
+```bash
+stelarctl product init-minimal product.yaml --generate-secret-values
+```
+
+When `--generate-secret-values` is used, `stelarctl` also writes a sidecar file
+containing the generated values, for example:
+
+```text
+product.secrets.yaml
+```
+
+Store that file securely. It contains secret values.
+
+If the operator has permission to read StorageClasses from the active Kubernetes
+context, storage values can be inferred:
+
+```bash
+stelarctl product init-minimal product.yaml \
+  --generate-secret-values \
+  --infer-storage-from-cluster
+```
+
+### Resolve the product into a fullspec
+
+```bash
+stelarctl generate-lakespec product.yaml dev --workspace .
+```
+
+This writes:
+
+```text
+environments/dev/product.json
+environments/dev/product_fullspec.json
+```
+
+### Prepare cluster metadata and secrets
+
+```bash
+stelarctl init-lake cluster dev --workspace . --context my-kube-context
+```
+
+By default this runs read-only prerequisite checks before creating missing
+secrets. If those checks fail because the current Kubernetes user lacks RBAC
+permissions to inspect cluster resources, rerun with:
+
+```bash
+stelarctl init-lake cluster dev --workspace . --context my-kube-context --skip-preflight
+```
+
+`--skip-preflight` skips only read-only prerequisite checks. It still loads the
+Kubernetes context, updates `spec.json`, and creates required secrets.
 
 ### Apply an environment to the cluster
 
-This can be achieved with the following command:
-```
-user% tk apply environments/stelar/my_env
-```
-A list of the full manifest (in YAML) is printed and there is a confirmation prompt. Typing __yes__ will perform the deployment. You can check that
-everything is running by a command like
-```
-user% kubectl get pods --namespace stelar
-```
-which will hopefully show a number of pods in the RUNNING state.
-
-### Deleting an environment from the cluster
-```
-user% tk delete environments/stelar/my_env
+```bash
+tk apply environments/dev
 ```
 
+Tanka prints the rendered manifest and asks for confirmation before applying it.
+After deployment, inspect the namespace with `kubectl`, for example:
 
-## Bootstrapping a new cluster
-
-This is done using the bootstrap tool, which is executed as follows:
-```
-python test_boot.py -f  <bootstrap.yaml>
-```
-
-The '<bootstrap.yaml>' file is a yaml file that contains several details
-pertaining to the new cluster. A sample file is shown below
-
-```
-env_name: "minikube.dev"
-#define either "amazon" or "minikube"
-platform: "minikube"
-k8s_context: "minikube"
-namespace: "stelar-dev"
-author: "dpetrou@tuc.gr"
-dns:
-  - name: "minikube"
-    scheme: "https"
-    subdomains:
-      - keycloak: "kc"
-      - minio: "minio"
-      - primary: "klms"
-config:
-  - smtp_server: "stelar.gr"
-    smtp_port: "465"
-    smtp_username: "info@stelar.gr"
-    s3_console_url: "http://klms.minikube/s3/login"
-secrets:
-  - name: "postgresdb-secret"
-    data:
-      - password: "postgres"
-  - name: "ckandb-secret"
-    data:
-      - password: "ckan"
-  - name: "keycloakdb-secret"
-    data:
-      - password: "keycloak"
-  - name: "datastoredb-secret"
-    data:
-      - password: "datastore"
-  - name: "keycloakroot-secret"
-    data:
-      - password: "stelar1234"
-  - name: "smtpapi-secret"
-    data:
-      - password: "smtp_pass"
-  - name: "ckanadmin-secret"
-    data:
-      - password: "stelar1234"
-  - name: "minioroot-secret"
-    data:
-      - password: "stelartuc"
+```bash
+kubectl get pods --namespace stelar-dev
 ```
 
+### Delete an environment from the cluster
+
+```bash
+tk delete environments/dev
+```
+
+## Legacy bootstrap script
+
+The previous bootstrap script is no longer part of the packaged `stelarctl`
+module. It has been moved to:
+
+```text
+legacy/bootstrap.py
+```
+
+Use it only when maintaining an older installation that still depends on the old
+`bootstrap.yaml` flow. New deployments should use the `stelarctl` workflow above.
