@@ -1,13 +1,18 @@
 import stat
 from types import SimpleNamespace
 
+import pytest
 import yaml
 from typer.testing import CliRunner
 
 from stelar.deploy import feature_model
 from stelar.deploy.cli import app
 from stelar.deploy.cli_handlers import product as product_cli
-from stelar.deploy.models.product import Product, ProductValidator
+from stelar.deploy.models.product import (
+    Product,
+    ProductValidationFailure,
+    ProductValidator,
+)
 from stelar.deploy.operations import minimal_product
 from stelar.deploy.operations.minimal_product import (
     InferredStorageClasses,
@@ -55,20 +60,31 @@ def test_build_minimal_product_validates_against_feature_model():
     assert klms["solr"]["volume"] == ["pvc"]
     assert klms["minio"]["volume"] == ["pvc"]
     assert klms["ingress"]["ingress_controller"] == ["nginx"]
-    assert klms["ingress"]["tls"] == ["letsencrypt"]
+    assert klms["ingress"]["tls"] == ["cert_manager"]
+    assert klms["ingress"]["cert_manager"]["ClusterIssuer"] == "letsencrypt-prod"
     assert klms["minio"]["API_DOMAIN"] == "https://minio.example.test"
     assert klms["minio"]["CONSOLE_DOMAIN"] == "https://klms.example.test/s3"
 
 
-def test_build_minimal_product_uses_self_signed_tls_for_http():
+def test_build_minimal_product_uses_no_tls_for_http():
     product = build_minimal_product(
         minimal_config(scheme="http", cluster_issuer="ignored")
     )
     fullspec = ProductValidator(feature_model).validate(Product.model_validate(product))
     klms = fullspec["klms"]
 
-    assert klms["CLUSTER_ISSUER"] is None
-    assert klms["ingress"]["tls"] == ["self_signed"]
+    assert "CLUSTER_ISSUER" not in klms
+    assert klms["ingress"]["tls"] == ["no_tls"]
+    assert "cert_manager" not in klms["ingress"]
+
+
+def test_feature_model_rejects_multiple_tls_modes():
+    product = build_minimal_product(minimal_config())
+    product["spec"]["ingress"]["tls"] = ["cert_manager", "self_signed"]
+    product["spec"]["ingress"]["self_signed"] = {}
+
+    with pytest.raises(ProductValidationFailure, match="Exactly one member of group tls"):
+        ProductValidator(feature_model).validate(Product.model_validate(product))
 
 
 def test_generate_minimal_secret_values_uses_non_empty_distinct_values():
@@ -243,7 +259,8 @@ def test_product_init_minimal_cli_can_infer_storage_from_cluster(tmp_path, monke
     assert "Inferred storage classes from 'dev'" in result.output
     assert product["spec"]["dynamicStorageClass"] == "fast-storage"
     assert product["spec"]["dynamic_volume_storage_class"] == "fast-storage"
-    assert product["spec"]["CLUSTER_ISSUER"] is None
+    assert "CLUSTER_ISSUER" not in product["spec"]
+    assert product["spec"]["ingress"]["tls"] == ["no_tls"]
 
 
 def test_product_init_minimal_rejects_same_product_and_secret_report_path(tmp_path):

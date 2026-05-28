@@ -8,6 +8,7 @@ from typing import Annotated
 import typer
 
 from ..operations import CommandError
+from .lakespec import register_lakespec_commands
 from ..operations.minimal_product import (
     InferredStorageClasses,
     MinimalProductConfig,
@@ -26,6 +27,7 @@ def register_product_commands(app: typer.Typer) -> None:
     """Register product generation commands."""
     product_app = typer.Typer(help="Create and manage product specifications")
     product_app.command("init-minimal")(init_minimal_product_command)
+    register_lakespec_commands(product_app)
     app.add_typer(product_app, name="product")
 
 

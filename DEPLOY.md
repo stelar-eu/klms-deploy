@@ -125,7 +125,7 @@ stelarctl product init-minimal product.yaml \
 ### Resolve the product into a fullspec
 
 ```bash
-stelarctl generate-lakespec product.yaml dev --workspace .
+stelarctl product generate product.yaml dev --workspace .
 ```
 
 This writes:

@@ -95,8 +95,15 @@ def generate_minimal_secret_values() -> MinimalSecretValues:
 def build_minimal_product(config: MinimalProductConfig) -> JsonObject:
     """Build the minimal product spec accepted by the feature model."""
     scheme = _normalized_scheme(config.scheme)
-    cluster_issuer = config.cluster_issuer if scheme == "https" else None
-    tls_selection = "letsencrypt" if scheme == "https" else "self_signed"
+    ingress: JsonObject = {"ingress_controller": ["nginx"], "tls": ["no_tls"]}
+    if scheme == "https":
+        if not config.cluster_issuer:
+            raise CommandError(
+                "ClusterIssuer name is required when URL scheme is https"
+            )
+        ingress["tls"] = ["cert_manager"]
+        ingress["cert_manager"] = {"ClusterIssuer": config.cluster_issuer}
+
     minio_api_domain = (
         f"{scheme}://{config.minio_api_subdomain}.{config.root_domain}"
     )
@@ -108,7 +115,6 @@ def build_minimal_product(config: MinimalProductConfig) -> JsonObject:
         "dynamic_volume_storage_class": config.provisioning_storage_class,
         "SCHEME": scheme,
         "ROOT_DOMAIN": config.root_domain,
-        "CLUSTER_ISSUER": cluster_issuer,
         "PRIMARY_SUBDOMAIN": config.primary_subdomain,
         "optional_components": [],
         "cluster": [],
@@ -162,10 +168,7 @@ def build_minimal_product(config: MinimalProductConfig) -> JsonObject:
         "quay": {
             "SUBDOMAIN": config.registry_subdomain,
         },
-        "ingress": {
-            "ingress_controller": ["nginx"],
-            "tls": [tls_selection],
-        },
+        "ingress": ingress,
     }
     return {"spec": spec}
 

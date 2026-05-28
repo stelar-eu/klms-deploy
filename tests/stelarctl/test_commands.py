@@ -136,12 +136,21 @@ def write_generated_lake_files(
             },
         }
     }
+    ingress = {"ingress_controller": ["nginx"], "tls": ["no_tls"]}
+    if scheme == "https":
+        ingress["tls"] = ["cert_manager"]
+        ingress["cert_manager"] = (
+            {"ClusterIssuer": cluster_issuer}
+            if cluster_issuer is not None
+            else {}
+        )
+
     product_fullspec = {
         "klms": {
             "dynamicStorageClass": dynamic_storage_class,
             "dynamic_volume_storage_class": provisioning_storage_class,
             "SCHEME": scheme,
-            "CLUSTER_ISSUER": cluster_issuer,
+            "ingress": ingress,
         }
     }
 
@@ -955,6 +964,32 @@ def test_init_lake_cluster_rejects_invalid_scheme(tmp_path, monkeypatch):
         init_lake_cluster("dev", workspace)
 
 
+def test_init_lake_cluster_rejects_http_with_tls_mode(tmp_path, monkeypatch):
+    workspace = make_workspace(tmp_path / "workspace")
+    init_lake_environment("dev", workspace)
+    environment_dir = write_generated_lake_files(workspace, scheme="http")
+    fullspec = read_json(environment_dir / "product_fullspec.json")
+    fullspec["klms"]["ingress"] = {"tls": ["self_signed"], "self_signed": {}}
+    write_json(environment_dir / "product_fullspec.json", fullspec)
+    set_cluster_preflight(monkeypatch)
+
+    with pytest.raises(CommandError, match="SCHEME http.*ingress.tls no_tls"):
+        init_lake_cluster("dev", workspace)
+
+
+def test_init_lake_cluster_rejects_https_without_tls_mode(tmp_path, monkeypatch):
+    workspace = make_workspace(tmp_path / "workspace")
+    init_lake_environment("dev", workspace)
+    environment_dir = write_generated_lake_files(workspace, scheme="https")
+    fullspec = read_json(environment_dir / "product_fullspec.json")
+    fullspec["klms"]["ingress"] = {"tls": ["no_tls"], "no_tls": {}}
+    write_json(environment_dir / "product_fullspec.json", fullspec)
+    set_cluster_preflight(monkeypatch)
+
+    with pytest.raises(CommandError, match="SCHEME https.*cert_manager or self_signed"):
+        init_lake_cluster("dev", workspace)
+
+
 def test_init_lake_cluster_requires_cluster_issuer_for_https(
     tmp_path,
     monkeypatch,
@@ -964,7 +999,7 @@ def test_init_lake_cluster_requires_cluster_issuer_for_https(
     write_generated_lake_files(workspace, scheme="https", cluster_issuer=None)
     set_cluster_preflight(monkeypatch)
 
-    with pytest.raises(CommandError, match="CLUSTER_ISSUER"):
+    with pytest.raises(CommandError, match="ingress.cert_manager.ClusterIssuer"):
         init_lake_cluster("dev", workspace)
 
 
@@ -1645,7 +1680,8 @@ def test_root_cli_help_only_lists_implemented_commands():
     result = runner.invoke(app, ["--help"])
 
     assert result.exit_code == 0
-    assert "generate-lakespec" in result.stdout
+    assert "generate-lakespec" not in result.stdout
+    assert "product" in result.stdout
     assert "init-lake" in result.stdout
     assert "status" not in result.stdout
     assert "model" not in result.stdout
@@ -1660,6 +1696,8 @@ class FakeProductValidator:
             "klms": {
                 "namespace": product.spec["namespace"],
                 "generated": True,
+                "SCHEME": "http",
+                "ingress": {"tls": ["no_tls"], "no_tls": {}},
             }
         }
 
@@ -1673,6 +1711,37 @@ class FailingProductValidator:
             "invalid product choices",
             {"klms": ["unsupported selection"]},
         )
+
+
+class HttpWithTlsProductValidator:
+    def __init__(self, feature_model):
+        self.feature_model = feature_model
+
+    def validate(self, product):
+        return {
+            "klms": {
+                "namespace": product.spec["namespace"],
+                "SCHEME": "http",
+                "ingress": {
+                    "tls": ["cert_manager"],
+                    "cert_manager": {"ClusterIssuer": "letsencrypt-production"},
+                },
+            }
+        }
+
+
+class HttpsNoTlsProductValidator:
+    def __init__(self, feature_model):
+        self.feature_model = feature_model
+
+    def validate(self, product):
+        return {
+            "klms": {
+                "namespace": product.spec["namespace"],
+                "SCHEME": "https",
+                "ingress": {"tls": ["no_tls"], "no_tls": {}},
+            }
+        }
 
 
 def test_generate_lakespec_cli_writes_files_and_prints_fullspec(
@@ -1691,7 +1760,8 @@ def test_generate_lakespec_cli_writes_files_and_prints_fullspec(
     result = runner.invoke(
         app,
         [
-            "generate-lakespec",
+            "product",
+            "generate",
             str(product_path),
             "dev",
             "--workspace",
@@ -1701,11 +1771,21 @@ def test_generate_lakespec_cli_writes_files_and_prints_fullspec(
 
     assert result.exit_code == 0
     assert json.loads(result.stdout) == {
-        "klms": {"namespace": "test", "generated": True}
+        "klms": {
+            "namespace": "test",
+            "generated": True,
+            "SCHEME": "http",
+            "ingress": {"tls": ["no_tls"], "no_tls": {}},
+        }
     }
     environment_dir = workspace / "environments" / "dev"
     assert read_json(environment_dir / "product_fullspec.json") == {
-        "klms": {"namespace": "test", "generated": True}
+        "klms": {
+            "namespace": "test",
+            "generated": True,
+            "SCHEME": "http",
+            "ingress": {"tls": ["no_tls"], "no_tls": {}},
+        }
     }
 
 
@@ -1716,7 +1796,8 @@ def test_generate_lakespec_cli_reports_command_error(tmp_path):
     result = runner.invoke(
         app,
         [
-            "generate-lakespec",
+            "product",
+            "generate",
             str(product_path),
             "dev",
             "--workspace",
@@ -1741,7 +1822,8 @@ def test_generate_lakespec_cli_reports_product_validation_failure(
     result = runner.invoke(
         app,
         [
-            "generate-lakespec",
+            "product",
+            "generate",
             str(product_path),
             "dev",
             "--workspace",
@@ -1789,7 +1871,14 @@ def test_product_to_fullspec_writes_product_and_fullspec(tmp_path, monkeypatch):
     fullspec = product_to_fullspec(product_path, "dev", workspace)
 
     environment_dir = workspace / "environments" / "dev"
-    assert fullspec == {"klms": {"namespace": "test", "generated": True}}
+    assert fullspec == {
+        "klms": {
+            "namespace": "test",
+            "generated": True,
+            "SCHEME": "http",
+            "ingress": {"tls": ["no_tls"], "no_tls": {}},
+        }
+    }
     assert json.loads((environment_dir / "product.json").read_text()) == {
         "author": "operator@example.com",
         "spec": {"namespace": "test"},
@@ -1802,6 +1891,29 @@ def test_product_to_fullspec_writes_product_and_fullspec(tmp_path, monkeypatch):
         "apiVersion": "tanka.dev/v1alpha1",
         "spec": {},
     }
+
+
+@pytest.mark.parametrize(
+    ("validator", "message"),
+    [
+        (HttpWithTlsProductValidator, "SCHEME http.*ingress.tls no_tls"),
+        (HttpsNoTlsProductValidator, "SCHEME https.*cert_manager or self_signed"),
+    ],
+)
+def test_product_to_fullspec_rejects_scheme_tls_mismatch(
+    tmp_path,
+    monkeypatch,
+    validator,
+    message,
+):
+    workspace = make_workspace(tmp_path / "workspace")
+    init_lake_environment("dev", workspace)
+    product_path = tmp_path / "product.yaml"
+    product_path.write_text("spec:\n  namespace: test\n", encoding="utf-8")
+    monkeypatch.setattr(lakespec_commands, "ProductValidator", validator)
+
+    with pytest.raises(CommandError, match=message):
+        product_to_fullspec(product_path, "dev", workspace)
 
 
 def test_init_lake_cluster_populates_spec_with_provided_context(

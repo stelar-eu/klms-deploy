@@ -23,6 +23,7 @@ from .common import (
     validate_workspace,
     write_environment_json,
 )
+from .fullspec_validation import validate_config_scheme_tls_consistency
 from .lake_environment import complete_lake_environment_dir
 from .progress import ClusterProgress
 
@@ -136,6 +137,7 @@ def init_lake_cluster(
     spec_json = read_environment_json(environment_dir / "spec.json")
     namespace = _environment_namespace(spec_json)
     config = _deployment_config(product_fullspec)
+    validate_config_scheme_tls_consistency(config)
     storage_class_names = _configured_storage_class_names(config)
     scheme = _deployment_scheme(config)
     cluster_issuer = _cluster_issuer_name(config, scheme)
@@ -169,7 +171,7 @@ def _run_preflight_checks(
         _validate_storage_class(storage_class_name)
     _validate_ingress_class(INGRESS_CLASS_NAME)
     _validate_ingress_controller(INGRESS_CLASS_NAME)
-    if scheme == "https":
+    if cluster_issuer:
         _validate_cert_manager()
         _validate_cluster_issuer(cluster_issuer)
 
@@ -232,12 +234,31 @@ def _deployment_scheme(config: JsonObject) -> str:
 
 
 def _cluster_issuer_name(config: JsonObject, scheme: str) -> str:
-    cluster_issuer = config.get("CLUSTER_ISSUER")
-    if scheme == "http":
+    ingress = config.get("ingress")
+    if ingress is None:
+        if scheme == "http":
+            return ""
+        raise CommandError("product_fullspec.json must define ingress")
+    if not isinstance(ingress, dict):
+        raise CommandError("product_fullspec.json must define ingress as an object")
+
+    tls = ingress.get("tls", [])
+    if not isinstance(tls, list) or not all(isinstance(item, str) for item in tls):
+        raise CommandError("product_fullspec.json must define ingress.tls as a list")
+    if "cert_manager" not in tls:
         return ""
+
+    cert_manager = ingress.get("cert_manager")
+    if not isinstance(cert_manager, dict):
+        raise CommandError(
+            "product_fullspec.json must define ingress.cert_manager when "
+            "ingress.tls selects cert_manager"
+        )
+    cluster_issuer = cert_manager.get("ClusterIssuer")
     if not isinstance(cluster_issuer, str) or not cluster_issuer:
         raise CommandError(
-            "product_fullspec.json must define CLUSTER_ISSUER when SCHEME is https"
+            "product_fullspec.json must define ingress.cert_manager.ClusterIssuer "
+            "when ingress.tls selects cert_manager"
         )
     return cluster_issuer
 
@@ -665,7 +686,7 @@ def _validate_cluster_issuer(cluster_issuer: str) -> None:
             raise CommandError(
                 f"ClusterIssuer {cluster_issuer!r} does not exist in the "
                 "selected cluster. Create the issuer or update the product "
-                "CLUSTER_ISSUER value."
+                "ingress.cert_manager.ClusterIssuer value."
             ) from exc
         raise CommandError(
             f"Could not validate ClusterIssuer {cluster_issuer!r}: {exc}"

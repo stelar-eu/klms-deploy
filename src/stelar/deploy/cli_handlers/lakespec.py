@@ -13,8 +13,8 @@ from ..models.product import ProductValidationFailure
 
 
 def register_lakespec_commands(app: typer.Typer) -> None:
-    """Register fullspec generation commands."""
-    app.command("generate-lakespec")(generate_lakespec_command)
+    """Register fullspec generation commands on a Typer app."""
+    app.command("generate")(generate_lakespec_command)
 
 
 def generate_lakespec_command(

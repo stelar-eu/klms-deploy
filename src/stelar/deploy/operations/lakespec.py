@@ -1,4 +1,4 @@
-"""Business logic for `generate-lakespec`."""
+"""Business logic for `product generate`."""
 
 from __future__ import annotations
 
@@ -13,6 +13,7 @@ from .common import (
     validate_workspace,
     write_environment_json,
 )
+from .fullspec_validation import validate_fullspec_scheme_tls_consistency
 from .lake_environment import initialized_lake_environment_dir
 
 
@@ -27,6 +28,7 @@ def product_to_fullspec(
     product_data = load_product_data(product_path)
     product = validate_product_data(product_path, product_data)
     fullspec = ProductValidator(feature_model).validate(product)
+    validate_fullspec_scheme_tls_consistency(fullspec)
 
     write_environment_json(environment_dir / "product.json", product_data)
     write_environment_json(environment_dir / "product_fullspec.json", fullspec)

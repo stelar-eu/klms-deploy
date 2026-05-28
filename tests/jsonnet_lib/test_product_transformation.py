@@ -20,7 +20,7 @@ def test_extract_components_from_wrapped_fullspec(J: JsonnetRunner):
           klms: {
             core_components: ["api", "postgres", "redis"],
             optional_components: ["llm_search", "sde", "previewer"],
-            cluster: ["cert_manager", "grafana"],
+            cluster: ["prometheus", "grafana"],
             sde: {
               components: ["kafka", "kafbat", "zookeeper", "flink", "sdemanager"],
             },
@@ -38,7 +38,7 @@ def test_extract_components_from_wrapped_fullspec(J: JsonnetRunner):
         "llm_search": {},
         "sde": {},
         "previewer": {},
-        "cert_manager": {},
+        "prometheus": {},
         "grafana": {},
     }
 
@@ -205,5 +205,47 @@ def test_extract_configuration_handles_bare_root_fullspec(J: JsonnetRunner):
         "prometheus": {},
         "redis": {
             "PORT": 6379,
+        },
+    }
+
+
+def test_tls_modes_are_configuration_not_components(J: JsonnetRunner):
+    out = J(
+        """
+        local fullspec = {
+          klms: {
+            SCHEME: "https",
+            core_components: ["api"],
+            optional_components: [],
+            cluster: [],
+            support: ["ingress", "network_policy"],
+            ingress: {
+              ingress_controller: ["nginx"],
+              tls: ["cert_manager"],
+              cert_manager: {
+                ClusterIssuer: "letsencrypt-production",
+              },
+            },
+          },
+        };
+
+        {
+          components: product_transformation.extract_components(fullspec),
+          ingress: product_transformation.extract_configuration(fullspec).ingress,
+        }
+        """
+    )
+
+    assert out == {
+        "components": {
+            "system": {},
+            "api": {},
+        },
+        "ingress": {
+            "ingress_controller": ["nginx"],
+            "tls": ["cert_manager"],
+            "cert_manager": {
+                "ClusterIssuer": "letsencrypt-production",
+            },
         },
     }

@@ -10,10 +10,17 @@ local utils = import "../../util/utils.libsonnet";
       config.minio.API_SUBDOMAIN,
       config.quay.SUBDOMAIN,
     ];
-    if config.SCHEME == "https" && config.CLUSTER_ISSUER != null then {
+    local ingress = if std.objectHas(config, "ingress") then config.ingress else {};
+    local tls = if std.objectHas(ingress, "tls") then ingress.tls else [];
+    local cluster_issuer =
+      if std.member(tls, "cert_manager") && std.objectHas(ingress, "cert_manager")
+      then ingress.cert_manager.ClusterIssuer
+      else null;
+
+    if config.SCHEME == "https" && cluster_issuer != null then {
       [d + "_cert"]: cert.dns_certificate(
         name = utils.get_secret_name(d, config.ROOT_DOMAIN),
-        issuerRef = cert.clusterIssuerRef(config.CLUSTER_ISSUER),
+        issuerRef = cert.clusterIssuerRef(cluster_issuer),
         dnsName = [d + "." + config.ROOT_DOMAIN]
       )
       for d in domains

@@ -40,7 +40,7 @@ cd ./lake-workspace
 jb install
 stelarctl init-lake environment linode --workspace .
 stelarctl product init-minimal product.yaml --generate-secret-values
-stelarctl generate-lakespec product.yaml linode --workspace .
+stelarctl product generate product.yaml linode --workspace .
 stelarctl init-lake cluster linode --workspace . --context my-kube-context
 tk apply environments/linode
 ```
@@ -102,10 +102,10 @@ Use `--infer-storage-from-cluster` when the current Kubernetes user is allowed
 to read StorageClasses and you want the command to prefill storage class names
 from the active or selected kubectl context.
 
-### generate-lakespec
+### product generate
 
 ```bash
-stelarctl generate-lakespec PRODUCT ENV --workspace WORKSPACE
+stelarctl product generate PRODUCT ENV --workspace WORKSPACE
 ```
 
 Loads a product JSON or YAML file, validates it against the feature model, and
@@ -192,4 +192,4 @@ To add a future command group:
 The old bootstrap script has moved to `legacy/bootstrap.py`. It is kept only for
 older installations that still depend on the previous `bootstrap.yaml` flow. New
 deployments should use `stelarctl product init-minimal`,
-`stelarctl generate-lakespec`, and `stelarctl init-lake cluster`.
+`stelarctl product generate`, and `stelarctl init-lake cluster`.

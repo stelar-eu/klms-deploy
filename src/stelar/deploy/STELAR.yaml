@@ -13,10 +13,6 @@ root:
       type: string
     ROOT_DOMAIN:
       type: string
-    CLUSTER_ISSUER:
-      type:
-        - string
-        - "null"
     PRIMARY_SUBDOMAIN:
       type: string
   subfeatures:
@@ -604,7 +600,11 @@ root:
             - group_name: tls
               rel: alternative
               members:
-                - name: letsencrypt
+                - name: no_tls
+                - name: cert_manager
+                  attributes:
+                    ClusterIssuer:
+                      type: string
                 - name: self_signed
 
         - name: network_policy
@@ -614,6 +614,5 @@ root:
     - group_name: cluster
       rel: optional
       members:
-        - name: cert_manager
         - name: prometheus
         - name: grafana
