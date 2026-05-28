@@ -7,12 +7,12 @@ from typing import Annotated
 
 import typer
 
-from ..cli_progress import (
+from .progress import (
     TyperClusterProgress,
     TyperLakeEnvironmentProgress,
     TyperLakeWorkspaceProgress,
 )
-from ..commands import (
+from ..operations import (
     CommandError,
     init_lake_cluster,
     init_lake_environment,

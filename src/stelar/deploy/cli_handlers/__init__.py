@@ -1,4 +1,4 @@
-"""Command registration package for `stelarctl`.
+"""CLI handler registration package for `stelarctl`.
 
 Add future command groups by creating a module with a `register_*_commands`
 function and calling it from `register_commands`.

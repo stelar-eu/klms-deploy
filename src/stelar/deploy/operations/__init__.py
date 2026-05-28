@@ -1,7 +1,7 @@
-"""Command helper package for `stelarctl`.
+"""Deployment operation package for `stelarctl`.
 
-The Typer layer imports from this package and should remain thin. Command
-modules own their business logic and command-specific helpers.
+The Typer layer imports from this package and should remain thin. Operation
+modules own deployment business logic and reusable helpers.
 """
 
 from .cluster import init_lake_cluster

@@ -8,7 +8,7 @@ from typing import Annotated
 
 import typer
 
-from ..commands import CommandError, product_to_fullspec
+from ..operations import CommandError, product_to_fullspec
 from ..models.product import ProductValidationFailure
 
 

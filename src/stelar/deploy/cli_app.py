@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import typer
 
-from .cli_commands import register_commands
+from .cli_handlers import register_commands
 
 
 def build_app() -> typer.Typer:

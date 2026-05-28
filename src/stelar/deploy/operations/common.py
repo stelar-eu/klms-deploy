@@ -1,4 +1,4 @@
-"""Shared helpers for stelarctl commands."""
+"""Shared helpers for deployment operations."""
 
 from __future__ import annotations
 

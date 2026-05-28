@@ -1,10 +1,10 @@
-"""CLI progress reporters for stelarctl commands."""
+"""Typer progress reporters for stelarctl CLI handlers."""
 
 from __future__ import annotations
 
 import typer
 
-from .commands.progress import (
+from ..operations.progress import (
     ClusterProgress,
     LakeEnvironmentProgress,
     LakeWorkspaceProgress,

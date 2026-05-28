@@ -6,11 +6,11 @@ from types import SimpleNamespace
 import pytest
 from typer.testing import CliRunner
 
-from stelar.deploy.commands import cluster as cluster_commands
-from stelar.deploy.commands import lakespec as lakespec_commands
-from stelar.deploy.commands import lake_workspace as workspace_commands
+from stelar.deploy.operations import cluster as cluster_commands
+from stelar.deploy.operations import lakespec as lakespec_commands
+from stelar.deploy.operations import lake_workspace as workspace_commands
 from stelar.deploy.cli import app
-from stelar.deploy.commands import (
+from stelar.deploy.operations import (
     CommandError,
     init_lake_cluster,
     init_lake_environment,

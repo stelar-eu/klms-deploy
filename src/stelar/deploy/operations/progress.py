@@ -1,4 +1,4 @@
-"""Progress hooks for command business logic."""
+"""Progress hooks for deployment operations."""
 
 from __future__ import annotations
 
