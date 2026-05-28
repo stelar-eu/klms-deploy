@@ -16,7 +16,7 @@ __pycache__/
 # Vendored helm charts
 /charts
 
-*.yaml
+# *.yaml
 
 # Distribution / packaging
 .Python
