@@ -63,7 +63,7 @@ class Feature(BaseModel):
     # by a name and a JSON schema.
     attributes: dict[str, AttributeSchema] = Field(default_factory=dict, repr=False)
 
-    # Subfeatures are orgainized in groups.
+    # Subfeatures are organized in groups.
     subfeatures: list[SubfeatureGroup] = Field(default_factory=list, repr=False)
 
     # The feature model that this feature belongs to. This is only set after the feature
@@ -215,7 +215,7 @@ class SubfeatureGroup(BaseModel):
     # The features that belong to this subfeature group.
     members: list[Feature] = Field(default_factory=list, repr=False)
 
-    # The parent feature. This is only set after the featureis added to a feature model.
+    # The parent feature. This is only set after the feature is added to a feature model.
     parent: Feature | None = Field(default=None, repr=False, exclude=True)
 
     # The index into the subfeatures list

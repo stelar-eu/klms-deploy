@@ -8,11 +8,22 @@ safety boundaries.
 
 from __future__ import annotations
 
+import inspect
 from textwrap import dedent
 
 import typer
 
 CONTEXT_SETTINGS = {"help_option_names": ["-h", "--help"]}
+
+
+class LinePreservingEpilogGroup(typer.core.TyperGroup):
+    """Typer group that renders epilog text without collapsing newlines."""
+
+    def format_epilog(self, ctx, formatter) -> None:  # noqa: ANN001
+        if not self.epilog:
+            return
+        formatter.write_paragraph()
+        formatter.write(inspect.cleandoc(self.epilog) + "\n")
 
 
 def show_help_on_no_args(ctx: typer.Context) -> None:
@@ -29,6 +40,21 @@ ROOT_HELP = (
 )
 ROOT_EPILOG = dedent(
     """
+    Command reference:
+      stelarctl init-lake workspace WORKSPACE
+          options: --force
+      stelarctl init-lake environment ENV
+          options: --workspace WORKSPACE
+      stelarctl init-lake cluster ENV
+          options: --workspace WORKSPACE, --context CONTEXT, --skip-preflight
+      stelarctl product init-minimal [OUTPUT]
+          options: --generate-secret-values, --secret-values-output FILE,
+                   --infer-storage-from-cluster, --context CONTEXT, --force
+      stelarctl product init-manual-tls [OUTPUT]
+          options: --force
+      stelarctl product generate PRODUCT ENV
+          options: --workspace WORKSPACE
+
     Typical workflow: run `init-lake workspace`, then `jb install`, then
     `init-lake environment`, then `product init-minimal` or your own product,
     then `product generate`, then `product init-manual-tls` if manual TLS is

@@ -1,5 +1,4 @@
-# This package contans the feature management library of STELAR.
-#
+"""Feature-model primitives used by STELAR product validation."""
 
 from .feature import (
     Feature,

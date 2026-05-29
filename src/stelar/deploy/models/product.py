@@ -26,20 +26,6 @@ class Product(BaseModel):
     """A product is a tree-like structure that represents the selected and
     configured features for a deployment."""
 
-    # apiVersion: str = Field(..., description="The API version of this product.")
-    # kind: str = Field(..., description="The kind of this product.")
-
-    # Todo: the feature model for this product should probably be specified in the spec.
-
-    # Below are attributes from the legacy bootstrap spec.
-    #
-    # k8s_context: str = Field(..., description="The Kubernetes context for this product.")
-    # namespace: str = Field(..., description="The Kubernetes namespace for this product.")
-    # author: str = Field(..., description="The author of this product.")
-    # platform: str = Field(..., description="The target platform for this product.")
-    # env_name: str = Field(..., description="The name of the environment for this product.")
-
-    # The root feature of the product, which is the same as the root feature of the feature model.
     spec: JsonObject = Field(
         ..., description="The product specification as a JSON object."
     )

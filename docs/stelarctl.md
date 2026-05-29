@@ -88,6 +88,24 @@ tk apply environments/dev
 
 The environment argument accepts either `dev` or `environments/dev`.
 
+## Command reference
+
+```text
+stelarctl init-lake workspace WORKSPACE
+    options: --force
+stelarctl init-lake environment ENV
+    options: --workspace WORKSPACE
+stelarctl init-lake cluster ENV
+    options: --workspace WORKSPACE, --context CONTEXT, --skip-preflight
+stelarctl product init-minimal [OUTPUT]
+    options: --generate-secret-values, --secret-values-output FILE,
+             --infer-storage-from-cluster, --context CONTEXT, --force
+stelarctl product init-manual-tls [OUTPUT]
+    options: --force
+stelarctl product generate PRODUCT ENV
+    options: --workspace WORKSPACE
+```
+
 ## Commands
 
 ### `init-lake workspace`
@@ -133,7 +151,7 @@ Existing `main.jsonnet` and `spec.json` files are not overwritten.
 ### `product init-minimal`
 
 ```bash
-stelarctl product init-minimal [OUTPUT] [--generate-secret-values] [--infer-storage-from-cluster]
+stelarctl product init-minimal [OUTPUT] [--generate-secret-values] [--secret-values-output FILE] [--infer-storage-from-cluster] [--context CONTEXT] [--force]
 ```
 
 Interactively creates a minimal product spec. The generated product selects:
@@ -158,19 +176,22 @@ required because MinIO clients inside the deployment must use plain HTTP.
 Use `--generate-secret-values` to let `stelarctl` create cryptographically
 random secret values. The product contains the values needed for validation, and
 a sidecar file such as `product.secrets.yaml` is written for operator reference.
-Store that sidecar file securely.
+Use `--secret-values-output FILE` to choose a different sidecar path. Store that
+sidecar file securely.
 
 Use `--infer-storage-from-cluster` when your Kubernetes user can read
 StorageClasses and you want the command to prefill storage values from the
-active or selected kubectl context.
+active kubectl context. Add `--context CONTEXT` to infer from a specific context.
+Use `--force` to overwrite existing output files.
 
 ### `product init-manual-tls`
 
 ```bash
-stelarctl product init-manual-tls manual_tls.yaml
+stelarctl product init-manual-tls [OUTPUT] [--force]
 ```
 
-Writes a template with endpoint-to-directory mappings:
+Writes a template with endpoint-to-directory mappings. `OUTPUT` defaults to
+`manual_tls.yaml`. Use `--force` to overwrite an existing file.
 
 ```yaml
 manual_tls:

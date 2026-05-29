@@ -2027,31 +2027,12 @@ def test_init_lake_cluster_cli_accepts_preflight_skip(tmp_path, monkeypatch):
     assert "🔐 Generating secret 'product-postgres-secret'..." in result.stdout
 
 
-def test_old_init_lake_environment_cli_command_is_removed():
-    help_result = runner.invoke(app, ["--help"])
-    removed_command_result = runner.invoke(app, ["init-lake-environment", "--help"])
-
-    assert help_result.exit_code == 0
-    assert "init-lake-environment" not in help_result.stdout
-    assert removed_command_result.exit_code != 0
-
-
-def test_root_cli_help_only_lists_implemented_commands():
-    result = runner.invoke(app, ["--help"])
-
-    assert result.exit_code == 0
-    assert "generate-lakespec" not in result.stdout
-    assert "product" in result.stdout
-    assert "init-lake" in result.stdout
-    assert "status" not in result.stdout
-    assert "model" not in result.stdout
-
-
 def test_root_cli_help_documents_current_workflow():
     result = runner.invoke(app, ["--help"])
 
     assert result.exit_code == 0
     output = plain_help(result.stdout)
+    assert "Command reference" in output
     assert "product generate" in output
     assert "init-lake cluster" in output
     assert "init-manual-tls" in output
@@ -2059,6 +2040,24 @@ def test_root_cli_help_documents_current_workflow():
     assert "Main concepts" in output
     assert "fullspec" in output
     assert "does not run tk apply" in output
+
+
+def test_root_cli_help_lists_all_subcommands_with_arguments():
+    result = runner.invoke(app, ["--help"])
+
+    assert result.exit_code == 0
+    output = plain_help(result.stdout)
+    assert "stelarctl init-lake workspace WORKSPACE" in output
+    assert "stelarctl init-lake environment ENV" in output
+    assert "stelarctl init-lake cluster ENV" in output
+    assert "--context CONTEXT" in output
+    assert "--skip-preflight" in output
+    assert "stelarctl product init-minimal [OUTPUT]" in output
+    assert "--secret-values-output FILE" in output
+    assert "--infer-storage-from-cluster" in output
+    assert "stelarctl product init-manual-tls [OUTPUT]" in output
+    assert "stelarctl product generate PRODUCT ENV" in output
+    assert "--workspace WORKSPACE" in output
 
 
 def test_product_group_help_explains_product_flow_and_tls_rules():
