@@ -22,7 +22,7 @@ from ..operations import (
     CommandError,
     write_manual_tls_sample,
 )
-from ..operations.secret_resources import MINIO_ROOT_PASSWORD_MIN_LENGTH
+from ..operations.secret_resources import PASSWORD_MIN_LENGTH
 from .lakespec import register_lakespec_commands
 from ..operations.minimal_product import (
     InferredStorageClasses,
@@ -243,20 +243,44 @@ def _prompt_minimal_product_config(
 
 def _prompt_secret_values() -> MinimalSecretValues:
     return MinimalSecretValues(
-        postgres_db_password=_prompt_secret("Postgres admin DB password"),
-        ckan_db_password=_prompt_secret("CKAN DB password"),
-        datastore_db_password=_prompt_secret("Datastore DB password"),
-        keycloak_db_password=_prompt_secret("Keycloak DB password"),
-        quay_db_password=_prompt_secret("Quay DB password"),
-        smtp_password=_prompt_secret("SMTP password"),
+        postgres_db_password=_prompt_secret(
+            "Postgres admin DB password",
+            min_length=PASSWORD_MIN_LENGTH,
+        ),
+        ckan_db_password=_prompt_secret(
+            "CKAN DB password",
+            min_length=PASSWORD_MIN_LENGTH,
+        ),
+        datastore_db_password=_prompt_secret(
+            "Datastore DB password",
+            min_length=PASSWORD_MIN_LENGTH,
+        ),
+        keycloak_db_password=_prompt_secret(
+            "Keycloak DB password",
+            min_length=PASSWORD_MIN_LENGTH,
+        ),
+        quay_db_password=_prompt_secret(
+            "Quay DB password",
+            min_length=PASSWORD_MIN_LENGTH,
+        ),
+        smtp_password=_prompt_secret(
+            "SMTP password",
+            min_length=PASSWORD_MIN_LENGTH,
+        ),
         api_session_secret_key=_prompt_secret("STELAR API session secret"),
-        ckan_admin_password=_prompt_secret("CKAN admin password"),
+        ckan_admin_password=_prompt_secret(
+            "CKAN admin password",
+            min_length=PASSWORD_MIN_LENGTH,
+        ),
         ckan_session_key=_prompt_secret("CKAN session key"),
         ckan_jwt_key=_prompt_secret("CKAN JWT key"),
-        keycloak_root_password=_prompt_secret("Keycloak admin/root password"),
+        keycloak_root_password=_prompt_secret(
+            "Keycloak admin/root password",
+            min_length=PASSWORD_MIN_LENGTH,
+        ),
         minio_root_password=_prompt_secret(
             "MinIO root password",
-            min_length=MINIO_ROOT_PASSWORD_MIN_LENGTH,
+            min_length=PASSWORD_MIN_LENGTH,
         ),
     )
 

@@ -44,7 +44,8 @@ OPTIONAL_PRODUCT_SECRET_FIELDS = (
     ("llm_search", "GROQ_API_KEY_SECRET_NAME", "GROQ_API_KEY", "key"),
 )
 CKAN_AUTH_SECRET_NAME = "ckan-auth-secret"
-MINIO_ROOT_PASSWORD_MIN_LENGTH = 8
+PASSWORD_MIN_LENGTH = 8
+MINIO_ROOT_PASSWORD_MIN_LENGTH = PASSWORD_MIN_LENGTH
 MINIO_ROOT_USER_MIN_LENGTH = 3
 
 
@@ -133,16 +134,19 @@ def _secret_from_product_spec(
 
 
 def _validate_secret_value(section: str, key: str, value: str) -> None:
-    if section == "minio" and key == "MINIO_ROOT_PASSWORD":
-        validate_minio_root_password(value, source=f"{section}.{key}")
+    if key.endswith("PASSWORD"):
+        validate_password(value, source=f"{section}.{key}")
+
+
+def validate_password(value: str, *, source: str) -> None:
+    if len(value) < PASSWORD_MIN_LENGTH:
+        raise CommandError(
+            f"{source} must be at least {PASSWORD_MIN_LENGTH} characters long"
+        )
 
 
 def validate_minio_root_password(value: str, *, source: str) -> None:
-    if len(value) < MINIO_ROOT_PASSWORD_MIN_LENGTH:
-        raise CommandError(
-            f"{source} must be at least "
-            f"{MINIO_ROOT_PASSWORD_MIN_LENGTH} characters long"
-        )
+    validate_password(value, source=source)
 
 
 def validate_minio_root_user(value: str, *, source: str) -> None:

@@ -12,7 +12,7 @@ from kubernetes import client as kube_client
 from kubernetes import config as kube_config
 
 from .common import CommandError, JsonObject
-from .secret_resources import validate_minio_root_password
+from .secret_resources import validate_password
 
 
 SECRET_FILE_MODE = 0o600
@@ -25,6 +25,17 @@ PREFERRED_STORAGE_CLASS_NAMES = (
     "gp3",
     "gp2",
 )
+MINIMAL_PASSWORD_FIELDS = {
+    "postgres_db_password": "postgres.POSTGRES_DB_PASSWORD",
+    "ckan_db_password": "postgres.CKAN_DB_PASSWORD",
+    "datastore_db_password": "postgres.DATASTORE_DB_PASSWORD",
+    "keycloak_db_password": "postgres.KEYCLOAK_DB_PASSWORD",
+    "quay_db_password": "postgres.QUAY_DB_PASSWORD",
+    "smtp_password": "api.SMTP_PASSWORD",
+    "ckan_admin_password": "ckan.CKAN_ADMIN_PASSWORD",
+    "keycloak_root_password": "keycloak.KEYCLOAK_ROOT_PASSWORD",
+    "minio_root_password": "minio.MINIO_ROOT_PASSWORD",
+}
 
 
 @dataclass(frozen=True)
@@ -93,13 +104,15 @@ def generate_minimal_secret_values() -> MinimalSecretValues:
     )
 
 
+def _validate_minimal_passwords(secrets: MinimalSecretValues) -> None:
+    for attribute, source in MINIMAL_PASSWORD_FIELDS.items():
+        validate_password(getattr(secrets, attribute), source=source)
+
+
 def build_minimal_product(config: MinimalProductConfig) -> JsonObject:
     """Build the minimal product spec accepted by the feature model."""
     scheme = _normalized_scheme(config.scheme)
-    validate_minio_root_password(
-        config.secrets.minio_root_password,
-        source="minio.MINIO_ROOT_PASSWORD",
-    )
+    _validate_minimal_passwords(config.secrets)
     insecure_minio_client = _normalized_minio_insecure_value(
         scheme,
         config.insecure_minio_client,

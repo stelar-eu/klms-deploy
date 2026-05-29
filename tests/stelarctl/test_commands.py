@@ -1104,6 +1104,22 @@ def test_init_lake_cluster_rejects_invalid_minio_credentials_in_fullspec(
         init_lake_cluster("dev", workspace)
 
 
+def test_init_lake_cluster_rejects_short_password_in_fullspec(tmp_path, monkeypatch):
+    workspace = make_workspace(tmp_path / "workspace")
+    init_lake_environment("dev", workspace)
+    environment_dir = write_generated_lake_files(workspace)
+    fullspec = read_json(environment_dir / "product_fullspec.json")
+    fullspec["klms"]["ckan"] = {"CKAN_ADMIN_PASSWORD": "1234"}
+    write_json(environment_dir / "product_fullspec.json", fullspec)
+    set_cluster_preflight(monkeypatch)
+
+    with pytest.raises(
+        CommandError,
+        match="ckan.CKAN_ADMIN_PASSWORD.*at least 8 characters",
+    ):
+        init_lake_cluster("dev", workspace)
+
+
 def test_init_lake_cluster_rejects_http_with_tls_mode(tmp_path, monkeypatch):
     workspace = make_workspace(tmp_path / "workspace")
     init_lake_environment("dev", workspace)
@@ -1503,6 +1519,12 @@ def test_init_lake_cluster_rejects_secret_create_error(tmp_path, monkeypatch):
         (
             lambda product: product["spec"]["api"].update({"SMTP_PASSWORD": ""}),
             "api.SMTP_PASSWORD",
+        ),
+        (
+            lambda product: product["spec"]["ckan"].update(
+                {"CKAN_ADMIN_PASSWORD": "1234"}
+            ),
+            "ckan.CKAN_ADMIN_PASSWORD.*at least 8 characters",
         ),
         (
             lambda product: product["spec"]["minio"].update(
@@ -2290,6 +2312,13 @@ class ShortMinioPasswordProductValidator(FakeProductValidator):
         return fullspec
 
 
+class ShortCkanAdminPasswordProductValidator(FakeProductValidator):
+    def validate(self, product):
+        fullspec = super().validate(product)
+        fullspec["klms"]["ckan"] = {"CKAN_ADMIN_PASSWORD": "1234"}
+        return fullspec
+
+
 class ShortMinioUserProductValidator(FakeProductValidator):
     def validate(self, product):
         fullspec = super().validate(product)
@@ -2369,6 +2398,10 @@ def test_product_to_fullspec_writes_product_and_fullspec(tmp_path, monkeypatch):
         (
             ShortMinioPasswordProductValidator,
             "minio.MINIO_ROOT_PASSWORD.*at least 8 characters",
+        ),
+        (
+            ShortCkanAdminPasswordProductValidator,
+            "ckan.CKAN_ADMIN_PASSWORD.*at least 8 characters",
         ),
         (
             ShortMinioUserProductValidator,

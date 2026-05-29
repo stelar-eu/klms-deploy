@@ -77,13 +77,27 @@ def test_product_secrets_rejects_missing_secret_field():
         product_secrets(spec)
 
 
-def test_product_secrets_rejects_short_minio_root_password():
+@pytest.mark.parametrize(
+    ("section", "field"),
+    [
+        ("postgres", "POSTGRES_DB_PASSWORD"),
+        ("postgres", "CKAN_DB_PASSWORD"),
+        ("postgres", "KEYCLOAK_DB_PASSWORD"),
+        ("postgres", "DATASTORE_DB_PASSWORD"),
+        ("postgres", "QUAY_DB_PASSWORD"),
+        ("keycloak", "KEYCLOAK_ROOT_PASSWORD"),
+        ("api", "SMTP_PASSWORD"),
+        ("ckan", "CKAN_ADMIN_PASSWORD"),
+        ("minio", "MINIO_ROOT_PASSWORD"),
+    ],
+)
+def test_product_secrets_rejects_short_passwords(section, field):
     spec = product_spec()
-    spec["minio"]["MINIO_ROOT_PASSWORD"] = "1234"
+    spec[section][field] = "1234"
 
     with pytest.raises(
         CommandError,
-        match="minio.MINIO_ROOT_PASSWORD.*at least 8 characters",
+        match=rf"{section}.{field}.*at least 8 characters",
     ):
         product_secrets(spec)
 

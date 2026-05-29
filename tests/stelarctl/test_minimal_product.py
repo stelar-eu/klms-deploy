@@ -94,12 +94,26 @@ def test_build_minimal_product_forces_insecure_minio_for_http():
     assert product["spec"]["minio"]["INSECURE_MC_CLIENT"] == "true"
 
 
-def test_build_minimal_product_rejects_short_minio_root_password():
-    secrets = replace(generate_minimal_secret_values(), minio_root_password="1234")
+@pytest.mark.parametrize(
+    ("secret_field", "message"),
+    [
+        ("postgres_db_password", "postgres.POSTGRES_DB_PASSWORD"),
+        ("ckan_db_password", "postgres.CKAN_DB_PASSWORD"),
+        ("datastore_db_password", "postgres.DATASTORE_DB_PASSWORD"),
+        ("keycloak_db_password", "postgres.KEYCLOAK_DB_PASSWORD"),
+        ("quay_db_password", "postgres.QUAY_DB_PASSWORD"),
+        ("smtp_password", "api.SMTP_PASSWORD"),
+        ("ckan_admin_password", "ckan.CKAN_ADMIN_PASSWORD"),
+        ("keycloak_root_password", "keycloak.KEYCLOAK_ROOT_PASSWORD"),
+        ("minio_root_password", "minio.MINIO_ROOT_PASSWORD"),
+    ],
+)
+def test_build_minimal_product_rejects_short_passwords(secret_field, message):
+    secrets = replace(generate_minimal_secret_values(), **{secret_field: "1234"})
 
     with pytest.raises(
         CommandError,
-        match="minio.MINIO_ROOT_PASSWORD.*at least 8 characters",
+        match=rf"{message}.*at least 8 characters",
     ):
         build_minimal_product(minimal_config(secrets=secrets))
 
@@ -110,29 +124,32 @@ def test_build_minimal_product_rejects_invalid_https_insecure_minio_value():
 
 
 @pytest.mark.parametrize(
-    ("field_name", "value", "message"),
+    ("section", "field"),
     [
-        (
-            "MINIO_ROOT_PASSWORD",
-            "1234",
-            "MINIO_ROOT_PASSWORD",
-        ),
-        (
-            "MINIO_ROOT_USER",
-            "ab",
-            "MINIO_ROOT_USER",
-        ),
+        ("api", "SMTP_PASSWORD"),
+        ("postgres", "POSTGRES_DB_PASSWORD"),
+        ("postgres", "CKAN_DB_PASSWORD"),
+        ("postgres", "DATASTORE_DB_PASSWORD"),
+        ("postgres", "KEYCLOAK_DB_PASSWORD"),
+        ("postgres", "QUAY_DB_PASSWORD"),
+        ("ckan", "CKAN_ADMIN_PASSWORD"),
+        ("keycloak", "KEYCLOAK_ROOT_PASSWORD"),
+        ("minio", "MINIO_ROOT_PASSWORD"),
     ],
 )
-def test_feature_model_rejects_invalid_minio_credential_constraints(
-    field_name,
-    value,
-    message,
-):
+def test_feature_model_rejects_short_password_constraints(section, field):
     product = build_minimal_product(minimal_config())
-    product["spec"]["minio"][field_name] = value
+    product["spec"][section][field] = "1234"
 
-    with pytest.raises(ProductValidationFailure, match=message):
+    with pytest.raises(ProductValidationFailure, match=field):
+        ProductValidator(feature_model).validate(Product.model_validate(product))
+
+
+def test_feature_model_rejects_short_minio_root_user():
+    product = build_minimal_product(minimal_config())
+    product["spec"]["minio"]["MINIO_ROOT_USER"] = "ab"
+
+    with pytest.raises(ProductValidationFailure, match="MINIO_ROOT_USER"):
         ProductValidator(feature_model).validate(Product.model_validate(product))
 
 

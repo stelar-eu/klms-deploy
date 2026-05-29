@@ -31,6 +31,7 @@ root:
               type: string
             SMTP_PASSWORD:
               type: string
+              minLength: 8
             SESSION_SECRET_KEY:
               type: string
             PORT:
@@ -61,14 +62,19 @@ root:
           attributes:
             POSTGRES_DB_PASSWORD:
               type: string
+              minLength: 8
             CKAN_DB_PASSWORD:
               type: string
+              minLength: 8
             DATASTORE_DB_PASSWORD:
               type: string
+              minLength: 8
             KEYCLOAK_DB_PASSWORD:
               type: string
+              minLength: 8
             QUAY_DB_PASSWORD:
               type: string
+              minLength: 8
             PORT:
               type: integer
               default: 5432
@@ -183,6 +189,7 @@ root:
           attributes:
             CKAN_ADMIN_PASSWORD:
               type: string
+              minLength: 8
             CKAN_SESSION_KEY:
               type: string
             CKAN_JWT_KEY:
@@ -231,7 +238,8 @@ root:
               default: "user"
             CKAN_SMTP_PASSWORD:
               type: string
-              default: "pass"
+              minLength: 8
+              default: "password"
             CKAN_SMTP_MAIL_FROM:
               type: string
               default: "ckan@localhost"
@@ -305,6 +313,7 @@ root:
               type: string
             KEYCLOAK_ROOT_PASSWORD:
               type: string
+              minLength: 8
             PORT:
               type: integer
               default: 8080
