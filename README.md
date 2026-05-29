@@ -6,16 +6,34 @@ The knowledge layer comprises: (a) a data catalog that offers automatically enha
 
 ## Deployment CLI
 
-This repository includes `stelarctl`, a CLI for initializing KLMS lake
-workspaces, generating product fullspecs, and running cluster preparation
-preflight checks. See [docs/stelarctl.md](docs/stelarctl.md) for the supported
-commands and deployment workflow.
+This repository includes `stelarctl`, the operator CLI for preparing a STELAR
+KLMS lake deployment before running Tanka. It creates the workspace layout,
+creates Tanka environment directories, validates product specs, generates
+`product_fullspec.json`, updates `spec.json`, runs cluster preflight checks, and
+creates missing deployment Secrets.
 
 The intended operator install path is:
 
 ```bash
 pipx install stelar-deploy
+stelarctl --help
 ```
+
+A minimal deployment flow is:
+
+```bash
+stelarctl init-lake workspace ./lake-workspace
+cd ./lake-workspace
+jb install
+stelarctl init-lake environment dev
+stelarctl product init-minimal product.yaml --generate-secret-values
+stelarctl product generate product.yaml dev
+stelarctl init-lake cluster dev --context my-kube-context
+tk apply environments/dev
+```
+
+See [docs/stelarctl.md](docs/stelarctl.md) for the full command reference,
+TLS modes, generated files, preflight behavior, and troubleshooting notes.
 
 ## KLMS core components
 

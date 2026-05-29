@@ -22,8 +22,6 @@ from ..operations import (
     CommandError,
     write_manual_tls_sample,
 )
-from ..operations.secret_resources import PASSWORD_MIN_LENGTH
-from .lakespec import register_lakespec_commands
 from ..operations.minimal_product import (
     InferredStorageClasses,
     MinimalProductConfig,
@@ -35,6 +33,17 @@ from ..operations.minimal_product import (
     infer_storage_classes_from_cluster,
     write_secret_report,
     write_yaml,
+)
+from ..operations.secret_resources import PASSWORD_MIN_LENGTH
+from .lakespec import register_lakespec_commands
+from .output_paths import (
+    validate_distinct_paths as _validate_distinct_paths,
+    validate_output_path as _validate_output_path,
+)
+from .prompts import (
+    prompt_choice as _prompt_choice,
+    prompt_required as _prompt_required,
+    prompt_secret as _prompt_secret,
 )
 
 
@@ -285,41 +294,6 @@ def _prompt_secret_values() -> MinimalSecretValues:
     )
 
 
-def _prompt_required(label: str, *, default: str | None = None) -> str:
-    while True:
-        value = typer.prompt(label, default=default).strip()
-        if value:
-            return value
-        typer.echo(f"{label} cannot be empty", err=True)
-
-
-def _prompt_secret(label: str, *, min_length: int = 1) -> str:
-    while True:
-        value = typer.prompt(
-            label,
-            hide_input=True,
-            confirmation_prompt=True,
-        )
-        if len(value) >= min_length:
-            return value
-        if min_length == 1:
-            typer.echo(f"{label} cannot be empty", err=True)
-        else:
-            typer.echo(
-                f"{label} must be at least {min_length} characters long",
-                err=True,
-            )
-
-
-def _prompt_choice(label: str, choices: tuple[str, ...], *, default: str) -> str:
-    choice_list = "/".join(choices)
-    while True:
-        value = typer.prompt(f"{label} [{choice_list}]", default=default).strip()
-        if value in choices:
-            return value
-        typer.echo(f"{label} must be one of: {choice_list}", err=True)
-
-
 def _echo_inferred_storage(inferred_storage: InferredStorageClasses) -> None:
     typer.echo(
         "Inferred storage classes from "
@@ -327,13 +301,3 @@ def _echo_inferred_storage(inferred_storage: InferredStorageClasses) -> None:
         f"dynamic={inferred_storage.dynamic_storage_class!r}, "
         f"pvc={inferred_storage.provisioning_storage_class!r}"
     )
-
-
-def _validate_output_path(path: Path, *, force: bool) -> None:
-    if path.exists() and not force:
-        raise CommandError(f"{path} already exists; use --force to overwrite it")
-
-
-def _validate_distinct_paths(left: Path, right: Path) -> None:
-    if left == right:
-        raise CommandError("Product output and secret-values output must differ")

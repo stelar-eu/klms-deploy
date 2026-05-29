@@ -6,7 +6,7 @@
 #
 
 from copy import deepcopy
-from typing import Any
+from typing import Any, Callable
 from collections import defaultdict
 
 from pydantic import BaseModel, JsonValue, Field
@@ -19,6 +19,7 @@ from .feature import (
 )
 
 JsonObject = dict[str, Any]
+ValidationStep = Callable[["Feature", JsonObject], None]
 
 
 class Product(BaseModel):
@@ -329,6 +330,16 @@ class ProductValidator:
                 "Product validation failed", dict(self.validation_errors)
             )
 
+    def _validation_steps(self) -> tuple[ValidationStep, ...]:
+        """Return the ordered product validation pipeline."""
+        return (
+            self._validate_structure,
+            self._select_features,
+            self._select_required_features,
+            self._validate_groups,
+            self._validate_attributes,
+        )
+
     def _prepare_validation(self):
         """Prepare for validation by clearing the enabled features and validation errors."""
         self.enabled_features.clear()
@@ -340,26 +351,13 @@ class ProductValidator:
         """Validate a product against a feature model."""
 
         self._prepare_validation()
-        self.enabled_features = set()
         self.input_product = product
         root = self.feature_model.root
         spec = deepcopy(product.spec)
 
-        # Perform the validation steps.
-        self._validate_structure(root, spec)
-        self._raise_if_errors()
-
-        self._select_features(root, spec)
-        self._raise_if_errors()
-
-        self._select_required_features(root, spec)
-        self._raise_if_errors()
-
-        self._validate_groups(root, spec)
-        self._raise_if_errors()
-
-        self._validate_attributes(root, spec)
-        self._raise_if_errors()
+        for validation_step in self._validation_steps():
+            validation_step(root, spec)
+            self._raise_if_errors()
 
         # Process the root feature, which is always enabled
         self.fullspec = {root.name: spec}

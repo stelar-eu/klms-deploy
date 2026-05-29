@@ -2051,9 +2051,26 @@ def test_root_cli_help_documents_current_workflow():
     result = runner.invoke(app, ["--help"])
 
     assert result.exit_code == 0
-    assert "product generate" in result.stdout
-    assert "init-lake cluster" in result.stdout
-    assert "init-manual-tls" in result.stdout
+    output = plain_help(result.stdout)
+    assert "product generate" in output
+    assert "init-lake cluster" in output
+    assert "init-manual-tls" in output
+    assert "Typical workflow" in output
+    assert "Main concepts" in output
+    assert "fullspec" in output
+    assert "does not run tk apply" in output
+
+
+def test_product_group_help_explains_product_flow_and_tls_rules():
+    result = runner.invoke(app, ["product", "--help"])
+
+    assert result.exit_code == 0
+    output = plain_help(result.stdout)
+    assert "Product flow" in output
+    assert "product_fullspec.json" in output
+    assert "SCHEME=http" in output
+    assert "SCHEME=https" in output
+    assert "manual_tls" in output
 
 
 def test_root_cli_short_help_alias_is_available():
