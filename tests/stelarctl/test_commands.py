@@ -156,7 +156,11 @@ def write_generated_lake_files(
             "dynamicStorageClass": dynamic_storage_class,
             "dynamic_volume_storage_class": provisioning_storage_class,
             "SCHEME": scheme,
-            "minio": {"INSECURE_MC_CLIENT": "true" if scheme == "http" else "false"},
+            "minio": {
+                "INSECURE_MC_CLIENT": "true" if scheme == "http" else "false",
+                "MINIO_ROOT_USER": "root",
+                "MINIO_ROOT_PASSWORD": "minio-root-password",
+            },
             "ingress": ingress,
         }
     }
@@ -1063,6 +1067,40 @@ def test_init_lake_cluster_rejects_invalid_scheme(tmp_path, monkeypatch):
     set_cluster_preflight(monkeypatch)
 
     with pytest.raises(CommandError, match="SCHEME as http or https"):
+        init_lake_cluster("dev", workspace)
+
+
+@pytest.mark.parametrize(
+    ("field_name", "value", "message"),
+    [
+        (
+            "MINIO_ROOT_PASSWORD",
+            "1234",
+            "minio.MINIO_ROOT_PASSWORD.*at least 8 characters",
+        ),
+        (
+            "MINIO_ROOT_USER",
+            "ab",
+            "minio.MINIO_ROOT_USER.*at least 3 characters",
+        ),
+    ],
+)
+def test_init_lake_cluster_rejects_invalid_minio_credentials_in_fullspec(
+    tmp_path,
+    monkeypatch,
+    field_name,
+    value,
+    message,
+):
+    workspace = make_workspace(tmp_path / "workspace")
+    init_lake_environment("dev", workspace)
+    environment_dir = write_generated_lake_files(workspace)
+    fullspec = read_json(environment_dir / "product_fullspec.json")
+    fullspec["klms"]["minio"][field_name] = value
+    write_json(environment_dir / "product_fullspec.json", fullspec)
+    set_cluster_preflight(monkeypatch)
+
+    with pytest.raises(CommandError, match=message):
         init_lake_cluster("dev", workspace)
 
 
@@ -2063,7 +2101,11 @@ class FakeProductValidator:
                 "namespace": product.spec["namespace"],
                 "generated": True,
                 "SCHEME": "http",
-                "minio": {"INSECURE_MC_CLIENT": "true"},
+                "minio": {
+                    "INSECURE_MC_CLIENT": "true",
+                    "MINIO_ROOT_USER": "root",
+                    "MINIO_ROOT_PASSWORD": "minio-root-password",
+                },
                 "ingress": {"tls": ["no_tls"], "no_tls": {}},
             }
         }
@@ -2089,7 +2131,11 @@ class HttpWithTlsProductValidator:
             "klms": {
                 "namespace": product.spec["namespace"],
                 "SCHEME": "http",
-                "minio": {"INSECURE_MC_CLIENT": "true"},
+                "minio": {
+                    "INSECURE_MC_CLIENT": "true",
+                    "MINIO_ROOT_USER": "root",
+                    "MINIO_ROOT_PASSWORD": "minio-root-password",
+                },
                 "ingress": {
                     "tls": ["cert_manager"],
                     "cert_manager": {"ClusterIssuer": "letsencrypt-production"},
@@ -2107,7 +2153,11 @@ class HttpWithSecureMinioProductValidator:
             "klms": {
                 "namespace": product.spec["namespace"],
                 "SCHEME": "http",
-                "minio": {"INSECURE_MC_CLIENT": "false"},
+                "minio": {
+                    "INSECURE_MC_CLIENT": "false",
+                    "MINIO_ROOT_USER": "root",
+                    "MINIO_ROOT_PASSWORD": "minio-root-password",
+                },
                 "ingress": {"tls": ["no_tls"], "no_tls": {}},
             }
         }
@@ -2122,7 +2172,11 @@ class HttpsNoTlsProductValidator:
             "klms": {
                 "namespace": product.spec["namespace"],
                 "SCHEME": "https",
-                "minio": {"INSECURE_MC_CLIENT": "false"},
+                "minio": {
+                    "INSECURE_MC_CLIENT": "false",
+                    "MINIO_ROOT_USER": "root",
+                    "MINIO_ROOT_PASSWORD": "minio-root-password",
+                },
                 "ingress": {"tls": ["no_tls"], "no_tls": {}},
             }
         }
@@ -2159,7 +2213,11 @@ def test_generate_lakespec_cli_writes_files_and_prints_fullspec(
             "namespace": "test",
             "generated": True,
             "SCHEME": "http",
-            "minio": {"INSECURE_MC_CLIENT": "true"},
+            "minio": {
+                "INSECURE_MC_CLIENT": "true",
+                "MINIO_ROOT_USER": "root",
+                "MINIO_ROOT_PASSWORD": "minio-root-password",
+            },
             "ingress": {"tls": ["no_tls"], "no_tls": {}},
         }
     }
@@ -2169,7 +2227,11 @@ def test_generate_lakespec_cli_writes_files_and_prints_fullspec(
             "namespace": "test",
             "generated": True,
             "SCHEME": "http",
-            "minio": {"INSECURE_MC_CLIENT": "true"},
+            "minio": {
+                "INSECURE_MC_CLIENT": "true",
+                "MINIO_ROOT_USER": "root",
+                "MINIO_ROOT_PASSWORD": "minio-root-password",
+            },
             "ingress": {"tls": ["no_tls"], "no_tls": {}},
         }
     }
@@ -2221,6 +2283,20 @@ def test_generate_lakespec_cli_reports_product_validation_failure(
     assert "invalid product choices" in result.output
 
 
+class ShortMinioPasswordProductValidator(FakeProductValidator):
+    def validate(self, product):
+        fullspec = super().validate(product)
+        fullspec["klms"]["minio"]["MINIO_ROOT_PASSWORD"] = "1234"
+        return fullspec
+
+
+class ShortMinioUserProductValidator(FakeProductValidator):
+    def validate(self, product):
+        fullspec = super().validate(product)
+        fullspec["klms"]["minio"]["MINIO_ROOT_USER"] = "ab"
+        return fullspec
+
+
 def test_product_to_fullspec_requires_initialized_environment(tmp_path, monkeypatch):
     workspace = make_workspace(tmp_path / "workspace")
     product_path = tmp_path / "product.yaml"
@@ -2262,7 +2338,11 @@ def test_product_to_fullspec_writes_product_and_fullspec(tmp_path, monkeypatch):
             "namespace": "test",
             "generated": True,
             "SCHEME": "http",
-            "minio": {"INSECURE_MC_CLIENT": "true"},
+            "minio": {
+                "INSECURE_MC_CLIENT": "true",
+                "MINIO_ROOT_USER": "root",
+                "MINIO_ROOT_PASSWORD": "minio-root-password",
+            },
             "ingress": {"tls": ["no_tls"], "no_tls": {}},
         }
     }
@@ -2286,6 +2366,14 @@ def test_product_to_fullspec_writes_product_and_fullspec(tmp_path, monkeypatch):
         (HttpWithTlsProductValidator, "SCHEME http.*ingress.tls no_tls"),
         (HttpsNoTlsProductValidator, "SCHEME https.*manual_tls"),
         (HttpWithSecureMinioProductValidator, "SCHEME http.*INSECURE_MC_CLIENT"),
+        (
+            ShortMinioPasswordProductValidator,
+            "minio.MINIO_ROOT_PASSWORD.*at least 8 characters",
+        ),
+        (
+            ShortMinioUserProductValidator,
+            "minio.MINIO_ROOT_USER.*at least 3 characters",
+        ),
     ],
 )
 def test_product_to_fullspec_rejects_scheme_tls_mismatch(

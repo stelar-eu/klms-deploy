@@ -361,6 +361,7 @@ root:
               type: string
             MINIO_ROOT_PASSWORD:
               type: string
+              minLength: 8
             CONSOLE_PORT:
               type: integer
               default: 9001
@@ -372,6 +373,7 @@ root:
               default: "quay.io/minio/minio:RELEASE.2025-04-22T22-12-26Z-cpuv1"
             MINIO_ROOT_USER:
               type: string
+              minLength: 3
               default: "root"
             MINIO_ROOT_PASSWORD_SECRET_NAME:
               type: string

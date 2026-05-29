@@ -109,6 +109,33 @@ def test_build_minimal_product_rejects_invalid_https_insecure_minio_value():
         build_minimal_product(minimal_config(insecure_minio_client="maybe"))
 
 
+@pytest.mark.parametrize(
+    ("field_name", "value", "message"),
+    [
+        (
+            "MINIO_ROOT_PASSWORD",
+            "1234",
+            "MINIO_ROOT_PASSWORD",
+        ),
+        (
+            "MINIO_ROOT_USER",
+            "ab",
+            "MINIO_ROOT_USER",
+        ),
+    ],
+)
+def test_feature_model_rejects_invalid_minio_credential_constraints(
+    field_name,
+    value,
+    message,
+):
+    product = build_minimal_product(minimal_config())
+    product["spec"]["minio"][field_name] = value
+
+    with pytest.raises(ProductValidationFailure, match=message):
+        ProductValidator(feature_model).validate(Product.model_validate(product))
+
+
 def test_feature_model_rejects_multiple_tls_modes():
     product = build_minimal_product(minimal_config())
     product["spec"]["ingress"]["tls"] = ["cert_manager", "self_signed"]

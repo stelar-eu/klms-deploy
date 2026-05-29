@@ -4,6 +4,10 @@ from __future__ import annotations
 
 from .common import CommandError, JsonObject
 from .manual_tls import MANUAL_TLS_SECRET_FIELDS
+from .secret_resources import (
+    validate_minio_root_password,
+    validate_minio_root_user,
+)
 
 TLS_MODES = {"no_tls", "cert_manager", "manual_tls", "self_signed"}
 
@@ -45,6 +49,8 @@ def validate_config_scheme_tls_consistency(
         modes = ", ".join(sorted(TLS_MODES))
         raise CommandError(f"{source} ingress.tls must be one of: {modes}")
 
+    _validate_minio_credentials(config, source=source)
+
     if scheme == "http" and tls_mode != "no_tls":
         raise CommandError(
             f"{source} with SCHEME http must select ingress.tls no_tls"
@@ -62,14 +68,48 @@ def validate_config_scheme_tls_consistency(
 
 
 def _validate_http_minio_insecure(config: JsonObject, *, source: str) -> None:
-    minio = config.get("minio")
-    if not isinstance(minio, dict):
-        raise CommandError(f"{source} with SCHEME http must define minio")
+    minio = _required_minio_config(config, source=source)
     if minio.get("INSECURE_MC_CLIENT") != "true":
         raise CommandError(
             f"{source} with SCHEME http must define "
             "minio.INSECURE_MC_CLIENT as true"
         )
+
+
+def _validate_minio_credentials(config: JsonObject, *, source: str) -> None:
+    minio = _required_minio_config(config, source=source)
+    root_user = _required_minio_string(minio, "MINIO_ROOT_USER", source=source)
+    root_password = _required_minio_string(
+        minio,
+        "MINIO_ROOT_PASSWORD",
+        source=source,
+    )
+    validate_minio_root_user(root_user, source=f"{source} minio.MINIO_ROOT_USER")
+    validate_minio_root_password(
+        root_password,
+        source=f"{source} minio.MINIO_ROOT_PASSWORD",
+    )
+
+
+def _required_minio_config(config: JsonObject, *, source: str) -> JsonObject:
+    minio = config.get("minio")
+    if not isinstance(minio, dict):
+        raise CommandError(f"{source} must define minio as an object")
+    return minio
+
+
+def _required_minio_string(
+    minio: JsonObject,
+    field_name: str,
+    *,
+    source: str,
+) -> str:
+    value = minio.get(field_name)
+    if not isinstance(value, str) or not value:
+        raise CommandError(
+            f"{source} must define minio.{field_name} as a non-empty string"
+        )
+    return value
 
 
 def _validate_manual_tls_config(ingress: JsonObject, *, source: str) -> None:

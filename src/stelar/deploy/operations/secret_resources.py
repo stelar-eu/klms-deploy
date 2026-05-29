@@ -45,6 +45,7 @@ OPTIONAL_PRODUCT_SECRET_FIELDS = (
 )
 CKAN_AUTH_SECRET_NAME = "ckan-auth-secret"
 MINIO_ROOT_PASSWORD_MIN_LENGTH = 8
+MINIO_ROOT_USER_MIN_LENGTH = 3
 
 
 def product_secrets(spec: JsonObject) -> list[tuple[str, dict[str, str]]]:
@@ -141,6 +142,14 @@ def validate_minio_root_password(value: str, *, source: str) -> None:
         raise CommandError(
             f"{source} must be at least "
             f"{MINIO_ROOT_PASSWORD_MIN_LENGTH} characters long"
+        )
+
+
+def validate_minio_root_user(value: str, *, source: str) -> None:
+    if len(value) < MINIO_ROOT_USER_MIN_LENGTH:
+        raise CommandError(
+            f"{source} must be at least "
+            f"{MINIO_ROOT_USER_MIN_LENGTH} characters long"
         )
 
 
