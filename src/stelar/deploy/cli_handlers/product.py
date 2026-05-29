@@ -22,6 +22,7 @@ from ..operations import (
     CommandError,
     write_manual_tls_sample,
 )
+from ..operations.secret_resources import MINIO_ROOT_PASSWORD_MIN_LENGTH
 from .lakespec import register_lakespec_commands
 from ..operations.minimal_product import (
     InferredStorageClasses,
@@ -253,7 +254,10 @@ def _prompt_secret_values() -> MinimalSecretValues:
         ckan_session_key=_prompt_secret("CKAN session key"),
         ckan_jwt_key=_prompt_secret("CKAN JWT key"),
         keycloak_root_password=_prompt_secret("Keycloak admin/root password"),
-        minio_root_password=_prompt_secret("MinIO root password"),
+        minio_root_password=_prompt_secret(
+            "MinIO root password",
+            min_length=MINIO_ROOT_PASSWORD_MIN_LENGTH,
+        ),
     )
 
 
@@ -265,16 +269,22 @@ def _prompt_required(label: str, *, default: str | None = None) -> str:
         typer.echo(f"{label} cannot be empty", err=True)
 
 
-def _prompt_secret(label: str) -> str:
+def _prompt_secret(label: str, *, min_length: int = 1) -> str:
     while True:
         value = typer.prompt(
             label,
             hide_input=True,
             confirmation_prompt=True,
         )
-        if value:
+        if len(value) >= min_length:
             return value
-        typer.echo(f"{label} cannot be empty", err=True)
+        if min_length == 1:
+            typer.echo(f"{label} cannot be empty", err=True)
+        else:
+            typer.echo(
+                f"{label} must be at least {min_length} characters long",
+                err=True,
+            )
 
 
 def _prompt_choice(label: str, choices: tuple[str, ...], *, default: str) -> str:

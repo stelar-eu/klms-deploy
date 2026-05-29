@@ -1,4 +1,5 @@
 import stat
+from dataclasses import replace
 from types import SimpleNamespace
 
 import pytest
@@ -91,6 +92,16 @@ def test_build_minimal_product_forces_insecure_minio_for_http():
     )
 
     assert product["spec"]["minio"]["INSECURE_MC_CLIENT"] == "true"
+
+
+def test_build_minimal_product_rejects_short_minio_root_password():
+    secrets = replace(generate_minimal_secret_values(), minio_root_password="1234")
+
+    with pytest.raises(
+        CommandError,
+        match="minio.MINIO_ROOT_PASSWORD.*at least 8 characters",
+    ):
+        build_minimal_product(minimal_config(secrets=secrets))
 
 
 def test_build_minimal_product_rejects_invalid_https_insecure_minio_value():

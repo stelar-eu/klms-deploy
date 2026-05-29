@@ -44,6 +44,7 @@ OPTIONAL_PRODUCT_SECRET_FIELDS = (
     ("llm_search", "GROQ_API_KEY_SECRET_NAME", "GROQ_API_KEY", "key"),
 )
 CKAN_AUTH_SECRET_NAME = "ckan-auth-secret"
+MINIO_ROOT_PASSWORD_MIN_LENGTH = 8
 
 
 def product_secrets(spec: JsonObject) -> list[tuple[str, dict[str, str]]]:
@@ -126,7 +127,21 @@ def _secret_from_product_spec(
     section_config = _product_spec_section(spec, section)
     secret_name = _required_product_spec_string(section_config, section, name_key)
     secret_value = _required_product_spec_string(section_config, section, value_key)
+    _validate_secret_value(section, value_key, secret_value)
     return secret_name, {data_key: secret_value}
+
+
+def _validate_secret_value(section: str, key: str, value: str) -> None:
+    if section == "minio" and key == "MINIO_ROOT_PASSWORD":
+        validate_minio_root_password(value, source=f"{section}.{key}")
+
+
+def validate_minio_root_password(value: str, *, source: str) -> None:
+    if len(value) < MINIO_ROOT_PASSWORD_MIN_LENGTH:
+        raise CommandError(
+            f"{source} must be at least "
+            f"{MINIO_ROOT_PASSWORD_MIN_LENGTH} characters long"
+        )
 
 
 def _product_spec_section(spec: JsonObject, section: str) -> JsonObject:

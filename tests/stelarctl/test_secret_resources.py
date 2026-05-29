@@ -77,6 +77,17 @@ def test_product_secrets_rejects_missing_secret_field():
         product_secrets(spec)
 
 
+def test_product_secrets_rejects_short_minio_root_password():
+    spec = product_spec()
+    spec["minio"]["MINIO_ROOT_PASSWORD"] = "1234"
+
+    with pytest.raises(
+        CommandError,
+        match="minio.MINIO_ROOT_PASSWORD.*at least 8 characters",
+    ):
+        product_secrets(spec)
+
+
 def test_kubernetes_secret_base64_encodes_opaque_data():
     secret = kubernetes_secret(
         "app-secret",

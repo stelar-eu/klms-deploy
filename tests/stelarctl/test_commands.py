@@ -1466,6 +1466,12 @@ def test_init_lake_cluster_rejects_secret_create_error(tmp_path, monkeypatch):
             lambda product: product["spec"]["api"].update({"SMTP_PASSWORD": ""}),
             "api.SMTP_PASSWORD",
         ),
+        (
+            lambda product: product["spec"]["minio"].update(
+                {"MINIO_ROOT_PASSWORD": "1234"}
+            ),
+            "minio.MINIO_ROOT_PASSWORD.*at least 8 characters",
+        ),
     ],
 )
 def test_init_lake_cluster_rejects_invalid_secret_source_fields(

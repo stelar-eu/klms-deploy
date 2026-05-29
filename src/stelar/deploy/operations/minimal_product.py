@@ -12,6 +12,7 @@ from kubernetes import client as kube_client
 from kubernetes import config as kube_config
 
 from .common import CommandError, JsonObject
+from .secret_resources import validate_minio_root_password
 
 
 SECRET_FILE_MODE = 0o600
@@ -95,6 +96,10 @@ def generate_minimal_secret_values() -> MinimalSecretValues:
 def build_minimal_product(config: MinimalProductConfig) -> JsonObject:
     """Build the minimal product spec accepted by the feature model."""
     scheme = _normalized_scheme(config.scheme)
+    validate_minio_root_password(
+        config.secrets.minio_root_password,
+        source="minio.MINIO_ROOT_PASSWORD",
+    )
     insecure_minio_client = _normalized_minio_insecure_value(
         scheme,
         config.insecure_minio_client,
