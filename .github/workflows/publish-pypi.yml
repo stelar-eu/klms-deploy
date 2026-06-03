@@ -1,16 +1,12 @@
 name: Publish stelarctl to PyPI
 
 on:
-  workflow_dispatch:
   push:
-    branches:
-      - main
-    paths:
-      - "src/stelar/**"
-      - "pyproject.toml"
+    tags:
+      - "stelarctl-v*"
 
 concurrency:
-  group: publish-pypi-main
+  group: publish-pypi-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
@@ -36,25 +32,24 @@ jobs:
       - name: Run stelarctl tests
         run: python -m pytest -q tests/stelarctl
 
-      - name: Set unique package version
+      - name: Set package version from tag
         run: |
           python - <<'PY'
           import os
           import re
           from pathlib import Path
 
+          tag = os.environ["GITHUB_REF_NAME"]
+          match = re.fullmatch(r"stelarctl-v(\d+\.\d+\.\d+(?:\.post\d+)?)", tag)
+          if not match:
+              raise SystemExit(
+                  "Expected release tag format stelarctl-vMAJOR.MINOR.PATCH "
+                  "or stelarctl-vMAJOR.MINOR.PATCH.postN"
+              )
+          version = match.group(1)
+
           pyproject = Path("pyproject.toml")
           text = pyproject.read_text(encoding="utf-8")
-          match = re.search(r'^version = "(\d+)\.(\d+)\.\d+"$', text, re.MULTILINE)
-          if not match:
-              raise SystemExit("Expected project.version to use MAJOR.MINOR.PATCH")
-
-          run_number = os.environ["GITHUB_RUN_NUMBER"]
-          run_attempt = os.environ["GITHUB_RUN_ATTEMPT"]
-          version = f"{match.group(1)}.{match.group(2)}.{run_number}"
-          if run_attempt != "1":
-              version = f"{version}.post{run_attempt}"
-
           text = re.sub(
               r'^version = "[^"]+"$',
               f'version = "{version}"',
@@ -83,7 +78,7 @@ jobs:
   publish:
     name: Publish distribution to PyPI
     needs: build
-    if: github.ref == 'refs/heads/main'
+    if: startsWith(github.ref, 'refs/tags/stelarctl-v')
     runs-on: ubuntu-latest
     environment: pypi
     permissions:

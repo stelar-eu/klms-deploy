@@ -331,6 +331,20 @@ If an HTTP deployment renders HTTPS URLs or MinIO clients fail against HTTP
 MinIO, inspect `product_fullspec.json` and verify `SCHEME` is `http`,
 `ingress.tls` is `no_tls`, and `minio.INSECURE_MC_CLIENT` is `true`.
 
+## Publishing the package
+
+The PyPI workflow does not run on normal pushes to `main`. To publish a new
+`stelar-deploy` package, tag the exact commit to release and push the tag:
+
+```bash
+git tag stelarctl-v0.1.12 <commit>
+git push origin stelarctl-v0.1.12
+```
+
+The tag must use `stelarctl-vMAJOR.MINOR.PATCH` or
+`stelarctl-vMAJOR.MINOR.PATCH.postN`. The workflow copies that version into
+`pyproject.toml` before building and publishing the wheel.
+
 ## Code layout
 
 The CLI is split so future commands can be added without expanding the entrypoint:
