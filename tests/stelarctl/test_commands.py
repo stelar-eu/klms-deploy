@@ -73,7 +73,7 @@ def make_workspace(path: Path) -> Path:
 
     template_dir = environment_template_dir(path)
     template_dir.mkdir(parents=True)
-    (template_dir / "main.jsonnet").write_text(
+    (template_dir / "main_template.jsonnet").write_text(
         MAIN_JSONNET_TEMPLATE,
         encoding="utf-8",
     )
@@ -786,7 +786,7 @@ def test_init_lake_environment_creates_directory_and_copies_templates(tmp_path):
         ("directory_created", str(environment_dir)),
         (
             "copying_template",
-            str(environment_template_dir(workspace) / "main.jsonnet"),
+            str(environment_template_dir(workspace) / "main_template.jsonnet"),
             str(environment_dir / "main.jsonnet"),
         ),
         ("template_copied", str(environment_dir / "main.jsonnet")),
@@ -1932,7 +1932,7 @@ def test_init_lake_environment_cli_creates_environment(tmp_path):
     assert f"✅ Directory {str(workspace / 'environments')!r} created." in result.stdout
     assert (
         "🖊️ Copying template "
-        f"{str(environment_template_dir(workspace) / 'main.jsonnet')!r}"
+        f"{str(environment_template_dir(workspace) / 'main_template.jsonnet')!r}"
         in result.stdout
     )
     assert (

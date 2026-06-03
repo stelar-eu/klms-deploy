@@ -187,7 +187,8 @@ INIT_LAKE_ENVIRONMENT_HELP = (
 INIT_LAKE_ENVIRONMENT_EPILOG = dedent(
     """
     This command expects jb install to have populated vendor/ because the Tanka
-    main.jsonnet template is copied from the vendored STELAR deployment library.
+    main_template.jsonnet is copied from the vendored STELAR deployment library
+    as the environment main.jsonnet entrypoint.
     Existing main.jsonnet and spec.json files are preserved.
     """
 ).strip()

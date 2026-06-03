@@ -137,13 +137,13 @@ from the packaged template.
 stelarctl init-lake environment ENV [--workspace WORKSPACE]
 ```
 
-Creates `environments/ENV`, copies `main.jsonnet` from the vendored STELAR
-library, and creates a minimal `spec.json` skeleton.
+Creates `environments/ENV`, copies `main_template.jsonnet` from the vendored
+STELAR library as `main.jsonnet`, and creates a minimal `spec.json` skeleton.
 
 This command expects `jb install` to have populated:
 
 ```text
-vendor/github.com/stelar-eu/klms-deploy/lib/environment_templates/main.jsonnet
+vendor/github.com/stelar-eu/klms-deploy/lib/environment_templates/main_template.jsonnet
 ```
 
 Existing `main.jsonnet` and `spec.json` files are not overwritten.

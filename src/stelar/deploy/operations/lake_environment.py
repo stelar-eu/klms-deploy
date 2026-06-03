@@ -21,6 +21,7 @@ ENVIRONMENT_TEMPLATE_DIR = (
 )
 INITIALIZED_LAKE_ENVIRONMENT_FILES = ("main.jsonnet", "spec.json")
 GENERATED_LAKE_ENVIRONMENT_FILES = ("product.json", "product_fullspec.json")
+MAIN_JSONNET_TEMPLATE = "main_template.jsonnet"
 SPEC_JSON_SKELETON = {
     "apiVersion": "tanka.dev/v1alpha1",
     "spec": {},
@@ -37,7 +38,7 @@ def init_lake_environment(
     Behavior:
     - Validate that workspace_path points to a valid workspace.
     - Create environments/<environment> when it does not exist.
-    - Copy main.jsonnet from the vendored STELAR library.
+    - Copy main_template.jsonnet from the vendored STELAR library as main.jsonnet.
     - Create a minimal spec.json skeleton when missing.
     - Do nothing when both files already exist.
     """
@@ -162,7 +163,12 @@ def _ensure_main_jsonnet(
         progress.file_exists(str(main_jsonnet_path))
         return
 
-    _copy_environment_template(workspace, "main.jsonnet", main_jsonnet_path, progress)
+    _copy_environment_template(
+        workspace,
+        MAIN_JSONNET_TEMPLATE,
+        main_jsonnet_path,
+        progress,
+    )
 
 
 def _ensure_spec_json(environment_dir: Path, progress: LakeEnvironmentProgress) -> None:
