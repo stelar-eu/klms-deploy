@@ -22,29 +22,10 @@ from stelar.deploy.models.product import ProductValidationFailure
 
 
 MAIN_JSONNET_TEMPLATE = (
-    "// Static environment template. The selected components are rendered from a\n"
-    "// generated product fullspec imported as one shared config object.\n"
-    "\n"
-    'local product_transformation = import "github.com/stelar-eu/klms-deploy/lib/util/product_transformation.libsonnet";\n'
-    'local component_registry = import "github.com/stelar-eu/klms-deploy/lib/util/components.libsonnet";\n'
-    "\n"
-    'local product_fullspec = import "./product_fullspec.json";\n'
-    "\n"
-    "local selected_components = std.objectFields(product_transformation.extract_components(product_fullspec));\n"
-    "local global_config = product_transformation.extract_configuration(product_fullspec);\n"
-    "\n"
-    "local render_order = [\n"
-    "  name\n"
-    "  for name in component_registry.get_names()\n"
-    "  if std.member(selected_components, name)\n"
-    "];\n"
-    "\n"
-    "{\n"
-    "  manifests: [\n"
-    "    component_registry.get(name).manifest(global_config)\n"
-    "    for name in render_order\n"
-    "  ],\n"
-    "}\n"
+    'local build_lake = import \"github.com/stelar-eu/klms-deploy/lib/util/build_lake.libsonnet\";\n'
+    'local product_fullspec = import \"./product_fullspec.json\";\n'
+    '\n'
+    'build_lake(product_fullspec)\n'
 )
 SPEC_JSON_TEMPLATE = '{\n  "apiVersion": "tanka.dev/v1alpha1",\n  "spec": {}\n}\n'
 runner = CliRunner()
