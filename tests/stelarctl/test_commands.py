@@ -16,6 +16,7 @@ from stelar.deploy.operations import (
     init_lake_cluster,
     init_lake_environment,
     init_lake_workspace,
+    workspace_info,
     product_to_fullspec,
 )
 from stelar.deploy.models.product import ProductValidationFailure
@@ -1795,19 +1796,19 @@ def test_init_lake_cli_has_environment_and_cluster_subcommands():
     result = runner.invoke(app, ["init-lake", "--help"])
 
     assert result.exit_code == 0
-    assert "workspace" in result.stdout
+    assert "init-lake workspace" not in result.stdout
     assert "environment" in result.stdout
     assert "cluster" in result.stdout
 
 
-def test_init_lake_workspace_cli_creates_workspace(tmp_path):
+def test_workspace_init_cli_creates_workspace(tmp_path):
     workspace = tmp_path / "workspace"
 
     result = runner.invoke(
         app,
         [
-            "init-lake",
             "workspace",
+            "init",
             str(workspace),
         ],
     )
@@ -1829,7 +1830,7 @@ def test_init_lake_workspace_cli_creates_workspace(tmp_path):
     )
 
 
-def test_init_lake_workspace_cli_force_rewrites_jsonnetfile(tmp_path):
+def test_workspace_init_cli_force_rewrites_jsonnetfile(tmp_path):
     workspace = tmp_path / "workspace"
     workspace.mkdir()
     (workspace / "jsonnetfile.json").write_text(
@@ -1840,8 +1841,8 @@ def test_init_lake_workspace_cli_force_rewrites_jsonnetfile(tmp_path):
     result = runner.invoke(
         app,
         [
-            "init-lake",
             "workspace",
+            "init",
             str(workspace),
             "--force",
         ],
@@ -1861,7 +1862,7 @@ def test_init_lake_workspace_cli_force_rewrites_jsonnetfile(tmp_path):
     )
 
 
-def test_init_lake_workspace_cli_adds_missing_dependencies(tmp_path):
+def test_workspace_init_cli_adds_missing_dependencies(tmp_path):
     workspace = tmp_path / "workspace"
     workspace.mkdir()
     (workspace / "jsonnetfile.json").write_text(
@@ -1872,8 +1873,8 @@ def test_init_lake_workspace_cli_adds_missing_dependencies(tmp_path):
     result = runner.invoke(
         app,
         [
-            "init-lake",
             "workspace",
+            "init",
             str(workspace),
         ],
     )
@@ -1890,6 +1891,74 @@ def test_init_lake_workspace_cli_adds_missing_dependencies(tmp_path):
         f"{str(workspace / 'jsonnetfile.json')!r}."
         in result.stdout
     )
+
+
+def test_workspace_cli_has_init_and_info_subcommands():
+    result = runner.invoke(app, ["workspace", "--help"])
+
+    assert result.exit_code == 0
+    output = plain_help(result.stdout)
+    assert "init" in output
+    assert "info" in output
+
+
+def test_workspace_info_operation_reports_environment_files(tmp_path):
+    workspace = make_workspace(tmp_path / "workspace")
+    init_lake_environment("dev", workspace)
+    info = workspace_info(workspace)
+
+    assert info.path == workspace
+    assert info.initialized is True
+    assert info.jsonnetfile is True
+    assert info.lib is False
+    assert info.vendor is True
+    assert info.environments_dir is True
+    assert len(info.environments) == 1
+    environment = info.environments[0]
+    assert environment.name == "environments/dev"
+    assert environment.main_jsonnet is True
+    assert environment.spec_json is True
+    assert environment.product_json is False
+    assert environment.product_fullspec_json is False
+
+
+def test_workspace_info_cli_reports_workspace_state(tmp_path):
+    workspace = make_workspace(tmp_path / "workspace")
+    init_lake_environment("dev", workspace)
+
+    result = runner.invoke(app, ["workspace", "info", str(workspace)])
+
+    assert result.exit_code == 0
+    assert f"Workspace: {workspace}" in result.stdout
+    assert "initialized: yes" in result.stdout
+    assert "jsonnetfile.json: present" in result.stdout
+    assert "lib/: missing" in result.stdout
+    assert "vendor/: present" in result.stdout
+    assert "environments/: present" in result.stdout
+    assert "  - environments/dev" in result.stdout
+    assert "main.jsonnet: present" in result.stdout
+    assert "spec.json: present" in result.stdout
+    assert "product.json: missing" in result.stdout
+    assert "product_fullspec.json: missing" in result.stdout
+
+
+def test_workspace_info_cli_reports_uninitialized_workspace(tmp_path):
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+
+    result = runner.invoke(app, ["workspace", "info", str(workspace)])
+
+    assert result.exit_code == 0
+    assert f"Workspace: {workspace}" in result.stdout
+    assert "initialized: no" in result.stdout
+    assert "jsonnetfile.json: missing" in result.stdout
+    assert "lib/: missing" in result.stdout
+    assert "vendor/: missing" in result.stdout
+    assert "environments/: missing" in result.stdout
+    assert "Environments:" in result.stdout
+    assert "  (none)" in result.stdout
+    assert "Next step:" in result.stdout
+    assert f"stelarctl workspace init {workspace}" in result.stdout
 
 
 def test_init_lake_environment_cli_creates_environment(tmp_path):
@@ -2028,7 +2097,8 @@ def test_root_cli_help_lists_all_subcommands_with_arguments():
 
     assert result.exit_code == 0
     output = plain_help(result.stdout)
-    assert "stelarctl init-lake workspace WORKSPACE" in output
+    assert "stelarctl workspace init WORKSPACE" in output
+    assert "stelarctl workspace info [WORKSPACE]" in output
     assert "stelarctl init-lake environment ENV" in output
     assert "stelarctl init-lake cluster ENV" in output
     assert "--context CONTEXT" in output

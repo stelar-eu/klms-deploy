@@ -15,21 +15,17 @@ from ..cli_help import (
     INIT_LAKE_ENVIRONMENT_HELP,
     INIT_LAKE_EPILOG,
     INIT_LAKE_HELP,
-    INIT_LAKE_WORKSPACE_EPILOG,
-    INIT_LAKE_WORKSPACE_HELP,
     show_help_on_no_args,
 )
 from .progress import (
     TyperClusterProgress,
     TyperLakeEnvironmentProgress,
-    TyperLakeWorkspaceProgress,
 )
 from ..operations import (
     CommandError,
     PreflightAccessError,
     init_lake_cluster,
     init_lake_environment,
-    init_lake_workspace,
 )
 
 
@@ -43,12 +39,6 @@ def register_init_lake_commands(app: typer.Typer) -> None:
         context_settings=CONTEXT_SETTINGS,
     )
     init_lake_app.command(
-        "workspace",
-        help=INIT_LAKE_WORKSPACE_HELP,
-        epilog=INIT_LAKE_WORKSPACE_EPILOG,
-        short_help="Initialize a workspace root",
-    )(init_lake_workspace_command)
-    init_lake_app.command(
         "environment",
         help=INIT_LAKE_ENVIRONMENT_HELP,
         epilog=INIT_LAKE_ENVIRONMENT_EPILOG,
@@ -61,31 +51,6 @@ def register_init_lake_commands(app: typer.Typer) -> None:
         short_help="Prepare cluster metadata and secrets",
     )(init_lake_cluster_command)
     app.add_typer(init_lake_app, name="init-lake")
-
-
-def init_lake_workspace_command(
-    workspace: Annotated[
-        Path,
-        typer.Argument(
-            file_okay=False,
-            dir_okay=True,
-            resolve_path=True,
-            help="Workspace root to initialize",
-        ),
-    ],
-    force: Annotated[
-        bool,
-        typer.Option("--force", help="Rewrite jsonnetfile.json when it exists"),
-    ] = False,
-) -> None:
-    try:
-        init_lake_workspace(
-            workspace,
-            force=force,
-            progress=TyperLakeWorkspaceProgress(),
-        )
-    except CommandError as exc:
-        raise typer.BadParameter(str(exc)) from exc
 
 
 def init_lake_environment_command(

@@ -76,7 +76,7 @@ Run these commands from any directory. Use `--workspace` when the workspace is
 not the current directory.
 
 ```bash
-stelarctl init-lake workspace ./lake-workspace
+stelarctl workspace init ./lake-workspace
 cd ./lake-workspace
 jb install
 stelarctl init-lake environment dev
@@ -91,8 +91,9 @@ The environment argument accepts either `dev` or `environments/dev`.
 ## Command reference
 
 ```text
-stelarctl init-lake workspace WORKSPACE
+stelarctl workspace init WORKSPACE
     options: --force
+stelarctl workspace info [WORKSPACE]
 stelarctl init-lake environment ENV
     options: --workspace WORKSPACE
 stelarctl init-lake cluster ENV
@@ -108,10 +109,10 @@ stelarctl product generate PRODUCT ENV
 
 ## Commands
 
-### `init-lake workspace`
+### `workspace init`
 
 ```bash
-stelarctl init-lake workspace WORKSPACE [--force]
+stelarctl workspace init WORKSPACE [--force]
 ```
 
 Creates the workspace root and writes the packaged `jsonnetfile.json` template.
@@ -130,6 +131,19 @@ by itself.
 
 Use `--force` only when you intentionally want to rewrite `jsonnetfile.json`
 from the packaged template.
+
+### `workspace info`
+
+```bash
+stelarctl workspace info [WORKSPACE]
+```
+
+Prints read-only workspace state, including whether `jsonnetfile.json`, `lib/`,
+`vendor/`, and `environments/` exist. For each discovered environment, it shows
+whether `main.jsonnet`, `spec.json`, `product.json`, and `product_fullspec.json`
+are present.
+
+`WORKSPACE` defaults to the current directory.
 
 ### `init-lake environment`
 
@@ -305,12 +319,12 @@ Kubernetes TLS Secrets.
 
 The commands are designed to be rerunnable:
 
-- `init-lake workspace` reuses directories and merges missing dependencies.
+- `workspace init` reuses directories and merges missing dependencies.
 - `init-lake environment` reuses directories and preserves existing files.
 - `product generate` rewrites the generated product files for the environment.
 - `init-lake cluster` updates `spec.json`, validates prerequisites, and skips existing Secrets.
 
-The main destructive option is `init-lake workspace --force`, which rewrites
+The main destructive option is `workspace init --force`, which rewrites
 `jsonnetfile.json`.
 
 ## Troubleshooting

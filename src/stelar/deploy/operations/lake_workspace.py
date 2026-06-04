@@ -1,9 +1,10 @@
-"""Business logic for lake workspace initialization."""
+"""Business logic for lake workspace initialization and inspection."""
 
 from __future__ import annotations
 
 import json
 import pkgutil
+from dataclasses import dataclass
 from pathlib import Path
 
 from .common import CommandError
@@ -11,6 +12,31 @@ from .progress import LakeWorkspaceProgress
 
 WORKSPACE_TEMPLATE_PACKAGE = "stelar.deploy"
 JSONNETFILE_TEMPLATE = "templates/jsonnetfile.json"
+
+
+@dataclass(frozen=True)
+class WorkspaceEnvironmentInfo:
+    """Filesystem state for one Tanka environment inside a workspace."""
+
+    name: str
+    path: Path
+    main_jsonnet: bool
+    spec_json: bool
+    product_json: bool
+    product_fullspec_json: bool
+
+
+@dataclass(frozen=True)
+class WorkspaceInfo:
+    """Filesystem state for a STELAR deployment workspace."""
+
+    path: Path
+    initialized: bool
+    jsonnetfile: bool
+    lib: bool
+    vendor: bool
+    environments_dir: bool
+    environments: tuple[WorkspaceEnvironmentInfo, ...]
 
 
 def init_lake_workspace(
@@ -26,6 +52,45 @@ def init_lake_workspace(
     _ensure_directory(workspace, progress)
     _ensure_directory(workspace / "lib", progress)
     _ensure_jsonnetfile(workspace / "jsonnetfile.json", force, progress)
+
+
+def workspace_info(workspace_path: Path) -> WorkspaceInfo:
+    """Return read-only filesystem information for a workspace path."""
+    workspace = Path(workspace_path)
+    jsonnetfile = workspace / "jsonnetfile.json"
+    if not workspace.is_dir():
+        raise CommandError(f"Workspace path {workspace} is not a directory")
+    environments_dir = workspace / "environments"
+    main_files = (
+        sorted(environments_dir.rglob("main.jsonnet"))
+        if environments_dir.is_dir()
+        else []
+    )
+    environments = tuple(
+        _environment_info(workspace, main_jsonnet) for main_jsonnet in main_files
+    )
+    return WorkspaceInfo(
+        path=workspace,
+        initialized=jsonnetfile.is_file(),
+        jsonnetfile=jsonnetfile.is_file(),
+        lib=(workspace / "lib").is_dir(),
+        vendor=(workspace / "vendor").is_dir(),
+        environments_dir=environments_dir.is_dir(),
+        environments=environments,
+    )
+
+
+def _environment_info(workspace: Path, main_jsonnet: Path) -> WorkspaceEnvironmentInfo:
+    environment_dir = main_jsonnet.parent
+    name = environment_dir.relative_to(workspace).as_posix()
+    return WorkspaceEnvironmentInfo(
+        name=name,
+        path=environment_dir,
+        main_jsonnet=main_jsonnet.is_file(),
+        spec_json=(environment_dir / "spec.json").is_file(),
+        product_json=(environment_dir / "product.json").is_file(),
+        product_fullspec_json=(environment_dir / "product_fullspec.json").is_file(),
+    )
 
 
 def _ensure_directory(path: Path, progress: LakeWorkspaceProgress) -> None:

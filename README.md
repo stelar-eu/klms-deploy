@@ -22,7 +22,7 @@ stelarctl --help
 A minimal deployment flow is:
 
 ```bash
-stelarctl init-lake workspace ./lake-workspace
+stelarctl workspace init ./lake-workspace
 cd ./lake-workspace
 jb install
 stelarctl init-lake environment dev

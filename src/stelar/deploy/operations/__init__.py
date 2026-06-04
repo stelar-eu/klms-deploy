@@ -13,7 +13,7 @@ from .common import (
     validate_workspace,
 )
 from .lake_environment import init_lake_environment
-from .lake_workspace import init_lake_workspace
+from .lake_workspace import init_lake_workspace, workspace_info
 from .lakespec import product_to_fullspec
 from .manual_tls import MANUAL_TLS_FILE_NAME, write_manual_tls_sample
 from .minimal_product import (
@@ -31,6 +31,7 @@ __all__ = [
     "init_lake_cluster",
     "init_lake_environment",
     "init_lake_workspace",
+    "workspace_info",
     "load_product",
     "load_product_data",
     "MANUAL_TLS_FILE_NAME",

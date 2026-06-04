@@ -41,8 +41,9 @@ ROOT_HELP = (
 ROOT_EPILOG = dedent(
     """
     Command reference:
-      stelarctl init-lake workspace WORKSPACE
+      stelarctl workspace init WORKSPACE
           options: --force
+      stelarctl workspace info [WORKSPACE]
       stelarctl init-lake environment ENV
           options: --workspace WORKSPACE
       stelarctl init-lake cluster ENV
@@ -55,7 +56,7 @@ ROOT_EPILOG = dedent(
       stelarctl product generate PRODUCT ENV
           options: --workspace WORKSPACE
 
-    Typical workflow: run `init-lake workspace`, then `jb install`, then
+    Typical workflow: run `workspace init`, then `jb install`, then
     `init-lake environment`, then `product init-minimal` or your own product,
     then `product generate`, then `product init-manual-tls` if manual TLS is
     selected, then `init-lake cluster`, and finally `tk apply environments/<env>`.
@@ -149,25 +150,24 @@ PRODUCT_GENERATE_EPILOG = dedent(
     """
 ).strip()
 
-INIT_LAKE_HELP = (
-    "Initialize lake deployment state. Use this group to create the workspace "
-    "root, create Tanka environment directories, and prepare cluster-specific "
-    "metadata/secrets for an environment."
+WORKSPACE_HELP = (
+    "Create, inspect, and maintain STELAR deployment workspace roots. A "
+    "workspace contains jsonnetfile.json, vendor/ after jb install, and "
+    "environments/ entries."
 )
-INIT_LAKE_EPILOG = dedent(
+WORKSPACE_EPILOG = dedent(
     """
-    Required order: init-lake workspace, then jb install from the workspace root,
-    then init-lake environment, then product generate, then init-lake cluster.
-    The final Kubernetes apply is explicit: run tk apply environments/<env> after
-    init-lake cluster succeeds.
+    Use workspace init before running jb install. Use workspace info when you
+    need to check whether dependencies, environments, and generated product files
+    are present.
     """
 ).strip()
 
-INIT_LAKE_WORKSPACE_HELP = (
-    "Create or update a deployment workspace root. The workspace contains "
-    "jsonnetfile.json, vendor/ after jb install, and environments/ entries."
+WORKSPACE_INIT_HELP = (
+    "Create or update a deployment workspace root. The command writes or merges "
+    "jsonnetfile.json and creates the local lib/ directory."
 )
-INIT_LAKE_WORKSPACE_EPILOG = dedent(
+WORKSPACE_INIT_EPILOG = dedent(
     """
     After this command, run jb install from the workspace root. Jsonnet Bundler
     downloads the vendored STELAR deployment library and its Jsonnet dependencies
@@ -176,6 +176,31 @@ INIT_LAKE_WORKSPACE_EPILOG = dedent(
     Existing jsonnetfile.json files are merged with the required dependency when
     possible. Use --force only when you intentionally want to rewrite it from the
     packaged template.
+    """
+).strip()
+
+WORKSPACE_INFO_HELP = (
+    "Print read-only workspace state: jsonnetfile.json, lib/, vendor/, "
+    "environments/, and generated files inside each environment."
+)
+WORKSPACE_INFO_EPILOG = dedent(
+    """
+    WORKSPACE defaults to the current directory. The command does not run jb,
+    Tanka, or kubectl; it only inspects local files.
+    """
+).strip()
+
+INIT_LAKE_HELP = (
+    "Initialize lake deployment state inside an existing workspace. Use this "
+    "group to create Tanka environment directories and prepare cluster-specific "
+    "metadata/secrets for an environment."
+)
+INIT_LAKE_EPILOG = dedent(
+    """
+    Required order: workspace init, then jb install from the workspace root,
+    then init-lake environment, then product generate, then init-lake cluster.
+    The final Kubernetes apply is explicit: run tk apply environments/<env> after
+    init-lake cluster succeeds.
     """
 ).strip()
 
