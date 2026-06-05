@@ -81,7 +81,7 @@ cd ./lake-workspace
 jb install
 stelarctl lake add dev
 stelarctl lake create --minimal dev --context my-kube-context --namespace stelar-dev
-stelarctl lake check-cluster dev
+stelarctl lake verify dev
 stelarctl lake bootstrap dev
 tk apply dev
 ```
@@ -107,7 +107,7 @@ stelarctl lake create PRODUCT ENV
 stelarctl lake create --minimal ENV
     options: --workspace WORKSPACE, --context CONTEXT, --namespace NAMESPACE,
              --manual-secrets, --infer-storage-from-cluster
-stelarctl lake check-cluster ENV
+stelarctl lake verify ENV
     options: --workspace WORKSPACE, --context CONTEXT, --namespace NAMESPACE
 stelarctl lake bootstrap ENV
     options: --workspace WORKSPACE, --skip-preflight
@@ -276,14 +276,14 @@ ENV/manual_tls.yaml
 The YAML file does not define Kubernetes Secret names. Secret names come from
 `product_fullspec.json` under `ingress.manual_tls`.
 
-### `lake check-cluster`
+### `lake verify`
 
 ```bash
-stelarctl lake check-cluster ENV [--workspace WORKSPACE] [--context CONTEXT] [--namespace NAMESPACE]
+stelarctl lake verify ENV [--workspace WORKSPACE] [--context CONTEXT] [--namespace NAMESPACE]
 ```
 
-Runs the bootstrap prerequisite checks without writing files and without
-creating Kubernetes Secrets. The command validates that:
+Verifies that a lake environment is ready for bootstrap/apply against a
+Kubernetes cluster. The command performs read-only checks only and validates that:
 
 - `ENV` is a stelarctl-marked lake environment.
 - `ENV/product_fullspec.json` exists and passes local deployment consistency checks.
@@ -369,7 +369,7 @@ The commands are designed to be rerunnable:
 - `lake list` and `lake info` inspect marked lake environments without changing files.
 - `lake remove` deletes one marked environment after confirmation, or immediately with `--yes`.
 - `lake create` rewrites the generated product files for the environment.
-- `lake check-cluster` validates prerequisites without writing files or creating Secrets.
+- `lake verify` validates prerequisites without writing files or creating Secrets.
 - `lake bootstrap` completes missing `spec.json` target fields, validates prerequisites, and skips existing Secrets.
 
 The main destructive option is `workspace init --force`, which rewrites
@@ -380,7 +380,7 @@ The main destructive option is `workspace init --force`, which rewrites
 If `lake add` cannot find `main.jsonnet`, run `jb install` from the
 workspace root and try again.
 
-If `lake check-cluster` reports missing context or namespace, provide
+If `lake verify` reports missing context or namespace, provide
 `--context` and/or `--namespace` for the check, or persist those values with
 `lake create --context ... --namespace ...`.
 

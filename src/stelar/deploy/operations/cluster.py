@@ -233,7 +233,7 @@ def _validate_manual_tls_inputs_if_selected(
             f"product_fullspec.json selects manual_tls, but {manual_tls_path} "
             "does not exist. Generate a sample with `stelarctl lake "
             f"manual-tls-template {manual_tls_path}` and edit it before running "
-            "lake check-cluster."
+            "lake verify."
         )
     read_manual_tls_secrets(manual_tls_path, config)
 

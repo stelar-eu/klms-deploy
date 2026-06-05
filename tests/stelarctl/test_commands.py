@@ -2417,7 +2417,7 @@ def test_lake_remove_cli_aborts_without_confirmation(tmp_path):
     assert "Delete lake environment 'dev'" in result.stdout
 
 
-def test_lake_check_cluster_cli_accepts_flags_without_mutating_spec(
+def test_lake_verify_cli_accepts_flags_without_mutating_spec(
     tmp_path,
     monkeypatch,
 ):
@@ -2431,7 +2431,7 @@ def test_lake_check_cluster_cli_accepts_flags_without_mutating_spec(
         app,
         [
             "lake",
-            "check-cluster",
+            "verify",
             "dev",
             "--workspace",
             str(workspace),
@@ -2443,11 +2443,11 @@ def test_lake_check_cluster_cli_accepts_flags_without_mutating_spec(
     )
 
     assert result.exit_code == 0, result.output
-    assert "Cluster checks passed." in result.output
+    assert "Lake verification passed." in result.output
     assert read_json(environment_dir / "spec.json") == spec_before
 
 
-def test_lake_check_cluster_cli_prompts_for_missing_context_flag(tmp_path):
+def test_lake_verify_cli_prompts_for_missing_context_flag(tmp_path):
     workspace = make_workspace(tmp_path / "workspace")
     init_lake_environment("dev", workspace)
     write_generated_lake_files(workspace)
@@ -2456,7 +2456,7 @@ def test_lake_check_cluster_cli_prompts_for_missing_context_flag(tmp_path):
         app,
         [
             "lake",
-            "check-cluster",
+            "verify",
             "dev",
             "--workspace",
             str(workspace),
@@ -2553,7 +2553,7 @@ def test_root_cli_help_documents_current_workflow():
     assert "Command reference" in output
     assert "lake create" in output
     assert "lake bootstrap" in output
-    assert "check-cluster" in output
+    assert "verify" in output
     assert "lake list" in output
     assert "lake info" in output
     assert "lake remove" in output
@@ -2577,7 +2577,7 @@ def test_root_cli_help_lists_all_subcommands_with_arguments():
     assert "stelarctl lake remove ENV" in output
     assert "--yes" in output
     assert "stelarctl lake create --minimal ENV" in output
-    assert "stelarctl lake check-cluster ENV" in output
+    assert "stelarctl lake verify ENV" in output
     assert "stelarctl lake bootstrap ENV" in output
     assert "--context CONTEXT" in output
     assert "--namespace NAMESPACE" in output
@@ -2671,8 +2671,8 @@ def test_init_lake_cluster_help_documents_preflight_and_tls_behavior():
     assert "cert-manager" in output
 
 
-def test_lake_check_cluster_help_documents_read_only_behavior():
-    result = runner.invoke(app, ["lake", "check-cluster", "--help"])
+def test_lake_verify_help_documents_read_only_behavior():
+    result = runner.invoke(app, ["lake", "verify", "--help"])
 
     assert result.exit_code == 0
     output = plain_help(result.stdout)
@@ -2680,6 +2680,13 @@ def test_lake_check_cluster_help_documents_read_only_behavior():
     assert "--namespace" in output
     assert "never writes spec.json" in output
     assert "No Kubernetes Secrets are created" in output
+
+
+def test_lake_check_cluster_command_is_not_registered():
+    result = runner.invoke(app, ["lake", "check-cluster", "--help"])
+
+    assert result.exit_code == 2
+    assert "No such command 'check-cluster'" in result.output
 
 
 class FakeProductValidator:

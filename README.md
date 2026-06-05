@@ -27,7 +27,7 @@ cd ./lake-workspace
 jb install
 stelarctl lake add dev
 stelarctl lake create --minimal dev --context my-kube-context --namespace stelar-dev
-stelarctl lake check-cluster dev
+stelarctl lake verify dev
 stelarctl lake bootstrap dev
 tk apply dev
 ```

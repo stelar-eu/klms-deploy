@@ -11,8 +11,8 @@ from ..cli_help import (
     CONTEXT_SETTINGS,
     LAKE_BOOTSTRAP_EPILOG,
     LAKE_BOOTSTRAP_HELP,
-    LAKE_CHECK_CLUSTER_EPILOG,
-    LAKE_CHECK_CLUSTER_HELP,
+    LAKE_VERIFY_EPILOG,
+    LAKE_VERIFY_HELP,
     INIT_LAKE_ENVIRONMENT_EPILOG,
     INIT_LAKE_ENVIRONMENT_HELP,
     INIT_LAKE_EPILOG,
@@ -95,11 +95,11 @@ def register_init_lake_commands(app: typer.Typer) -> None:
         short_help="Write manual TLS template",
     )(lake_manual_tls_template_command)
     init_lake_app.command(
-        "check-cluster",
-        help=LAKE_CHECK_CLUSTER_HELP,
-        epilog=LAKE_CHECK_CLUSTER_EPILOG,
-        short_help="Run read-only cluster checks",
-    )(lake_check_cluster_command)
+        "verify",
+        help=LAKE_VERIFY_HELP,
+        epilog=LAKE_VERIFY_EPILOG,
+        short_help="Verify cluster readiness",
+    )(lake_verify_command)
     init_lake_app.command(
         "bootstrap",
         help=LAKE_BOOTSTRAP_HELP,
@@ -292,7 +292,7 @@ def lake_manual_tls_template_command(
 
 
 
-def lake_check_cluster_command(
+def lake_verify_command(
     env: Annotated[
         str,
         typer.Argument(help="Workspace environment name"),
@@ -338,7 +338,7 @@ def lake_check_cluster_command(
     except CommandError as exc:
         raise typer.BadParameter(str(exc)) from exc
 
-    typer.echo("Cluster checks passed.")
+    typer.echo("Lake verification passed.")
 
 
 def lake_bootstrap_command(

@@ -59,7 +59,7 @@ ROOT_EPILOG = dedent(
                    --manual-secrets, --infer-storage-from-cluster
       stelarctl lake manual-tls-template [OUTPUT]
           options: --force
-      stelarctl lake check-cluster ENV
+      stelarctl lake verify ENV
           options: --workspace WORKSPACE, --context CONTEXT, --namespace NAMESPACE
       stelarctl lake bootstrap ENV
           options: --workspace WORKSPACE, --skip-preflight
@@ -67,7 +67,7 @@ ROOT_EPILOG = dedent(
     Typical workflow: run `workspace init`, then `jb install`, then
     `lake add`, then `lake create --minimal` or `lake create PRODUCT ENV`,
     then `lake manual-tls-template` if manual TLS is selected, optionally
-    `lake check-cluster`, then `lake bootstrap`, and
+    `lake verify`, then `lake bootstrap`, and
     finally `tk apply ENV`.
 
     Main concepts: a workspace is the root with jsonnetfile.json, vendor/, and
@@ -175,7 +175,7 @@ INIT_LAKE_HELP = (
 INIT_LAKE_EPILOG = dedent(
     """
     Required order: workspace init, then jb install from the workspace root,
-    then lake add, then lake create, then lake check-cluster or lake bootstrap.
+    then lake add, then lake create, then lake verify or lake bootstrap.
     Use lake list and lake info to inspect environments. Use lake remove to
     delete one. The final Kubernetes apply is explicit: run tk apply ENV after
     lake bootstrap succeeds.
@@ -209,7 +209,7 @@ LAKE_LIST_HELP = (
 LAKE_LIST_EPILOG = dedent(
     """
     Use this to see which workspace-relative paths stelarctl will accept for
-    lake create, lake info, lake remove, lake check-cluster, and lake bootstrap.
+    lake create, lake info, lake remove, lake verify, and lake bootstrap.
     """
 ).strip()
 
@@ -236,12 +236,13 @@ LAKE_REMOVE_EPILOG = dedent(
 ).strip()
 
 
-LAKE_CHECK_CLUSTER_HELP = (
-    "Run read-only bootstrap prerequisite checks for a lake environment. The "
-    "command requires product_fullspec.json plus an explicit or spec.json "
-    "context and namespace, and it never writes spec.json or creates Secrets."
+LAKE_VERIFY_HELP = (
+    "Verify that a lake environment is ready for bootstrap/apply against a "
+    "Kubernetes cluster. The command requires product_fullspec.json plus an "
+    "explicit or spec.json context and namespace, and it never writes spec.json "
+    "or creates Secrets."
 )
-LAKE_CHECK_CLUSTER_EPILOG = dedent(
+LAKE_VERIFY_EPILOG = dedent(
     """
     Required inputs: the environment must be a stelarctl-marked lake environment,
     ENV/product_fullspec.json must exist, and a Kubernetes context and namespace
