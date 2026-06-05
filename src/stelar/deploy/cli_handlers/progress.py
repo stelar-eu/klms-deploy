@@ -14,6 +14,18 @@ from ..operations.progress import (
 class TyperClusterProgress(ClusterProgress):
     """Render cluster initialization progress through Typer."""
 
+    def inferred_context(self, context_name: str) -> None:
+        typer.echo(
+            "ℹ️ spec.json has no contextNames; using active kubectl "
+            f"context {context_name!r}."
+        )
+
+    def inferred_namespace(self, namespace: str, context_name: str) -> None:
+        typer.echo(
+            "ℹ️ spec.json has no namespace; using namespace "
+            f"{namespace!r} from kubectl context {context_name!r}."
+        )
+
     def generating_secret(self, secret_name: str) -> None:
         typer.echo(f"🔐 Generating secret {secret_name!r}...")
 
@@ -56,6 +68,18 @@ class TyperLakeEnvironmentProgress(LakeEnvironmentProgress):
 
     def file_exists(self, path: str) -> None:
         typer.echo(f"⚠️ File {path!r} already exists.")
+
+    def existing_spec_adopted(self, path: str) -> None:
+        typer.echo(
+            f"⚠️ Existing Tanka spec {path!r} was preserved and marked as a "
+            "stelarctl lake environment."
+        )
+
+    def removing_environment(self, path: str) -> None:
+        typer.echo(f"🗑️ Removing lake environment {path!r}...")
+
+    def environment_removed(self, path: str) -> None:
+        typer.echo(f"✅ Lake environment {path!r} removed.")
 
 
 class TyperLakeWorkspaceProgress(LakeWorkspaceProgress):

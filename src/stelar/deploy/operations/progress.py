@@ -6,6 +6,12 @@ from __future__ import annotations
 class ClusterProgress:
     """No-op progress reporter for cluster initialization."""
 
+    def inferred_context(self, context_name: str) -> None:
+        pass
+
+    def inferred_namespace(self, namespace: str, context_name: str) -> None:
+        pass
+
     def generating_secret(self, secret_name: str) -> None:
         pass
 
@@ -47,6 +53,15 @@ class LakeEnvironmentProgress:
         pass
 
     def file_exists(self, path: str) -> None:
+        pass
+
+    def existing_spec_adopted(self, path: str) -> None:
+        pass
+
+    def removing_environment(self, path: str) -> None:
+        pass
+
+    def environment_removed(self, path: str) -> None:
         pass
 
 

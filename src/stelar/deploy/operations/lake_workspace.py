@@ -7,7 +7,11 @@ import pkgutil
 from dataclasses import dataclass
 from pathlib import Path
 
-from .common import CommandError
+from .common import CommandError, validate_workspace
+from .lake_environment import (
+    initialized_lake_environment_dir,
+    is_lake_environment_spec,
+)
 from .progress import LakeWorkspaceProgress
 
 WORKSPACE_TEMPLATE_PACKAGE = "stelar.deploy"
@@ -60,29 +64,53 @@ def workspace_info(workspace_path: Path) -> WorkspaceInfo:
     jsonnetfile = workspace / "jsonnetfile.json"
     if not workspace.is_dir():
         raise CommandError(f"Workspace path {workspace} is not a directory")
-    environments_dir = workspace / "environments"
-    main_files = (
-        sorted(environments_dir.rglob("main.jsonnet"))
-        if environments_dir.is_dir()
-        else []
-    )
-    environments = tuple(
-        _environment_info(workspace, main_jsonnet) for main_jsonnet in main_files
-    )
+    environments = _marked_environment_infos(workspace)
     return WorkspaceInfo(
         path=workspace,
         initialized=jsonnetfile.is_file(),
         jsonnetfile=jsonnetfile.is_file(),
         lib=(workspace / "lib").is_dir(),
         vendor=(workspace / "vendor").is_dir(),
-        environments_dir=environments_dir.is_dir(),
+        environments_dir=(workspace / "environments").is_dir(),
         environments=environments,
     )
 
 
-def _environment_info(workspace: Path, main_jsonnet: Path) -> WorkspaceEnvironmentInfo:
-    environment_dir = main_jsonnet.parent
+def list_lake_environments(
+    workspace_path: Path = Path("."),
+) -> tuple[WorkspaceEnvironmentInfo, ...]:
+    """Return stelarctl-marked lake environments in an initialized workspace."""
+    workspace = validate_workspace(workspace_path)
+    return _marked_environment_infos(workspace.path)
+
+
+def lake_environment_info(
+    environment: str,
+    workspace_path: Path = Path("."),
+) -> WorkspaceEnvironmentInfo:
+    """Return filesystem information for one initialized lake environment."""
+    workspace = validate_workspace(workspace_path)
+    environment_dir = initialized_lake_environment_dir(workspace, environment)
+    return _environment_info(workspace.path, environment_dir)
+
+
+def _marked_environment_infos(workspace: Path) -> tuple[WorkspaceEnvironmentInfo, ...]:
+    spec_files = [
+        spec_json
+        for spec_json in sorted(workspace.rglob("spec.json"))
+        if is_lake_environment_spec(spec_json)
+    ]
+    return tuple(
+        _environment_info(workspace, spec_json.parent) for spec_json in spec_files
+    )
+
+
+def _environment_info(
+    workspace: Path,
+    environment_dir: Path,
+) -> WorkspaceEnvironmentInfo:
     name = environment_dir.relative_to(workspace).as_posix()
+    main_jsonnet = environment_dir / "main.jsonnet"
     return WorkspaceEnvironmentInfo(
         name=name,
         path=environment_dir,
@@ -205,7 +233,8 @@ def _read_jsonnetfile_template() -> dict:
 
     if not isinstance(data, dict):
         raise CommandError(
-            f"Packaged workspace template {JSONNETFILE_TEMPLATE!r} must contain an object"
+            f"Packaged workspace template {JSONNETFILE_TEMPLATE!r} must "
+            "contain an object"
         )
 
     return data
@@ -222,7 +251,10 @@ def _dependencies(data: dict, path: Path) -> list[dict]:
     return dependencies
 
 
-def _has_dependency(existing_dependencies: list[dict], required_dependency: dict) -> bool:
+def _has_dependency(
+    existing_dependencies: list[dict],
+    required_dependency: dict,
+) -> bool:
     required_source = required_dependency.get("source")
     return any(
         dependency.get("source") == required_source

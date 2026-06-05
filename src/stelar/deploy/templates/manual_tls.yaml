@@ -1,5 +1,5 @@
-# Manual TLS secret input for `stelarctl init-lake cluster`.
-# Copy this file to environments/<env>/manual_tls.yaml and edit the values.
+# Manual TLS secret input for `stelarctl lake bootstrap`.
+# Copy this file to ENV/manual_tls.yaml and edit the values.
 # Each endpoint value is a directory containing tls.crt and tls.key.
 # Secret names come from product_fullspec.json ingress.manual_tls.
 manual_tls:

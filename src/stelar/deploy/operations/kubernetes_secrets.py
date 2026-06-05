@@ -1,4 +1,4 @@
-"""Kubernetes Secret application helpers for init-lake cluster."""
+"""Kubernetes Secret application helpers for lake bootstrap."""
 
 from __future__ import annotations
 

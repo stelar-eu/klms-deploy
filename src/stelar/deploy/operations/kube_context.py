@@ -2,24 +2,20 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from kubernetes import client as kube_client
 from kubernetes import config as kube_config
 
 from .common import CommandError
 
+DEFAULT_KUBE_NAMESPACE = "default"
+
 
 def resolve_kube_context(context: str | None) -> str:
     """Return an explicit or active kubectl context after validating it exists."""
-    try:
-        contexts, active_context = kube_config.list_kube_config_contexts()
-    except Exception as exc:
-        raise CommandError(f"Could not load kubectl contexts: {exc}") from exc
-
-    context_names = {
-        kube_context["name"]
-        for kube_context in contexts or []
-        if isinstance(kube_context, dict) and "name" in kube_context
-    }
+    contexts, active_context = _load_kube_contexts()
+    context_names = _context_names(contexts)
 
     if context is None:
         if not isinstance(active_context, dict) or not active_context.get("name"):
@@ -30,6 +26,24 @@ def resolve_kube_context(context: str | None) -> str:
         raise CommandError(f"Kubectl context {context!r} does not exist")
 
     return context
+
+
+def resolve_kube_namespace(context_name: str) -> str:
+    """Return the namespace configured on a kube context, defaulting like kubectl."""
+    contexts, _ = _load_kube_contexts()
+    for kube_context in contexts or []:
+        if not isinstance(kube_context, dict):
+            continue
+        if kube_context.get("name") != context_name:
+            continue
+        context_data = kube_context.get("context")
+        if isinstance(context_data, dict):
+            namespace = context_data.get("namespace")
+            if isinstance(namespace, str) and namespace.strip():
+                return namespace.strip()
+        return DEFAULT_KUBE_NAMESPACE
+
+    raise CommandError(f"Kubectl context {context_name!r} does not exist")
 
 
 def load_kube_context(context_name: str) -> None:
@@ -58,3 +72,19 @@ def normalize_bearer_token_auth() -> None:
         config.api_key_prefix.setdefault("BearerToken", "Bearer")
 
     kube_client.Configuration.set_default(config)
+
+
+def _load_kube_contexts() -> tuple[list[dict[str, Any]] | None, dict[str, Any] | None]:
+    try:
+        contexts, active_context = kube_config.list_kube_config_contexts()
+    except Exception as exc:
+        raise CommandError(f"Could not load kubectl contexts: {exc}") from exc
+    return contexts, active_context
+
+
+def _context_names(contexts: list[dict[str, Any]] | None) -> set[str]:
+    return {
+        kube_context["name"]
+        for kube_context in contexts or []
+        if isinstance(kube_context, dict) and isinstance(kube_context.get("name"), str)
+    }

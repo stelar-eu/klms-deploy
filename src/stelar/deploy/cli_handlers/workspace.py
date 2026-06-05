@@ -97,7 +97,7 @@ def _echo_workspace_info(info: WorkspaceInfo) -> None:
     typer.echo(f"jsonnetfile.json: {_presence(info.jsonnetfile)}")
     typer.echo(f"lib/: {_presence(info.lib)}")
     typer.echo(f"vendor/: {_presence(info.vendor)}")
-    typer.echo(f"environments/: {_presence(info.environments_dir)}")
+    typer.echo(f"lake environments: {len(info.environments)}")
     typer.echo("Environments:")
     if not info.environments:
         typer.echo("  (none)")

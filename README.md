@@ -25,11 +25,11 @@ A minimal deployment flow is:
 stelarctl workspace init ./lake-workspace
 cd ./lake-workspace
 jb install
-stelarctl init-lake environment dev
-stelarctl product init-minimal product.yaml --generate-secret-values
-stelarctl product generate product.yaml dev
-stelarctl init-lake cluster dev --context my-kube-context
-tk apply environments/dev
+stelarctl lake add dev
+stelarctl lake create --minimal dev --context my-kube-context --namespace stelar-dev
+stelarctl lake check-cluster dev
+stelarctl lake bootstrap dev
+tk apply dev
 ```
 
 See [docs/stelarctl.md](docs/stelarctl.md) for the full command reference,

@@ -13,9 +13,13 @@ from stelar.deploy.operations import lake_workspace as workspace_commands
 from stelar.deploy.cli import app
 from stelar.deploy.operations import (
     CommandError,
+    check_lake_cluster,
     init_lake_cluster,
     init_lake_environment,
     init_lake_workspace,
+    lake_environment_info,
+    list_lake_environments,
+    remove_lake_environment,
     workspace_info,
     product_to_fullspec,
 )
@@ -28,7 +32,7 @@ MAIN_JSONNET_TEMPLATE = (
     '\n'
     'build_lake(product_fullspec)\n'
 )
-SPEC_JSON_TEMPLATE = '{\n  "apiVersion": "tanka.dev/v1alpha1",\n  "spec": {}\n}\n'
+SPEC_JSON_TEMPLATE = '{\n  "apiVersion": "tanka.dev/v1alpha1",\n  "metadata": {\n    "annotations": {\n      "stelar.eu/lake-environment": "true"\n    }\n  },\n  "spec": {}\n}\n'
 runner = CliRunner()
 ANSI_ESCAPE_RE = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
 
@@ -43,6 +47,10 @@ def read_jsonnetfile(workspace: Path) -> dict:
 
 def read_json(path: Path) -> dict:
     return json.loads(path.read_text(encoding="utf-8"))
+
+
+def read_json_from_text(text: str) -> dict:
+    return json.loads(text)
 
 
 def write_json(path: Path, data: dict) -> None:
@@ -84,9 +92,12 @@ def write_generated_lake_files(
     scheme: str = "https",
     cluster_issuer: str | None = "letsencrypt-production",
 ) -> Path:
-    environment_dir = workspace / "environments" / environment
+    environment_dir = workspace / environment
     spec_json = {
         "apiVersion": "tanka.dev/v1alpha1",
+        "metadata": {
+            "annotations": {"stelar.eu/lake-environment": "true"},
+        },
         "spec": {},
     }
     product_json = {
@@ -193,7 +204,11 @@ def set_cluster_preflight(
     def list_kube_config_contexts():
         if missing == "contexts":
             raise RuntimeError("cannot list contexts")
-        return [{"name": name} for name in context_names], active
+        contexts = [
+            {"name": name, "context": {"namespace": "test"}}
+            for name in context_names
+        ]
+        return contexts, active
 
     class CoreV1Api:
         def read_namespace(self, name):
@@ -514,6 +529,15 @@ class RecordingLakeEnvironmentProgress:
     def file_exists(self, path: str) -> None:
         self.events.append(("file_exists", path))
 
+    def existing_spec_adopted(self, path: str) -> None:
+        self.events.append(("existing_spec_adopted", path))
+
+    def removing_environment(self, path: str) -> None:
+        self.events.append(("removing_environment", path))
+
+    def environment_removed(self, path: str) -> None:
+        self.events.append(("environment_removed", path))
+
 
 class RecordingLakeWorkspaceProgress:
     def __init__(self):
@@ -753,7 +777,7 @@ def test_init_lake_environment_creates_directory_and_copies_templates(tmp_path):
 
     init_lake_environment("dev", workspace, progress=progress)
 
-    environment_dir = workspace / "environments" / "dev"
+    environment_dir = workspace / "dev"
     assert environment_dir.is_dir()
     assert (environment_dir / "main.jsonnet").read_text(
         encoding="utf-8"
@@ -762,8 +786,6 @@ def test_init_lake_environment_creates_directory_and_copies_templates(tmp_path):
         encoding="utf-8"
     ) == SPEC_JSON_TEMPLATE
     assert progress.events == [
-        ("creating_directory", str(workspace / "environments")),
-        ("directory_created", str(workspace / "environments")),
         ("creating_directory", str(environment_dir)),
         ("directory_created", str(environment_dir)),
         (
@@ -777,7 +799,7 @@ def test_init_lake_environment_creates_directory_and_copies_templates(tmp_path):
     ]
 
 
-def test_init_lake_environment_accepts_environments_prefixed_name(tmp_path):
+def test_init_lake_environment_preserves_environments_prefixed_name(tmp_path):
     workspace = make_workspace(tmp_path / "workspace")
 
     init_lake_environment("environments/dev", workspace)
@@ -791,20 +813,35 @@ def test_init_lake_environment_creates_nested_environment(tmp_path):
 
     init_lake_environment("team/dev", workspace)
 
-    assert (workspace / "environments" / "team" / "dev" / "main.jsonnet").is_file()
-    assert (workspace / "environments" / "team" / "dev" / "spec.json").is_file()
+    assert (workspace / "team" / "dev" / "main.jsonnet").is_file()
+    assert (workspace / "team" / "dev" / "spec.json").is_file()
 
 
-def test_init_lake_environment_adds_missing_files_to_existing_environment(tmp_path):
+def test_init_lake_environment_rejects_existing_unmarked_main_by_default(tmp_path):
     workspace = make_workspace(tmp_path / "workspace")
-    environment_dir = workspace / "environments" / "dev"
+    environment_dir = workspace / "dev"
     environment_dir.mkdir(parents=True)
     (environment_dir / "main.jsonnet").write_text(
         "existing main\n",
         encoding="utf-8",
     )
 
-    init_lake_environment("dev", workspace)
+    with pytest.raises(CommandError, match="Refusing to adopt"):
+        init_lake_environment("dev", workspace)
+
+    assert not (environment_dir / "spec.json").exists()
+
+
+def test_init_lake_environment_adopts_existing_main_when_requested(tmp_path):
+    workspace = make_workspace(tmp_path / "workspace")
+    environment_dir = workspace / "dev"
+    environment_dir.mkdir(parents=True)
+    (environment_dir / "main.jsonnet").write_text(
+        "existing main\n",
+        encoding="utf-8",
+    )
+
+    init_lake_environment("dev", workspace, adopt_existing_main=True)
 
     assert (environment_dir / "main.jsonnet").read_text(
         encoding="utf-8"
@@ -814,16 +851,61 @@ def test_init_lake_environment_adds_missing_files_to_existing_environment(tmp_pa
     ) == SPEC_JSON_TEMPLATE
 
 
-def test_init_lake_environment_does_not_overwrite_existing_files(tmp_path):
+def test_init_lake_environment_preserves_existing_files_and_marks_spec(tmp_path):
     workspace = make_workspace(tmp_path / "workspace")
-    environment_dir = workspace / "environments" / "dev"
+    environment_dir = workspace / "dev"
+    environment_dir.mkdir(parents=True)
+    (environment_dir / "main.jsonnet").write_text(
+        "existing main\n",
+        encoding="utf-8",
+    )
+    existing_spec = {
+        "apiVersion": "tanka.dev/v1alpha1",
+        "spec": {"namespace": "existing"},
+    }
+    (environment_dir / "spec.json").write_text(
+        f"{json.dumps(existing_spec)}\n",
+        encoding="utf-8",
+    )
+    progress = RecordingLakeEnvironmentProgress()
+
+    init_lake_environment(
+        "dev",
+        workspace,
+        progress=progress,
+        adopt_existing_main=True,
+    )
+
+    assert (environment_dir / "main.jsonnet").read_text(
+        encoding="utf-8"
+    ) == "existing main\n"
+    assert read_json(environment_dir / "spec.json") == {
+        "apiVersion": "tanka.dev/v1alpha1",
+        "metadata": {
+            "annotations": {
+                "stelar.eu/lake-environment": "true",
+            },
+        },
+        "spec": {"namespace": "existing"},
+    }
+    assert progress.events == [
+        ("directory_exists", str(environment_dir)),
+        ("file_exists", str(environment_dir / "main.jsonnet")),
+        ("file_exists", str(environment_dir / "spec.json")),
+        ("existing_spec_adopted", str(environment_dir / "spec.json")),
+    ]
+
+
+def test_init_lake_environment_keeps_marked_existing_environment_idempotent(tmp_path):
+    workspace = make_workspace(tmp_path / "workspace")
+    environment_dir = workspace / "dev"
     environment_dir.mkdir(parents=True)
     (environment_dir / "main.jsonnet").write_text(
         "existing main\n",
         encoding="utf-8",
     )
     (environment_dir / "spec.json").write_text(
-        "existing spec\n",
+        SPEC_JSON_TEMPLATE,
         encoding="utf-8",
     )
     progress = RecordingLakeEnvironmentProgress()
@@ -835,9 +917,8 @@ def test_init_lake_environment_does_not_overwrite_existing_files(tmp_path):
     ) == "existing main\n"
     assert (environment_dir / "spec.json").read_text(
         encoding="utf-8"
-    ) == "existing spec\n"
+    ) == SPEC_JSON_TEMPLATE
     assert progress.events == [
-        ("directory_exists", str(workspace / "environments")),
         ("directory_exists", str(environment_dir)),
         ("file_exists", str(environment_dir / "main.jsonnet")),
         ("file_exists", str(environment_dir / "spec.json")),
@@ -852,19 +933,18 @@ def test_init_lake_environment_validates_workspace(tmp_path):
         init_lake_environment("dev", workspace)
 
 
-def test_init_lake_environment_rejects_environments_file(tmp_path):
+def test_init_lake_environment_ignores_unrelated_environments_file(tmp_path):
     workspace = make_workspace(tmp_path / "workspace")
     (workspace / "environments").write_text("not a directory", encoding="utf-8")
 
-    with pytest.raises(CommandError, match="exists but is not a directory"):
-        init_lake_environment("dev", workspace)
+    init_lake_environment("dev", workspace)
+
+    assert (workspace / "dev" / "main.jsonnet").is_file()
 
 
 def test_init_lake_environment_rejects_environment_file(tmp_path):
     workspace = make_workspace(tmp_path / "workspace")
-    environments_dir = workspace / "environments"
-    environments_dir.mkdir()
-    (environments_dir / "dev").write_text("not a directory", encoding="utf-8")
+    (workspace / "dev").write_text("not a directory", encoding="utf-8")
 
     with pytest.raises(CommandError, match="exists but is not a directory"):
         init_lake_environment("dev", workspace)
@@ -872,7 +952,7 @@ def test_init_lake_environment_rejects_environment_file(tmp_path):
 
 def test_init_lake_environment_rejects_existing_main_jsonnet_directory(tmp_path):
     workspace = make_workspace(tmp_path / "workspace")
-    environment_dir = workspace / "environments" / "dev"
+    environment_dir = workspace / "dev"
     environment_dir.mkdir(parents=True)
     (environment_dir / "main.jsonnet").mkdir()
 
@@ -882,7 +962,7 @@ def test_init_lake_environment_rejects_existing_main_jsonnet_directory(tmp_path)
 
 def test_init_lake_environment_rejects_existing_spec_json_directory(tmp_path):
     workspace = make_workspace(tmp_path / "workspace")
-    environment_dir = workspace / "environments" / "dev"
+    environment_dir = workspace / "dev"
     environment_dir.mkdir(parents=True)
     (environment_dir / "main.jsonnet").write_text("{}", encoding="utf-8")
     (environment_dir / "spec.json").mkdir()
@@ -911,6 +991,89 @@ def test_init_lake_environment_rejects_invalid_environment_names(
         init_lake_environment(environment, workspace)
 
 
+def test_check_lake_cluster_requires_initialized_environment(tmp_path):
+    workspace = make_workspace(tmp_path / "workspace")
+
+    with pytest.raises(CommandError, match="has not been initialized"):
+        check_lake_cluster("dev", workspace, context="current-context", namespace="test")
+
+
+def test_check_lake_cluster_requires_fullspec(tmp_path):
+    workspace = make_workspace(tmp_path / "workspace")
+    init_lake_environment("dev", workspace)
+
+    with pytest.raises(CommandError, match="missing product_fullspec.json"):
+        check_lake_cluster("dev", workspace, context="current-context", namespace="test")
+
+
+def test_check_lake_cluster_requires_context_or_flag(tmp_path):
+    workspace = make_workspace(tmp_path / "workspace")
+    init_lake_environment("dev", workspace)
+    write_generated_lake_files(workspace)
+
+    with pytest.raises(CommandError, match="--context CONTEXT"):
+        check_lake_cluster("dev", workspace, namespace="test")
+
+
+def test_check_lake_cluster_requires_namespace_or_flag(tmp_path, monkeypatch):
+    workspace = make_workspace(tmp_path / "workspace")
+    init_lake_environment("dev", workspace)
+    environment_dir = write_generated_lake_files(workspace)
+    spec_json = read_json(environment_dir / "spec.json")
+    spec_json["spec"] = {"contextNames": ["current-context"]}
+    write_json(environment_dir / "spec.json", spec_json)
+    set_cluster_preflight(monkeypatch)
+
+    with pytest.raises(CommandError, match="--namespace NAMESPACE"):
+        check_lake_cluster("dev", workspace)
+
+
+def test_check_lake_cluster_uses_flags_without_mutating_spec_json(
+    tmp_path,
+    monkeypatch,
+):
+    workspace = make_workspace(tmp_path / "workspace")
+    init_lake_environment("dev", workspace)
+    environment_dir = write_generated_lake_files(workspace)
+    spec_before = read_json(environment_dir / "spec.json")
+    calls = set_cluster_preflight(monkeypatch)
+
+    check_lake_cluster(
+        "dev",
+        workspace,
+        context="current-context",
+        namespace="test",
+    )
+
+    assert calls["context"] == "current-context"
+    assert calls["namespace"] == "test"
+    assert calls["created_secrets"] == []
+    assert calls["read_secrets"] == []
+    assert read_json(environment_dir / "spec.json") == spec_before
+
+
+def test_check_lake_cluster_uses_spec_context_and_namespace_without_product_json(
+    tmp_path,
+    monkeypatch,
+):
+    workspace = make_workspace(tmp_path / "workspace")
+    init_lake_environment("dev", workspace)
+    environment_dir = write_generated_lake_files(workspace)
+    (environment_dir / "product.json").unlink()
+    spec_json = read_json(environment_dir / "spec.json")
+    spec_json["spec"] = {
+        "contextNames": ["current-context"],
+        "namespace": "test",
+    }
+    write_json(environment_dir / "spec.json", spec_json)
+    calls = set_cluster_preflight(monkeypatch)
+
+    check_lake_cluster("dev", workspace)
+
+    assert calls["context"] == "current-context"
+    assert calls["namespace"] == "test"
+
+
 def test_init_lake_cluster_requires_initialized_environment(tmp_path):
     workspace = make_workspace(tmp_path / "workspace")
 
@@ -929,7 +1092,7 @@ def test_init_lake_cluster_requires_generated_product_files(tmp_path):
 def test_init_lake_cluster_requires_generated_fullspec_file(tmp_path):
     workspace = make_workspace(tmp_path / "workspace")
     init_lake_environment("dev", workspace)
-    environment_dir = workspace / "environments" / "dev"
+    environment_dir = workspace / "dev"
     (environment_dir / "product.json").write_text(
         '{"spec": {}}\n',
         encoding="utf-8",
@@ -950,7 +1113,7 @@ def test_init_lake_cluster_rejects_product_without_spec(tmp_path, monkeypatch):
         init_lake_cluster("dev", workspace)
 
 
-def test_init_lake_cluster_rejects_product_without_namespace(
+def test_init_lake_cluster_uses_spec_namespace_not_product_namespace(
     tmp_path,
     monkeypatch,
 ):
@@ -960,10 +1123,11 @@ def test_init_lake_cluster_rejects_product_without_namespace(
     product = read_json(environment_dir / "product.json")
     product["spec"].pop("namespace")
     write_json(environment_dir / "product.json", product)
-    set_cluster_preflight(monkeypatch)
+    calls = set_cluster_preflight(monkeypatch)
 
-    with pytest.raises(CommandError, match="Product spec must define"):
-        init_lake_cluster("dev", workspace)
+    init_lake_cluster("dev", workspace)
+
+    assert calls["namespace"] == "test"
 
 
 def test_init_lake_cluster_rejects_fullspec_without_klms(tmp_path, monkeypatch):
@@ -1173,7 +1337,7 @@ def test_init_lake_cluster_requires_manual_tls_environment_file(
 
     with pytest.raises(
         CommandError,
-        match="manual_tls.yaml.*stelarctl product init-manual-tls",
+        match="manual_tls.yaml.*stelarctl lake manual-tls-template",
     ):
         init_lake_cluster("dev", workspace)
 
@@ -1793,11 +1957,11 @@ def test_init_lake_cluster_skips_cert_manager_for_http(tmp_path, monkeypatch):
 
 
 def test_init_lake_cli_has_environment_and_cluster_subcommands():
-    result = runner.invoke(app, ["init-lake", "--help"])
+    result = runner.invoke(app, ["lake", "--help"])
 
     assert result.exit_code == 0
-    assert "init-lake workspace" not in result.stdout
-    assert "environment" in result.stdout
+    assert "lake workspace" not in result.stdout
+    assert "add" in result.stdout
     assert "cluster" in result.stdout
 
 
@@ -1912,14 +2076,108 @@ def test_workspace_info_operation_reports_environment_files(tmp_path):
     assert info.jsonnetfile is True
     assert info.lib is False
     assert info.vendor is True
-    assert info.environments_dir is True
     assert len(info.environments) == 1
     environment = info.environments[0]
-    assert environment.name == "environments/dev"
+    assert environment.name == "dev"
     assert environment.main_jsonnet is True
     assert environment.spec_json is True
     assert environment.product_json is False
     assert environment.product_fullspec_json is False
+
+
+def test_workspace_info_ignores_unmarked_tanka_environments(tmp_path):
+    workspace = make_workspace(tmp_path / "workspace")
+    environment_dir = workspace / "plain"
+    environment_dir.mkdir(parents=True)
+    (environment_dir / "main.jsonnet").write_text("{}\n", encoding="utf-8")
+    (environment_dir / "spec.json").write_text(
+        '{"apiVersion": "tanka.dev/v1alpha1", "spec": {}}\n',
+        encoding="utf-8",
+    )
+
+    info = workspace_info(workspace)
+
+    assert info.environments == ()
+
+
+def test_list_lake_environments_reports_marked_environments_only(tmp_path):
+    workspace = make_workspace(tmp_path / "workspace")
+    init_lake_environment("dev", workspace)
+    init_lake_environment("lakes/prod", workspace)
+    plain_dir = workspace / "plain"
+    plain_dir.mkdir()
+    (plain_dir / "main.jsonnet").write_text("{}\n", encoding="utf-8")
+    (plain_dir / "spec.json").write_text(
+        '{"apiVersion": "tanka.dev/v1alpha1", "spec": {}}\n',
+        encoding="utf-8",
+    )
+
+    environments = list_lake_environments(workspace)
+
+    assert [environment.name for environment in environments] == [
+        "dev",
+        "lakes/prod",
+    ]
+
+
+def test_lake_environment_info_reports_specified_environment(tmp_path):
+    workspace = make_workspace(tmp_path / "workspace")
+    init_lake_environment("lakes/prod", workspace)
+    write_generated_lake_files(workspace, "lakes/prod")
+
+    environment = lake_environment_info("lakes/prod", workspace)
+
+    assert environment.name == "lakes/prod"
+    assert environment.path == workspace / "lakes" / "prod"
+    assert environment.main_jsonnet is True
+    assert environment.spec_json is True
+    assert environment.product_json is True
+    assert environment.product_fullspec_json is True
+
+
+def test_lake_environment_info_rejects_unmarked_environment(tmp_path):
+    workspace = make_workspace(tmp_path / "workspace")
+    environment_dir = workspace / "plain"
+    environment_dir.mkdir()
+    (environment_dir / "main.jsonnet").write_text("{}\n", encoding="utf-8")
+    (environment_dir / "spec.json").write_text(
+        '{"apiVersion": "tanka.dev/v1alpha1", "spec": {}}\n',
+        encoding="utf-8",
+    )
+
+    with pytest.raises(CommandError, match="missing the stelarctl marker"):
+        lake_environment_info("plain", workspace)
+
+
+def test_remove_lake_environment_deletes_marked_environment(tmp_path):
+    workspace = make_workspace(tmp_path / "workspace")
+    init_lake_environment("dev", workspace)
+    environment_dir = workspace / "dev"
+    progress = RecordingLakeEnvironmentProgress()
+
+    remove_lake_environment("dev", workspace, progress=progress)
+
+    assert not environment_dir.exists()
+    assert progress.events == [
+        ("removing_environment", str(environment_dir)),
+        ("environment_removed", str(environment_dir)),
+    ]
+
+
+def test_remove_lake_environment_rejects_unmarked_environment(tmp_path):
+    workspace = make_workspace(tmp_path / "workspace")
+    environment_dir = workspace / "plain"
+    environment_dir.mkdir()
+    (environment_dir / "main.jsonnet").write_text("{}\n", encoding="utf-8")
+    (environment_dir / "spec.json").write_text(
+        '{"apiVersion": "tanka.dev/v1alpha1", "spec": {}}\n',
+        encoding="utf-8",
+    )
+
+    with pytest.raises(CommandError, match="missing the stelarctl marker"):
+        remove_lake_environment("plain", workspace)
+
+    assert environment_dir.is_dir()
 
 
 def test_workspace_info_cli_reports_workspace_state(tmp_path):
@@ -1934,8 +2192,8 @@ def test_workspace_info_cli_reports_workspace_state(tmp_path):
     assert "jsonnetfile.json: present" in result.stdout
     assert "lib/: missing" in result.stdout
     assert "vendor/: present" in result.stdout
-    assert "environments/: present" in result.stdout
-    assert "  - environments/dev" in result.stdout
+    assert "lake environments: 1" in result.stdout
+    assert "  - dev" in result.stdout
     assert "main.jsonnet: present" in result.stdout
     assert "spec.json: present" in result.stdout
     assert "product.json: missing" in result.stdout
@@ -1954,7 +2212,7 @@ def test_workspace_info_cli_reports_uninitialized_workspace(tmp_path):
     assert "jsonnetfile.json: missing" in result.stdout
     assert "lib/: missing" in result.stdout
     assert "vendor/: missing" in result.stdout
-    assert "environments/: missing" in result.stdout
+    assert "lake environments: 0" in result.stdout
     assert "Environments:" in result.stdout
     assert "  (none)" in result.stdout
     assert "Next step:" in result.stdout
@@ -1967,8 +2225,8 @@ def test_init_lake_environment_cli_creates_environment(tmp_path):
     result = runner.invoke(
         app,
         [
-            "init-lake",
-            "environment",
+            "lake",
+            "add",
             "dev",
             "--workspace",
             str(workspace),
@@ -1976,10 +2234,10 @@ def test_init_lake_environment_cli_creates_environment(tmp_path):
     )
 
     assert result.exit_code == 0
-    assert (workspace / "environments" / "dev" / "main.jsonnet").is_file()
-    assert (workspace / "environments" / "dev" / "spec.json").is_file()
-    assert f"🌐 Creating directory {str(workspace / 'environments')!r}..." in result.stdout
-    assert f"✅ Directory {str(workspace / 'environments')!r} created." in result.stdout
+    assert (workspace / "dev" / "main.jsonnet").is_file()
+    assert (workspace / "dev" / "spec.json").is_file()
+    assert f"🌐 Creating directory {str(workspace / 'dev')!r}..." in result.stdout
+    assert f"✅ Directory {str(workspace / 'dev')!r} created." in result.stdout
     assert (
         "🖊️ Copying template "
         f"{str(environment_template_dir(workspace) / 'main_template.jsonnet')!r}"
@@ -1987,19 +2245,229 @@ def test_init_lake_environment_cli_creates_environment(tmp_path):
     )
     assert (
         f"✅ Template written successfully at "
-        f"{str(workspace / 'environments' / 'dev' / 'main.jsonnet')!r}."
+        f"{str(workspace / 'dev' / 'main.jsonnet')!r}."
         in result.stdout
     )
     assert (
         f"🖊️ Writing Tanka spec skeleton to "
-        f"{str(workspace / 'environments' / 'dev' / 'spec.json')!r}..."
+        f"{str(workspace / 'dev' / 'spec.json')!r}..."
         in result.stdout
     )
     assert (
         f"✅ Tanka spec skeleton written successfully at "
-        f"{str(workspace / 'environments' / 'dev' / 'spec.json')!r}."
+        f"{str(workspace / 'dev' / 'spec.json')!r}."
         in result.stdout
     )
+
+
+def test_init_lake_environment_cli_rejects_implicit_main_adoption(tmp_path):
+    workspace = make_workspace(tmp_path / "workspace")
+    environment_dir = workspace / "dev"
+    environment_dir.mkdir()
+    (environment_dir / "main.jsonnet").write_text("{}\n", encoding="utf-8")
+
+    result = runner.invoke(
+        app,
+        [
+            "lake",
+            "add",
+            "dev",
+            "--workspace",
+            str(workspace),
+        ],
+    )
+
+    assert result.exit_code == 2
+    assert "Refusing to adopt" in result.output
+    assert "--adopt-existing-main" in result.output
+
+
+def test_init_lake_environment_cli_adopts_existing_main_when_requested(tmp_path):
+    workspace = make_workspace(tmp_path / "workspace")
+    environment_dir = workspace / "dev"
+    environment_dir.mkdir()
+    (environment_dir / "main.jsonnet").write_text("{}\n", encoding="utf-8")
+
+    result = runner.invoke(
+        app,
+        [
+            "lake",
+            "add",
+            "dev",
+            "--workspace",
+            str(workspace),
+            "--adopt-existing-main",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert read_json(environment_dir / "spec.json") == read_json_from_text(
+        SPEC_JSON_TEMPLATE
+    )
+
+
+def test_lake_list_cli_reports_lake_environments(tmp_path):
+    workspace = make_workspace(tmp_path / "workspace")
+    init_lake_environment("dev", workspace)
+    init_lake_environment("lakes/prod", workspace)
+
+    result = runner.invoke(
+        app,
+        [
+            "lake",
+            "list",
+            "--workspace",
+            str(workspace),
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert "Lake environments: 2" in result.stdout
+    assert "  - dev" in result.stdout
+    assert "  - lakes/prod" in result.stdout
+    assert f"path: {workspace / 'dev'}" in result.stdout
+    assert "product: missing" in result.stdout
+    assert "fullspec: missing" in result.stdout
+
+
+def test_lake_list_cli_reports_no_environments(tmp_path):
+    workspace = make_workspace(tmp_path / "workspace")
+
+    result = runner.invoke(
+        app,
+        [
+            "lake",
+            "list",
+            "--workspace",
+            str(workspace),
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert "Lake environments: 0" in result.stdout
+    assert "  (none)" in result.stdout
+
+
+def test_lake_info_cli_reports_lake_environment(tmp_path):
+    workspace = make_workspace(tmp_path / "workspace")
+    init_lake_environment("dev", workspace)
+
+    result = runner.invoke(
+        app,
+        [
+            "lake",
+            "info",
+            "dev",
+            "--workspace",
+            str(workspace),
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert "Lake environment: dev" in result.stdout
+    assert f"path: {workspace / 'dev'}" in result.stdout
+    assert "main.jsonnet: present" in result.stdout
+    assert "spec.json: present" in result.stdout
+    assert "product.json: missing" in result.stdout
+    assert "product_fullspec.json: missing" in result.stdout
+
+
+def test_lake_remove_cli_deletes_environment_with_yes(tmp_path):
+    workspace = make_workspace(tmp_path / "workspace")
+    init_lake_environment("dev", workspace)
+    environment_dir = workspace / "dev"
+
+    result = runner.invoke(
+        app,
+        [
+            "lake",
+            "remove",
+            "dev",
+            "--workspace",
+            str(workspace),
+            "--yes",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert not environment_dir.exists()
+    assert f"Removing lake environment {str(environment_dir)!r}" in result.stdout
+    assert f"Lake environment {str(environment_dir)!r} removed." in result.stdout
+
+
+def test_lake_remove_cli_aborts_without_confirmation(tmp_path):
+    workspace = make_workspace(tmp_path / "workspace")
+    init_lake_environment("dev", workspace)
+    environment_dir = workspace / "dev"
+
+    result = runner.invoke(
+        app,
+        [
+            "lake",
+            "remove",
+            "dev",
+            "--workspace",
+            str(workspace),
+        ],
+        input="n\n",
+    )
+
+    assert result.exit_code == 1
+    assert environment_dir.is_dir()
+    assert "Delete lake environment 'dev'" in result.stdout
+
+
+def test_lake_check_cluster_cli_accepts_flags_without_mutating_spec(
+    tmp_path,
+    monkeypatch,
+):
+    workspace = make_workspace(tmp_path / "workspace")
+    init_lake_environment("dev", workspace)
+    environment_dir = write_generated_lake_files(workspace)
+    spec_before = read_json(environment_dir / "spec.json")
+    set_cluster_preflight(monkeypatch)
+
+    result = runner.invoke(
+        app,
+        [
+            "lake",
+            "check-cluster",
+            "dev",
+            "--workspace",
+            str(workspace),
+            "--context",
+            "current-context",
+            "--namespace",
+            "test",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "Cluster checks passed." in result.output
+    assert read_json(environment_dir / "spec.json") == spec_before
+
+
+def test_lake_check_cluster_cli_prompts_for_missing_context_flag(tmp_path):
+    workspace = make_workspace(tmp_path / "workspace")
+    init_lake_environment("dev", workspace)
+    write_generated_lake_files(workspace)
+
+    result = runner.invoke(
+        app,
+        [
+            "lake",
+            "check-cluster",
+            "dev",
+            "--workspace",
+            str(workspace),
+            "--namespace",
+            "test",
+        ],
+    )
+
+    assert result.exit_code != 0
+    assert "--context CONTEXT" in result.output
+    assert "lake create" in result.output
 
 
 def test_init_lake_cluster_cli_accepts_initialized_environment(tmp_path, monkeypatch):
@@ -2011,8 +2479,8 @@ def test_init_lake_cluster_cli_accepts_initialized_environment(tmp_path, monkeyp
     result = runner.invoke(
         app,
         [
-            "init-lake",
-            "cluster",
+            "lake",
+            "bootstrap",
             "dev",
             "--workspace",
             str(workspace),
@@ -2041,8 +2509,8 @@ def test_init_lake_cluster_cli_reports_preflight_rbac_failure(
     result = runner.invoke(
         app,
         [
-            "init-lake",
-            "cluster",
+            "lake",
+            "bootstrap",
             "dev",
             "--workspace",
             str(workspace),
@@ -2064,8 +2532,8 @@ def test_init_lake_cluster_cli_accepts_preflight_skip(tmp_path, monkeypatch):
     result = runner.invoke(
         app,
         [
-            "init-lake",
-            "cluster",
+            "lake",
+            "bootstrap",
             "dev",
             "--workspace",
             str(workspace),
@@ -2083,9 +2551,13 @@ def test_root_cli_help_documents_current_workflow():
     assert result.exit_code == 0
     output = plain_help(result.stdout)
     assert "Command reference" in output
-    assert "product generate" in output
-    assert "init-lake cluster" in output
-    assert "init-manual-tls" in output
+    assert "lake create" in output
+    assert "lake bootstrap" in output
+    assert "check-cluster" in output
+    assert "lake list" in output
+    assert "lake info" in output
+    assert "lake remove" in output
+    assert "manual-tls-template" in output
     assert "Typical workflow" in output
     assert "Main concepts" in output
     assert "fullspec" in output
@@ -2099,70 +2571,89 @@ def test_root_cli_help_lists_all_subcommands_with_arguments():
     output = plain_help(result.stdout)
     assert "stelarctl workspace init WORKSPACE" in output
     assert "stelarctl workspace info [WORKSPACE]" in output
-    assert "stelarctl init-lake environment ENV" in output
-    assert "stelarctl init-lake cluster ENV" in output
+    assert "stelarctl lake add ENV" in output
+    assert "stelarctl lake list" in output
+    assert "stelarctl lake info ENV" in output
+    assert "stelarctl lake remove ENV" in output
+    assert "--yes" in output
+    assert "stelarctl lake create --minimal ENV" in output
+    assert "stelarctl lake check-cluster ENV" in output
+    assert "stelarctl lake bootstrap ENV" in output
     assert "--context CONTEXT" in output
+    assert "--namespace NAMESPACE" in output
     assert "--skip-preflight" in output
-    assert "stelarctl product init-minimal [OUTPUT]" in output
-    assert "--secret-values-output FILE" in output
+    assert "--manual-secrets" in output
     assert "--infer-storage-from-cluster" in output
-    assert "stelarctl product init-manual-tls [OUTPUT]" in output
-    assert "stelarctl product generate PRODUCT ENV" in output
+    assert "stelarctl lake manual-tls-template [OUTPUT]" in output
+    assert "stelarctl lake create PRODUCT ENV" in output
     assert "--workspace WORKSPACE" in output
 
 
-def test_product_group_help_explains_product_flow_and_tls_rules():
+def test_product_group_is_not_registered():
     result = runner.invoke(app, ["product", "--help"])
 
-    assert result.exit_code == 0
-    output = plain_help(result.stdout)
-    assert "Product flow" in output
-    assert "product_fullspec.json" in output
-    assert "SCHEME=http" in output
-    assert "SCHEME=https" in output
-    assert "manual_tls" in output
+    assert result.exit_code == 2
+    assert "No such command 'product'" in result.output
+
+
+def test_product_generate_command_is_not_registered():
+    result = runner.invoke(app, ["product", "generate", "--help"])
+
+    assert result.exit_code == 2
+    assert "No such command 'product'" in result.output
+
+
+def test_product_init_minimal_command_is_not_registered():
+    result = runner.invoke(app, ["product", "init-minimal", "--help"])
+
+    assert result.exit_code == 2
+    assert "No such command 'product'" in result.output
 
 
 def test_root_cli_short_help_alias_is_available():
     result = runner.invoke(app, ["-h"])
 
     assert result.exit_code == 0
-    assert "Usage:" in result.stdout
-    assert "product" in result.stdout
+    output = plain_help(result.stdout)
+    assert "Usage:" in output
+    assert "\n  lake       " in output
+    assert "\n  product" not in output
 
 
 def test_root_cli_without_args_shows_help():
     result = runner.invoke(app, [])
 
     assert result.exit_code == 0
-    assert "Usage:" in result.stdout
-    assert "product" in result.stdout
-    assert "init-lake" in result.stdout
+    output = plain_help(result.stdout)
+    assert "Usage:" in output
+    assert "\n  lake       " in output
+    assert "\n  product" not in output
 
 
-def test_product_cli_help_documents_tls_modes():
-    result = runner.invoke(app, ["product", "init-minimal", "--help"])
+def test_lake_create_help_documents_minimal_tls_modes():
+    result = runner.invoke(app, ["lake", "create", "--help"])
 
     assert result.exit_code == 0
+    assert "--minimal" in result.stdout
+    assert "--manual-secrets" in result.stdout
     assert "INSECURE_MC_CLIENT" in result.stdout
     assert "cert_manager" in result.stdout
     assert "manual_tls" in result.stdout
-    assert "not" in result.stdout
-    assert "generated" in result.stdout
+    assert "does not" in result.stdout
 
 
-def test_product_manual_tls_help_documents_required_environment_file():
-    result = runner.invoke(app, ["product", "init-manual-tls", "--help"])
+def test_lake_manual_tls_template_help_documents_required_environment_file():
+    result = runner.invoke(app, ["lake", "manual-tls-template", "--help"])
 
     assert result.exit_code == 0
     output = plain_help(result.stdout)
-    assert "environments/<env>/manual_tls.yaml" in output
+    assert "ENV/manual_tls.yaml" in output
     assert "tls.crt" in output
     assert "product_fullspec.json" in output
 
 
-def test_product_generate_help_documents_fullspec_validation():
-    result = runner.invoke(app, ["product", "generate", "--help"])
+def test_lake_create_help_documents_fullspec_validation():
+    result = runner.invoke(app, ["lake", "create", "--help"])
 
     assert result.exit_code == 0
     assert "minio.INSECURE_MC_CLIENT" in result.stdout
@@ -2171,13 +2662,24 @@ def test_product_generate_help_documents_fullspec_validation():
 
 
 def test_init_lake_cluster_help_documents_preflight_and_tls_behavior():
-    result = runner.invoke(app, ["init-lake", "cluster", "--help"])
+    result = runner.invoke(app, ["lake", "bootstrap", "--help"])
 
     assert result.exit_code == 0
     output = plain_help(result.stdout)
     assert "--skip-preflight" in output
     assert "manual_tls" in output
     assert "cert-manager" in output
+
+
+def test_lake_check_cluster_help_documents_read_only_behavior():
+    result = runner.invoke(app, ["lake", "check-cluster", "--help"])
+
+    assert result.exit_code == 0
+    output = plain_help(result.stdout)
+    assert "--context" in output
+    assert "--namespace" in output
+    assert "never writes spec.json" in output
+    assert "No Kubernetes Secrets are created" in output
 
 
 class FakeProductValidator:
@@ -2271,7 +2773,7 @@ class HttpsNoTlsProductValidator:
         }
 
 
-def test_generate_lakespec_cli_writes_files_and_prints_fullspec(
+def test_lake_create_cli_writes_files_and_prints_fullspec(
     tmp_path,
     monkeypatch,
 ):
@@ -2287,8 +2789,8 @@ def test_generate_lakespec_cli_writes_files_and_prints_fullspec(
     result = runner.invoke(
         app,
         [
-            "product",
-            "generate",
+            "lake",
+            "create",
             str(product_path),
             "dev",
             "--workspace",
@@ -2310,7 +2812,7 @@ def test_generate_lakespec_cli_writes_files_and_prints_fullspec(
             "ingress": {"tls": ["no_tls"], "no_tls": {}},
         }
     }
-    environment_dir = workspace / "environments" / "dev"
+    environment_dir = workspace / "dev"
     assert read_json(environment_dir / "product_fullspec.json") == {
         "klms": {
             "namespace": "test",
@@ -2326,15 +2828,15 @@ def test_generate_lakespec_cli_writes_files_and_prints_fullspec(
     }
 
 
-def test_generate_lakespec_cli_reports_command_error(tmp_path):
+def test_lake_create_cli_reports_command_error(tmp_path):
     product_path = tmp_path / "product.yaml"
     product_path.write_text("spec:\n  namespace: test\n", encoding="utf-8")
 
     result = runner.invoke(
         app,
         [
-            "product",
-            "generate",
+            "lake",
+            "create",
             str(product_path),
             "dev",
             "--workspace",
@@ -2346,7 +2848,7 @@ def test_generate_lakespec_cli_reports_command_error(tmp_path):
     assert "Workspace path" in result.output
 
 
-def test_generate_lakespec_cli_reports_product_validation_failure(
+def test_lake_create_cli_reports_product_validation_failure(
     tmp_path,
     monkeypatch,
 ):
@@ -2359,8 +2861,8 @@ def test_generate_lakespec_cli_reports_product_validation_failure(
     result = runner.invoke(
         app,
         [
-            "product",
-            "generate",
+            "lake",
+            "create",
             str(product_path),
             "dev",
             "--workspace",
@@ -2405,7 +2907,7 @@ def test_product_to_fullspec_requires_initialized_environment(tmp_path, monkeypa
 
 def test_product_to_fullspec_requires_environment_spec_json(tmp_path, monkeypatch):
     workspace = make_workspace(tmp_path / "workspace")
-    environment_dir = workspace / "environments" / "dev"
+    environment_dir = workspace / "dev"
     environment_dir.mkdir(parents=True)
     (environment_dir / "main.jsonnet").write_text("{}", encoding="utf-8")
     product_path = tmp_path / "product.yaml"
@@ -2414,6 +2916,39 @@ def test_product_to_fullspec_requires_environment_spec_json(tmp_path, monkeypatc
 
     with pytest.raises(CommandError, match="missing spec.json"):
         product_to_fullspec(product_path, "dev", workspace)
+
+
+def expected_tanka_spec(
+    *,
+    context_name: str | None = None,
+    namespace: str | None = None,
+    annotations: dict | None = None,
+) -> dict:
+    spec = {
+        "expectVersions": {},
+        "injectLabels": True,
+        "resourceDefaults": {
+            "annotations": annotations or {},
+            "labels": {
+                "app.kubernetes.io/managed-by": "tanka",
+                "app.kubernetes.io/part-of": "stelar",
+                "stelar.deployment": "main",
+            },
+        },
+    }
+    if context_name is not None:
+        spec["contextNames"] = [context_name]
+    if namespace is not None:
+        spec["namespace"] = namespace
+    return {
+        "apiVersion": "tanka.dev/v1alpha1",
+        "metadata": {
+            "annotations": {"stelar.eu/lake-environment": "true"},
+            "name": "dev",
+            "namespace": "dev/main.jsonnet",
+        },
+        "spec": spec,
+    }
 
 
 def test_product_to_fullspec_writes_product_and_fullspec(tmp_path, monkeypatch):
@@ -2428,7 +2963,7 @@ def test_product_to_fullspec_writes_product_and_fullspec(tmp_path, monkeypatch):
 
     fullspec = product_to_fullspec(product_path, "dev", workspace)
 
-    environment_dir = workspace / "environments" / "dev"
+    environment_dir = workspace / "dev"
     assert fullspec == {
         "klms": {
             "namespace": "test",
@@ -2452,8 +2987,35 @@ def test_product_to_fullspec_writes_product_and_fullspec(tmp_path, monkeypatch):
     )
     assert json.loads((environment_dir / "spec.json").read_text()) == {
         "apiVersion": "tanka.dev/v1alpha1",
+        "metadata": {
+            "annotations": {"stelar.eu/lake-environment": "true"},
+        },
         "spec": {},
     }
+
+
+def test_product_to_fullspec_writes_provided_spec_context_and_namespace(
+    tmp_path,
+    monkeypatch,
+):
+    workspace = make_workspace(tmp_path / "workspace")
+    init_lake_environment("dev", workspace)
+    product_path = tmp_path / "product.yaml"
+    product_path.write_text("spec:\n  namespace: product-ns\n", encoding="utf-8")
+    monkeypatch.setattr(lakespec_commands, "ProductValidator", FakeProductValidator)
+
+    product_to_fullspec(
+        product_path,
+        "dev",
+        workspace,
+        context_name="stored-context",
+        namespace="stored-namespace",
+    )
+
+    assert read_json(workspace / "dev" / "spec.json") == expected_tanka_spec(
+        context_name="stored-context",
+        namespace="stored-namespace",
+    )
 
 
 @pytest.mark.parametrize(
@@ -2492,6 +3054,47 @@ def test_product_to_fullspec_rejects_scheme_tls_mismatch(
         product_to_fullspec(product_path, "dev", workspace)
 
 
+def test_init_lake_cluster_infers_missing_namespace_from_configured_context(
+    tmp_path,
+    monkeypatch,
+):
+    workspace = make_workspace(tmp_path / "workspace")
+    init_lake_environment("dev", workspace)
+    environment_dir = write_generated_lake_files(workspace)
+    spec_json = read_json(environment_dir / "spec.json")
+    spec_json["spec"] = {"contextNames": ["current-context"]}
+    write_json(environment_dir / "spec.json", spec_json)
+    set_cluster_preflight(monkeypatch)
+
+    init_lake_cluster("dev", workspace)
+
+    assert read_json(environment_dir / "spec.json") == expected_tanka_spec(
+        context_name="current-context",
+        namespace="test",
+    )
+
+
+def test_init_lake_cluster_infers_missing_context_without_overwriting_namespace(
+    tmp_path,
+    monkeypatch,
+):
+    workspace = make_workspace(tmp_path / "workspace")
+    init_lake_environment("dev", workspace)
+    environment_dir = write_generated_lake_files(workspace)
+    spec_json = read_json(environment_dir / "spec.json")
+    spec_json["spec"] = {"namespace": "configured-namespace"}
+    write_json(environment_dir / "spec.json", spec_json)
+    calls = set_cluster_preflight(monkeypatch)
+
+    init_lake_cluster("dev", workspace)
+
+    assert calls["namespace"] == "configured-namespace"
+    assert read_json(environment_dir / "spec.json") == expected_tanka_spec(
+        context_name="current-context",
+        namespace="configured-namespace",
+    )
+
+
 def test_init_lake_cluster_populates_spec_with_provided_context(
     tmp_path,
     monkeypatch,
@@ -2507,13 +3110,14 @@ def test_init_lake_cluster_populates_spec_with_provided_context(
     init_lake_cluster("dev", workspace, context="other-context")
 
     spec_json = json.loads(
-        (workspace / "environments" / "dev" / "spec.json").read_text()
+        (workspace / "dev" / "spec.json").read_text()
     )
     assert spec_json == {
         "apiVersion": "tanka.dev/v1alpha1",
         "metadata": {
-            "name": "environments/dev",
-            "namespace": "environments/dev/main.jsonnet",
+            "annotations": {"stelar.eu/lake-environment": "true"},
+            "name": "dev",
+            "namespace": "dev/main.jsonnet",
         },
         "spec": {
             "contextNames": ["other-context"],

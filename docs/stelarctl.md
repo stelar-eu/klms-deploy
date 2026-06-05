@@ -21,12 +21,12 @@ A deployment is organized around these files and directories:
 | `workspace/` | Root directory for one operator-managed lake workspace. |
 | `jsonnetfile.json` | Jsonnet Bundler dependency file used by `jb install`. |
 | `vendor/` | Dependencies fetched by Jsonnet Bundler. Created by `jb install`, not by `stelarctl`. |
-| `environments/<env>/` | One Tanka environment and deployment target. |
-| `environments/<env>/main.jsonnet` | Tanka entrypoint copied from the vendored STELAR deployment library. |
-| `environments/<env>/spec.json` | Tanka environment metadata. `init-lake cluster` updates context, namespace, labels, and annotations. |
-| `environments/<env>/product.json` | Validated product input copied into the environment. |
-| `environments/<env>/product_fullspec.json` | Fully defaulted product generated from the feature model. Jsonnet uses this as the deployment config inventory. |
-| `environments/<env>/manual_tls.yaml` | Optional operator-provided certificate directory mapping for manual TLS deployments. |
+| `ENV/` | One stelarctl-marked Tanka environment and deployment target, where `ENV` is the workspace-relative path passed to `lake add`. |
+| `ENV/main.jsonnet` | Tanka entrypoint copied from the vendored STELAR deployment library. |
+| `ENV/spec.json` | Tanka environment metadata. Carries the stelarctl lake marker. `lake create --context/--namespace` may populate deployment target fields; `lake bootstrap` fills missing target fields from kubeconfig and writes labels/annotations. |
+| `ENV/product.json` | Validated product input copied into the environment. |
+| `ENV/product_fullspec.json` | Fully defaulted product generated from the feature model. Jsonnet uses this as the deployment config inventory. |
+| `ENV/manual_tls.yaml` | Optional operator-provided certificate directory mapping for manual TLS deployments. |
 
 `product.json` is the compact user-authored input. `product_fullspec.json` is
 the expanded configuration after defaults and feature selections are resolved.
@@ -65,7 +65,7 @@ A normal deployment still uses the standard Jsonnet/Tanka tools:
 - `jb` installs Jsonnet dependencies into `vendor/`.
 - `jsonnet` evaluates the deployment library.
 - `tk` renders and applies Tanka environments.
-- `kubectl` provides the Kubernetes context used by `init-lake cluster`.
+- `kubectl` provides the Kubernetes context and default namespace used by `lake bootstrap` when they are missing from `ENV/spec.json`.
 
 `stelarctl` prepares inputs for those tools. It intentionally does not run
 `tk apply` automatically.
@@ -79,14 +79,14 @@ not the current directory.
 stelarctl workspace init ./lake-workspace
 cd ./lake-workspace
 jb install
-stelarctl init-lake environment dev
-stelarctl product init-minimal product.yaml --generate-secret-values
-stelarctl product generate product.yaml dev
-stelarctl init-lake cluster dev --context my-kube-context
-tk apply environments/dev
+stelarctl lake add dev
+stelarctl lake create --minimal dev --context my-kube-context --namespace stelar-dev
+stelarctl lake check-cluster dev
+stelarctl lake bootstrap dev
+tk apply dev
 ```
 
-The environment argument accepts either `dev` or `environments/dev`.
+The environment argument is a workspace-relative path. `dev` creates `dev/`; `lakes/prod` creates `lakes/prod/`.
 
 ## Command reference
 
@@ -94,17 +94,25 @@ The environment argument accepts either `dev` or `environments/dev`.
 stelarctl workspace init WORKSPACE
     options: --force
 stelarctl workspace info [WORKSPACE]
-stelarctl init-lake environment ENV
+stelarctl lake add ENV
+    options: --workspace WORKSPACE, --adopt-existing-main
+stelarctl lake list
     options: --workspace WORKSPACE
-stelarctl init-lake cluster ENV
-    options: --workspace WORKSPACE, --context CONTEXT, --skip-preflight
-stelarctl product init-minimal [OUTPUT]
-    options: --generate-secret-values, --secret-values-output FILE,
-             --infer-storage-from-cluster, --context CONTEXT, --force
-stelarctl product init-manual-tls [OUTPUT]
+stelarctl lake info ENV
+    options: --workspace WORKSPACE
+stelarctl lake remove ENV
+    options: --workspace WORKSPACE, --yes
+stelarctl lake create PRODUCT ENV
+    options: --workspace WORKSPACE, --context CONTEXT, --namespace NAMESPACE
+stelarctl lake create --minimal ENV
+    options: --workspace WORKSPACE, --context CONTEXT, --namespace NAMESPACE,
+             --manual-secrets, --infer-storage-from-cluster
+stelarctl lake check-cluster ENV
+    options: --workspace WORKSPACE, --context CONTEXT, --namespace NAMESPACE
+stelarctl lake bootstrap ENV
+    options: --workspace WORKSPACE, --skip-preflight
+stelarctl lake manual-tls-template [OUTPUT]
     options: --force
-stelarctl product generate PRODUCT ENV
-    options: --workspace WORKSPACE
 ```
 
 ## Commands
@@ -139,20 +147,22 @@ stelarctl workspace info [WORKSPACE]
 ```
 
 Prints read-only workspace state, including whether `jsonnetfile.json`, `lib/`,
-`vendor/`, and `environments/` exist. For each discovered environment, it shows
+and `vendor/` exist. It lists lake environments whose `spec.json` contains the
+`metadata.annotations["stelar.eu/lake-environment"]: "true"` marker. For each
+discovered lake environment, it shows
 whether `main.jsonnet`, `spec.json`, `product.json`, and `product_fullspec.json`
 are present.
 
 `WORKSPACE` defaults to the current directory.
 
-### `init-lake environment`
+### `lake add`
 
 ```bash
-stelarctl init-lake environment ENV [--workspace WORKSPACE]
+stelarctl lake add ENV [--workspace WORKSPACE] [--adopt-existing-main]
 ```
 
-Creates `environments/ENV`, copies `main_template.jsonnet` from the vendored
-STELAR library as `main.jsonnet`, and creates a minimal `spec.json` skeleton.
+Creates `ENV` relative to the workspace, copies `main_template.jsonnet`
+from the vendored STELAR library as `main.jsonnet`, and creates a minimal `spec.json` skeleton.
 
 This command expects `jb install` to have populated:
 
@@ -160,15 +170,49 @@ This command expects `jb install` to have populated:
 vendor/github.com/stelar-eu/klms-deploy/lib/environment_templates/main_template.jsonnet
 ```
 
-Existing `main.jsonnet` and `spec.json` files are not overwritten.
+Existing marked environments are preserved for idempotent reruns. If `main.jsonnet` already exists but `spec.json` is missing or unmarked, the command stops to avoid silently adopting an arbitrary Tanka entrypoint. Use `--adopt-existing-main` only when that directory should be managed by stelarctl. Existing valid `spec.json` files are preserved and annotated with the stelarctl lake marker when explicit adoption is requested.
 
-### `product init-minimal`
+### `lake list`
 
 ```bash
-stelarctl product init-minimal [OUTPUT] [--generate-secret-values] [--secret-values-output FILE] [--infer-storage-from-cluster] [--context CONTEXT] [--force]
+stelarctl lake list [--workspace WORKSPACE]
 ```
 
-Interactively creates a minimal product spec. The generated product selects:
+Lists stelarctl-marked lake environments in the workspace. Ordinary Tanka directories are ignored unless their `spec.json` contains the lake marker. The output shows each environment path and whether generated product files are present.
+
+### `lake info`
+
+```bash
+stelarctl lake info ENV [--workspace WORKSPACE]
+```
+
+Shows file-level state for one marked lake environment: path, `main.jsonnet`, `spec.json`, `product.json`, and `product_fullspec.json`.
+
+### `lake remove`
+
+```bash
+stelarctl lake remove ENV [--workspace WORKSPACE] [--yes]
+```
+
+Deletes a marked lake environment directory. The command refuses unmarked directories, so it does not delete arbitrary workspace folders by typo. Without `--yes`, it asks for confirmation before deleting.
+
+### `lake create`
+
+```bash
+stelarctl lake create PRODUCT ENV [--workspace WORKSPACE] [--context CONTEXT] [--namespace NAMESPACE]
+stelarctl lake create --minimal ENV [--workspace WORKSPACE] [--context CONTEXT] [--namespace NAMESPACE] [--manual-secrets] [--infer-storage-from-cluster]
+```
+
+Creates product files inside an initialized lake environment.
+
+The `PRODUCT ENV` mode loads an existing product JSON/YAML file, validates it against the feature model, and writes:
+
+```text
+ENV/product.json
+ENV/product_fullspec.json
+```
+
+The `--minimal ENV` mode interactively creates a minimal product directly in the environment. The generated minimal product selects:
 
 - required core components only
 - PVC-backed PostgreSQL, MinIO, and Solr volumes
@@ -180,28 +224,29 @@ It supports two TLS shapes:
 - `SCHEME: http` with `ingress.tls: [no_tls]`
 - `SCHEME: https` with `ingress.tls: [cert_manager]`
 
-The minimal generator does not create manual TLS products. For manual TLS, write
-or edit a product that selects `manual_tls`, then use `product init-manual-tls`
-to prepare the certificate input file.
+The minimal mode does not create manual TLS products. For manual TLS, write or edit a product that selects `manual_tls`, then use `lake manual-tls-template` to prepare the certificate input file.
 
-When `http` is selected, `minio.INSECURE_MC_CLIENT` is forced to `true`. This is
-required because MinIO clients inside the deployment must use plain HTTP.
+When `http` is selected, `minio.INSECURE_MC_CLIENT` is forced to `true`. This is required because MinIO clients inside the deployment must use plain HTTP.
 
-Use `--generate-secret-values` to let `stelarctl` create cryptographically
-random secret values. The product contains the values needed for validation, and
-a sidecar file such as `product.secrets.yaml` is written for operator reference.
-Use `--secret-values-output FILE` to choose a different sidecar path. Store that
-sidecar file securely.
+By default, `--minimal` creates cryptographically random secret values. The generated product/fullspec contain the values needed for `lake bootstrap` to create Kubernetes Secrets. Use `--manual-secrets` only when you want to type the secret values yourself instead of letting `stelarctl` generate them.
 
-Use `--infer-storage-from-cluster` when your Kubernetes user can read
-StorageClasses and you want the command to prefill storage values from the
-active kubectl context. Add `--context CONTEXT` to infer from a specific context.
-Use `--force` to overwrite existing output files.
+Use `--context CONTEXT` and/or `--namespace NAMESPACE` when you already know the deployment target. `lake create` writes whichever of those fields you provide into `ENV/spec.json`. Either flag may be omitted; `lake bootstrap` later fills only the missing field from kubeconfig.
 
-### `product init-manual-tls`
+Use `--infer-storage-from-cluster` when your Kubernetes user can read StorageClasses and you want the minimal-product prompt to prefill storage values from kubeconfig. Add `--context CONTEXT` to infer storage from a specific context and also record that context in `spec.json`.
+
+Important validation rules:
+
+- `SCHEME: http` requires `ingress.tls: [no_tls]`.
+- `SCHEME: http` requires `minio.INSECURE_MC_CLIENT: "true"`.
+- `SCHEME: https` requires one TLS mode: `cert_manager`, `manual_tls`, or `self_signed`.
+- `manual_tls` requires `PRIMARY_TLS_SECRET_NAME`, `KEYCLOAK_TLS_SECRET_NAME`, `MINIO_API_TLS_SECRET_NAME`, and `REGISTRY_TLS_SECRET_NAME`.
+
+If validation fails, no deployable fullspec should be treated as ready.
+
+### `lake manual-tls-template`
 
 ```bash
-stelarctl product init-manual-tls [OUTPUT] [--force]
+stelarctl lake manual-tls-template [OUTPUT] [--force]
 ```
 
 Writes a template with endpoint-to-directory mappings. `OUTPUT` defaults to
@@ -225,50 +270,49 @@ tls.key
 Then place the edited file at:
 
 ```text
-environments/ENV/manual_tls.yaml
+ENV/manual_tls.yaml
 ```
 
 The YAML file does not define Kubernetes Secret names. Secret names come from
 `product_fullspec.json` under `ingress.manual_tls`.
 
-### `product generate`
+### `lake check-cluster`
 
 ```bash
-stelarctl product generate PRODUCT ENV [--workspace WORKSPACE]
+stelarctl lake check-cluster ENV [--workspace WORKSPACE] [--context CONTEXT] [--namespace NAMESPACE]
 ```
 
-Loads a product JSON or YAML file, validates it against the feature model, and
-writes:
+Runs the bootstrap prerequisite checks without writing files and without
+creating Kubernetes Secrets. The command validates that:
 
-```text
-environments/ENV/product.json
-environments/ENV/product_fullspec.json
-```
+- `ENV` is a stelarctl-marked lake environment.
+- `ENV/product_fullspec.json` exists and passes local deployment consistency checks.
+- a Kubernetes context is available from `--context` or `ENV/spec.json`.
+- a Kubernetes namespace is available from `--namespace` or `ENV/spec.json`.
+- the selected cluster has the required namespace, StorageClasses, ingress, and TLS prerequisites.
 
-Important validation rules:
+Unlike `lake bootstrap`, this command does not infer missing context or namespace
+from kubeconfig and does not update `spec.json`. If either target field is
+missing, rerun with `--context` and/or `--namespace`, or persist the values with
+`lake create --context ... --namespace ...`.
 
-- `SCHEME: http` requires `ingress.tls: [no_tls]`.
-- `SCHEME: http` requires `minio.INSECURE_MC_CLIENT: "true"`.
-- `SCHEME: https` requires one TLS mode: `cert_manager`, `manual_tls`, or `self_signed`.
-- `manual_tls` requires `PRIMARY_TLS_SECRET_NAME`, `KEYCLOAK_TLS_SECRET_NAME`, `MINIO_API_TLS_SECRET_NAME`, and `REGISTRY_TLS_SECRET_NAME`.
-
-If validation fails, no deployable fullspec should be treated as ready.
-
-### `init-lake cluster`
+### `lake bootstrap`
 
 ```bash
-stelarctl init-lake cluster ENV [--workspace WORKSPACE] [--context CONTEXT] [--skip-preflight]
+stelarctl lake bootstrap ENV [--workspace WORKSPACE] [--skip-preflight]
 ```
 
-Prepares the environment for the selected Kubernetes cluster:
+Prepares the environment for Kubernetes:
 
-1. Loads `product.json` and `product_fullspec.json`.
-2. Resolves the explicit `--context` or active kubectl context.
-3. Updates `spec.json` with context, namespace, labels, annotations, and Tanka metadata.
-4. Validates scheme/TLS/MinIO consistency from the fullspec.
-5. Runs read-only preflight checks unless `--skip-preflight` is used.
-6. Creates missing product-derived Kubernetes Secrets.
-7. Creates manual TLS Secrets if the fullspec selects `manual_tls`.
+1. Loads `product.json`, `product_fullspec.json`, and `spec.json`.
+2. Reads `spec.contextNames` and `spec.namespace` when present.
+3. If `spec.contextNames` is missing, records the active kubectl context.
+4. If `spec.namespace` is missing, records the namespace configured on that context, or `default` when kubeconfig has none.
+5. Updates `spec.json` with the completed target fields, labels, annotations, and Tanka metadata.
+6. Validates scheme/TLS/MinIO consistency from the fullspec.
+7. Runs read-only preflight checks unless `--skip-preflight` is used.
+8. Creates missing product-derived Kubernetes Secrets.
+9. Creates manual TLS Secrets if the fullspec selects `manual_tls`.
 
 Current preflight checks verify:
 
@@ -284,7 +328,7 @@ Current preflight checks verify:
 If the Kubernetes user lacks RBAC access for a read-only preflight check,
 `stelarctl` stops and tells the user to rerun with `--skip-preflight`. That flag
 skips only read-only prerequisite checks. It still loads the Kubernetes context,
-updates `spec.json`, validates local config, and creates required Secrets.
+completes missing `spec.json` target fields, validates local config, and creates required Secrets.
 
 Secrets are created only when missing. Existing Secrets are left untouched.
 
@@ -293,12 +337,12 @@ Secrets are created only when missing. Existing Secrets are left untouched.
 ### Plain HTTP
 
 Use `SCHEME: http` and `ingress.tls: [no_tls]`. MinIO insecure client mode must
-be `true`. `product init-minimal` enforces this automatically.
+be `true`. `lake create --minimal` enforces this automatically.
 
 ### HTTPS with cert-manager
 
 Use `SCHEME: https`, `ingress.tls: [cert_manager]`, and provide
-`ingress.cert_manager.ClusterIssuer`. `init-lake cluster` verifies cert-manager
+`ingress.cert_manager.ClusterIssuer`. `lake bootstrap` verifies cert-manager
 and the ClusterIssuer during preflight.
 
 ### HTTPS with manual TLS
@@ -307,12 +351,13 @@ Use `SCHEME: https`, `ingress.tls: [manual_tls]`, and provide the four manual
 TLS Secret names in the product. Then:
 
 ```bash
-stelarctl product init-manual-tls environments/ENV/manual_tls.yaml
-# edit environments/ENV/manual_tls.yaml so each endpoint points to tls.crt/tls.key
-stelarctl init-lake cluster ENV --context my-kube-context
+stelarctl lake manual-tls-template ENV/manual_tls.yaml
+# edit ENV/manual_tls.yaml so each endpoint points to tls.crt/tls.key
+stelarctl lake create PRODUCT ENV --context my-kube-context --namespace stelar-dev
+stelarctl lake bootstrap ENV
 ```
 
-`init-lake cluster` validates the certificate/key pairs before creating
+`lake bootstrap` validates the certificate/key pairs before creating
 Kubernetes TLS Secrets.
 
 ## Idempotency and safety
@@ -320,24 +365,31 @@ Kubernetes TLS Secrets.
 The commands are designed to be rerunnable:
 
 - `workspace init` reuses directories and merges missing dependencies.
-- `init-lake environment` reuses directories and preserves existing files.
-- `product generate` rewrites the generated product files for the environment.
-- `init-lake cluster` updates `spec.json`, validates prerequisites, and skips existing Secrets.
+- `lake add` reuses directories and preserves already marked environments.
+- `lake list` and `lake info` inspect marked lake environments without changing files.
+- `lake remove` deletes one marked environment after confirmation, or immediately with `--yes`.
+- `lake create` rewrites the generated product files for the environment.
+- `lake check-cluster` validates prerequisites without writing files or creating Secrets.
+- `lake bootstrap` completes missing `spec.json` target fields, validates prerequisites, and skips existing Secrets.
 
 The main destructive option is `workspace init --force`, which rewrites
 `jsonnetfile.json`.
 
 ## Troubleshooting
 
-If `init-lake environment` cannot find `main.jsonnet`, run `jb install` from the
+If `lake add` cannot find `main.jsonnet`, run `jb install` from the
 workspace root and try again.
+
+If `lake check-cluster` reports missing context or namespace, provide
+`--context` and/or `--namespace` for the check, or persist those values with
+`lake create --context ... --namespace ...`.
 
 If preflight fails with an RBAC message, either use a Kubernetes identity with
 read access to namespaces, StorageClasses, IngressClasses, pods, and cert-manager
-resources, or rerun with `--skip-preflight` and let `tk apply` reveal cluster
-readiness problems later.
+resources, or rerun `lake bootstrap` with `--skip-preflight` and let `tk apply`
+reveal cluster readiness problems later.
 
-If manual TLS fails, check that `environments/ENV/manual_tls.yaml` exists, that
+If manual TLS fails, check that `ENV/manual_tls.yaml` exists, that
 each endpoint points to a directory, and that every directory contains a matching
 PEM `tls.crt` and `tls.key` pair.
 
@@ -385,5 +437,5 @@ To add a future command group:
 
 The old bootstrap script has moved to `legacy/bootstrap.py`. It is kept only for
 older installations that still depend on the previous `bootstrap.yaml` flow. New
-deployments should use `stelarctl product init-minimal`, `stelarctl product
-generate`, and `stelarctl init-lake cluster`.
+deployments should use `stelarctl lake create --minimal` or `stelarctl lake
+create PRODUCT ENV`, followed by `stelarctl lake bootstrap`.
