@@ -1,3 +1,4 @@
+import json
 from dataclasses import replace
 from types import SimpleNamespace
 
@@ -40,13 +41,18 @@ def make_workspace(path):
         / "environment_templates"
     )
     template_dir.mkdir(parents=True)
-    (template_dir / "main_template.jsonnet").write_text("{}\n", encoding="utf-8")
+    (template_dir / "main_template.jsonnet").write_text(
+        'local build_lake = import "github.com/stelar-eu/klms-deploy/lib/util/build_lake.libsonnet";\n'
+        'local environment_spec = import "./spec.json";\n'
+        '\n'
+        'build_lake(environment_spec)\n',
+        encoding="utf-8",
+    )
     return path
 
 
 def minimal_config(**overrides) -> MinimalProductConfig:
     values = {
-        "namespace": "stelar-dev",
         "root_domain": "example.test",
         "primary_subdomain": "klms",
         "keycloak_subdomain": "kc",
@@ -281,7 +287,7 @@ def test_infer_storage_classes_from_cluster_prefers_known_storage_name(monkeypat
 def test_lake_create_minimal_cli_generates_product_with_default_secret_values(tmp_path):
     workspace = make_workspace(tmp_path / "workspace")
     init_lake_environment("dev", workspace)
-    product_path = workspace / "dev" / "product.json"
+    product_path = workspace / "dev" / "minimal.json"
 
     result = runner.invoke(
         app,
@@ -289,16 +295,20 @@ def test_lake_create_minimal_cli_generates_product_with_default_secret_values(tm
             "lake",
             "create",
             "--minimal",
+            "minimal.json",
             "dev",
             "--workspace",
             str(workspace),
+            "--namespace",
+            "stelar-dev",
+            "--context",
+            "dev-context",
         ],
         input=(
             "https\n"
             "letsencrypt-prod\n"
             "longhorn\n"
             "csi-hostpath-sc\n"
-            "stelar-dev\n"
             "example.test\n"
             "klms\n"
             "kc\n"
@@ -313,9 +323,21 @@ def test_lake_create_minimal_cli_generates_product_with_default_secret_values(tm
 
     assert result.exit_code == 0, result.output
     assert "Wrote minimal product" in result.output
-    assert (workspace / "dev" / "product_fullspec.json").is_file()
+    assert (workspace / "dev" / "minimal_fullspec.json").is_file()
+    assert not (workspace / "dev" / "product.json").exists()
+    assert not (workspace / "dev" / "product_fullspec.json").exists()
+    assert "build_lake(environment_spec)" in (
+        workspace / "dev" / "main.jsonnet"
+    ).read_text(encoding="utf-8")
+    spec = yaml.safe_load(
+        (workspace / "dev" / "spec.json").read_text(encoding="utf-8")
+    )
+    assert "active_product" in spec["spec"]["stelar"]
+    assert spec["spec"]["stelar"]["active_product_name"] == "minimal"
+    assert spec["spec"]["contextNames"] == ["dev-context"]
+    assert spec["spec"]["namespace"] == "stelar-dev"
     product = yaml.safe_load(product_path.read_text(encoding="utf-8"))
-    assert product["spec"]["namespace"] == "stelar-dev"
+    assert "namespace" not in product["spec"]
     assert product["spec"]["dynamicStorageClass"] == "longhorn"
     assert product["spec"]["dynamic_volume_storage_class"] == "csi-hostpath-sc"
     assert product["spec"]["cluster"] == []
@@ -326,10 +348,80 @@ def test_lake_create_minimal_cli_generates_product_with_default_secret_values(tm
     assert not (workspace / "dev" / "product.secrets.yaml").exists()
 
 
+def test_lake_create_minimal_cli_rejects_target_flags_after_bootstrap(tmp_path):
+    workspace = make_workspace(tmp_path / "workspace")
+    init_lake_environment("dev", workspace)
+    spec_path = workspace / "dev" / "spec.json"
+    spec = json.loads(spec_path.read_text(encoding="utf-8"))
+    spec["spec"] = {
+        "contextNames": ["current-context"],
+        "namespace": "test",
+        "stelar": {
+            "bootstrapped_product": {
+                "target_sha256": "stored-target-hash",
+                "secret_names": ["stored-secret"],
+                "bootstrapped_at": "2026-06-07T00:00:00Z",
+                "product_name": "minimal",
+            },
+        },
+    }
+    spec_path.write_text(f"{json.dumps(spec)}\n", encoding="utf-8")
+
+    result = runner.invoke(
+        app,
+        [
+            "lake",
+            "create",
+            "--minimal",
+            "minimal.json",
+            "dev",
+            "--workspace",
+            str(workspace),
+            "--context",
+            "other-context",
+        ],
+        input="",
+    )
+
+    assert result.exit_code != 0
+    assert "recorded bootstrap state" in result.output
+    assert "overrides are not allowed" in result.output
+    assert not (workspace / "dev" / "minimal.json").exists()
+    assert json.loads(spec_path.read_text(encoding="utf-8")) == spec
+
+
+def test_lake_create_minimal_cli_rejects_empty_target_before_writing_product(tmp_path):
+    workspace = make_workspace(tmp_path / "workspace")
+    init_lake_environment("dev", workspace)
+    spec_before = json.loads((workspace / "dev" / "spec.json").read_text(encoding="utf-8"))
+
+    result = runner.invoke(
+        app,
+        [
+            "lake",
+            "create",
+            "--minimal",
+            "minimal",
+            "dev",
+            "--workspace",
+            str(workspace),
+            "--namespace",
+            " ",
+        ],
+        input="",
+    )
+
+    assert result.exit_code != 0
+    assert "non-empty" in result.output
+    assert not (workspace / "dev" / "minimal.json").exists()
+    assert not (workspace / "dev" / "minimal_fullspec.json").exists()
+    assert json.loads((workspace / "dev" / "spec.json").read_text(encoding="utf-8")) == spec_before
+
+
 def test_lake_create_minimal_cli_can_infer_storage_from_cluster(tmp_path, monkeypatch):
     workspace = make_workspace(tmp_path / "workspace")
     init_lake_environment("dev", workspace)
-    product_path = workspace / "dev" / "product.json"
+    product_path = workspace / "dev" / "minimal.json"
     monkeypatch.setattr(
         lakespec_cli,
         "infer_storage_classes_from_cluster",
@@ -346,6 +438,7 @@ def test_lake_create_minimal_cli_can_infer_storage_from_cluster(tmp_path, monkey
             "lake",
             "create",
             "--minimal",
+            "minimal.json",
             "dev",
             "--workspace",
             str(workspace),
@@ -355,7 +448,6 @@ def test_lake_create_minimal_cli_can_infer_storage_from_cluster(tmp_path, monkey
         ],
         input=(
             "http\n"
-            "stelar-dev\n"
             "example.test\n"
             "klms\n"
             "kc\n"
@@ -370,7 +462,11 @@ def test_lake_create_minimal_cli_can_infer_storage_from_cluster(tmp_path, monkey
     assert result.exit_code == 0, result.output
     product = yaml.safe_load(product_path.read_text(encoding="utf-8"))
 
+    spec = yaml.safe_load((workspace / "dev" / "spec.json").read_text(encoding="utf-8"))
+
     assert "Inferred storage classes from 'dev'" in result.output
+    assert spec["spec"]["contextNames"] == ["dev"]
+    assert "namespace" not in product["spec"]
     assert product["spec"]["dynamicStorageClass"] == "fast-storage"
     assert product["spec"]["dynamic_volume_storage_class"] == "fast-storage"
     assert "CLUSTER_ISSUER" not in product["spec"]
@@ -410,7 +506,7 @@ def test_lake_manual_tls_template_cli_rejects_existing_file(tmp_path):
 def test_lake_create_minimal_cli_manual_secrets_prompts_for_values(tmp_path):
     workspace = make_workspace(tmp_path / "workspace")
     init_lake_environment("dev", workspace)
-    product_path = workspace / "dev" / "product.json"
+    product_path = workspace / "dev" / "minimal.json"
 
     result = runner.invoke(
         app,
@@ -418,6 +514,7 @@ def test_lake_create_minimal_cli_manual_secrets_prompts_for_values(tmp_path):
             "lake",
             "create",
             "--minimal",
+            "minimal.json",
             "dev",
             "--workspace",
             str(workspace),
@@ -452,7 +549,6 @@ def test_lake_create_minimal_cli_manual_secrets_prompts_for_values(tmp_path):
             "keycloakrootpass123\n"
             "miniorootpass123\n"
             "miniorootpass123\n"
-            "stelar-dev\n"
             "example.test\n"
             "klms\n"
             "kc\n"

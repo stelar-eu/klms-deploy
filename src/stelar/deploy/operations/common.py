@@ -101,7 +101,10 @@ def product_spec(product_data: JsonObject) -> JsonObject:
 def product_author(product_data: JsonObject) -> str | None:
     author = product_data.get("author")
     if author is None:
-        author = product_spec(product_data).get("author")
+        spec = product_data.get("spec")
+        if not isinstance(spec, dict):
+            return None
+        author = spec.get("author")
     if author is None:
         return None
     if not isinstance(author, str) or not author:

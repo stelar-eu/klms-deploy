@@ -7,6 +7,7 @@ import random
 import string
 
 from .common import CommandError, JsonObject
+from .manual_tls import manual_tls_secret_names, manual_tls_selected
 
 PRODUCT_SECRET_FIELDS = (
     (
@@ -50,7 +51,7 @@ MINIO_ROOT_USER_MIN_LENGTH = 3
 
 
 def product_secrets(spec: JsonObject) -> list[tuple[str, dict[str, str]]]:
-    """Build Secret names and data from product spec secret fields."""
+    """Build Secret names and data from fullspec config secret fields."""
     secrets = [
         _secret_from_product_spec(spec, section, name_key, value_key, data_key)
         for section, name_key, value_key, data_key in PRODUCT_SECRET_FIELDS
@@ -69,6 +70,21 @@ def product_secrets(spec: JsonObject) -> list[tuple[str, dict[str, str]]]:
             )
 
     return secrets
+
+
+def product_secret_names(spec: JsonObject) -> tuple[str, ...]:
+    """Return product Secret names created from fullspec config fields."""
+    return tuple(secret_name for secret_name, _ in product_secrets(spec)) + (
+        CKAN_AUTH_SECRET_NAME,
+    )
+
+
+def expected_bootstrap_secret_names(spec: JsonObject) -> tuple[str, ...]:
+    """Return all bootstrap Secret names for a rendered KLMS config."""
+    names = product_secret_names(spec)
+    if manual_tls_selected(spec):
+        names += manual_tls_secret_names(spec)
+    return tuple(dict.fromkeys(names))
 
 
 def ckan_auth_secret_data() -> dict[str, str]:
@@ -160,7 +176,7 @@ def validate_minio_root_user(value: str, *, source: str) -> None:
 def _product_spec_section(spec: JsonObject, section: str) -> JsonObject:
     value = spec.get(section)
     if not isinstance(value, dict):
-        raise CommandError(f"Product spec must contain a {section} object")
+        raise CommandError(f"Fullspec config must contain a {section} object")
     return value
 
 
@@ -172,7 +188,7 @@ def _required_product_spec_string(
     value = section_config.get(key)
     if not isinstance(value, str) or not value:
         raise CommandError(
-            f"Product spec must define {section}.{key} "
+            f"Fullspec config must define {section}.{key} "
             "as a non-empty string"
         )
     return value

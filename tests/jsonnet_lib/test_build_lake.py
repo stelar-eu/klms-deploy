@@ -59,10 +59,21 @@ def redis_fullspec_data() -> dict:
     }
 
 
+def environment_spec(fullspec: str, namespace: str = "test") -> str:
+    return f"""
+    {{
+      spec: {{
+        namespace: "{namespace}",
+        stelar: {{ active_product: {fullspec} }},
+      }},
+    }}
+    """
+
+
 def test_build_lake_renders_selected_component_from_fullspec(J: JsonnetRunner):
     out = J(
         f"""
-        local result = build_lake({redis_fullspec()});
+        local result = build_lake({environment_spec(redis_fullspec())});
         {{
           manifest_count: std.length(result.manifests),
           resource_keys: std.objectFields(result.manifests[0]),
@@ -85,7 +96,7 @@ def test_build_lake_renders_selected_component_from_fullspec(J: JsonnetRunner):
 def test_build_lake_ignores_unselected_component_configuration(J: JsonnetRunner):
     out = J(
         f"""
-        local result = build_lake({redis_fullspec('api: { IMAGE: "unused", PORT: 80 },')});
+        local result = build_lake({environment_spec(redis_fullspec('api: { IMAGE: "unused", PORT: 80 },'))});
         {{
           manifest_count: std.length(result.manifests),
           first_manifest_name: result.manifests[0].deployment.metadata.name,
@@ -99,7 +110,59 @@ def test_build_lake_ignores_unselected_component_configuration(J: JsonnetRunner)
     }
 
 
-def test_main_template_imports_fullspec_and_delegates_to_build_lake(
+def test_build_lake_injects_environment_namespace_into_component_config(J: JsonnetRunner):
+    out = J(
+        f"""
+        local fullspec = {{
+          klms: {{
+            support: {{}},
+            core_components: [],
+            optional_components: [],
+            cluster: [],
+            SCHEME: "http",
+            api: {{ PORT: 80 }},
+          }},
+        }};
+        local result = build_lake({environment_spec("fullspec", namespace="lake-ns")});
+        {{
+          manifest_count: std.length(result.manifests),
+          network_policy_namespace: result.manifests[0].networkpolicy.metadata.namespace,
+        }}
+        """
+    )
+
+    assert out == {
+        "manifest_count": 1,
+        "network_policy_namespace": "lake-ns",
+    }
+
+
+def test_component_registry_includes_feature_model_component_entrypoints(
+    J: JsonnetRunner,
+):
+    out = J(
+        """
+        local component_registry = import "github.com/stelar-eu/klms-deploy/lib/util/components.libsonnet";
+        local feature_model_components = [
+          "airflow",
+          "previewer",
+          "sde",
+          "visualizer",
+        ];
+        {
+          missing: [
+            name
+            for name in feature_model_components
+            if !std.member(component_registry.get_names(), name)
+          ],
+        }
+        """
+    )
+
+    assert out["missing"] == []
+
+
+def test_main_template_imports_environment_spec_and_delegates_to_build_lake(
     tmp_path: Path,
     stelar_vendor_root: Path,
 ):
@@ -108,8 +171,8 @@ def test_main_template_imports_fullspec_and_delegates_to_build_lake(
     template = REPO_ROOT / "lib" / "environment_templates" / "main_template.jsonnet"
     main_jsonnet = environment / "main.jsonnet"
     main_jsonnet.write_text(template.read_text(encoding="utf-8"), encoding="utf-8")
-    (environment / "product_fullspec.json").write_text(
-        json.dumps(redis_fullspec_data()),
+    (environment / "spec.json").write_text(
+        json.dumps({"spec": {"namespace": "test", "stelar": {"active_product": redis_fullspec_data()}}}),
         encoding="utf-8",
     )
 

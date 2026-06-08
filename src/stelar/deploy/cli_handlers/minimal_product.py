@@ -23,13 +23,11 @@ def prompt_minimal_product(
     *,
     manual_secrets: bool,
     inferred_storage: InferredStorageClasses | None,
-    namespace: str | None = None,
 ) -> dict:
     """Prompt for a minimal product and return the product object."""
     config = _prompt_minimal_product_config(
         manual_secrets=manual_secrets,
         inferred_storage=inferred_storage,
-        namespace=namespace,
     )
     return build_minimal_product(config)
 
@@ -38,7 +36,6 @@ def _prompt_minimal_product_config(
     *,
     manual_secrets: bool,
     inferred_storage: InferredStorageClasses | None,
-    namespace: str | None,
 ) -> MinimalProductConfig:
     scheme = _prompt_choice("URL scheme", ("http", "https"), default="https")
     cluster_issuer = (
@@ -66,7 +63,6 @@ def _prompt_minimal_product_config(
         else generate_minimal_secret_values()
     )
 
-    namespace = namespace or _prompt_required("Kubernetes namespace", default="stelar-dev")
     root_domain = _prompt_required("Public root domain", default="minikube")
     primary_subdomain = _prompt_required("Primary app subdomain", default="klms")
     keycloak_subdomain = _prompt_required("Keycloak subdomain", default="kc")
@@ -83,7 +79,6 @@ def _prompt_minimal_product_config(
     )
 
     return MinimalProductConfig(
-        namespace=namespace,
         root_domain=root_domain,
         primary_subdomain=primary_subdomain,
         keycloak_subdomain=keycloak_subdomain,

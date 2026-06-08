@@ -6,6 +6,7 @@ import typer
 
 from ..operations.progress import (
     ClusterProgress,
+    LakeActivationProgress,
     LakeEnvironmentProgress,
     LakeWorkspaceProgress,
 )
@@ -40,6 +41,65 @@ class TyperClusterProgress(ClusterProgress):
 
     def secret_exists(self, secret_name: str) -> None:
         typer.echo(f"⚠️ Secret {secret_name!r} already exists.")
+
+    def bootstrap_already_applied(
+        self,
+        namespace: str,
+        secret_names: tuple[str, ...],
+    ) -> None:
+        typer.echo(
+            "⚠️ Bootstrap appears to have already run in namespace "
+            f"{namespace!r}: all {len(secret_names)} required Secrets exist."
+        )
+
+    def bootstrap_state_check_forbidden(self, namespace: str, reason: str) -> None:
+        typer.echo(
+            "⚠️ Cannot check whether bootstrap already ran in namespace "
+            f"{namespace!r}: {reason}. Proceeding at your own risk."
+        )
+
+
+class TyperLakeActivationProgress(LakeActivationProgress):
+    """Render lake product activation notices through Typer."""
+
+    def bootstrapped_product_reactivated(
+        self,
+        product_name: str,
+        namespace: str,
+        secret_names: tuple[str, ...],
+    ) -> None:
+        typer.echo(
+            "ℹ️ Product "
+            f"{product_name!r} is already active and appears bootstrapped in "
+            f"namespace {namespace!r}: all {len(secret_names)} required "
+            "Secrets exist."
+        )
+
+    def activating_despite_existing_bootstrap(
+        self,
+        product_name: str,
+        namespace: str,
+        existing_secret_names: tuple[str, ...],
+        expected_secret_names: tuple[str, ...],
+    ) -> None:
+        typer.echo(
+            "⚠️ Existing bootstrap Secrets were found in namespace "
+            f"{namespace!r}: {len(existing_secret_names)} of "
+            f"{len(expected_secret_names)} required Secrets exist. "
+            f"Proceeding with activation of product {product_name!r}."
+        )
+
+    def activating_despite_bootstrap_check_failure(
+        self,
+        product_name: str,
+        namespace: str,
+        reason: str,
+    ) -> None:
+        typer.echo(
+            "⚠️ Cannot check bootstrap Secrets in namespace "
+            f"{namespace!r}: {reason}. Proceeding with activation of "
+            f"product {product_name!r}."
+        )
 
 
 class TyperLakeEnvironmentProgress(LakeEnvironmentProgress):

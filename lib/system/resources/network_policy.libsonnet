@@ -4,7 +4,7 @@ local k = import "../../util/k.libsonnet";
 {
   new(config):
     k.networking.v1.networkPolicy.new("stelar-task-isolation-policy")
-    + { metadata+: { namespace: config.namespace } }
+    + { metadata+: { namespace: config.environment.namespace } }
     + {
       spec+: {
         podSelector: { matchLabels: { "stelar.metadata.class": "task-execution" } },

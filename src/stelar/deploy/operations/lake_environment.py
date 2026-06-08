@@ -4,11 +4,20 @@ from __future__ import annotations
 
 import json
 import shutil
+import sys
 
 from pathlib import Path
 
 from ..workspace import Workspace
-from .common import CommandError, validate_workspace
+from .bootstrap_state import bootstrapped_product_or_none
+from .common import (
+    CommandError,
+    ensure_object,
+    read_environment_json,
+    validate_workspace,
+    write_environment_json,
+)
+from .environment_spec import validate_environment_target_fields
 from .progress import LakeEnvironmentProgress
 
 ENVIRONMENT_TEMPLATE_DIR = (
@@ -20,10 +29,10 @@ ENVIRONMENT_TEMPLATE_DIR = (
     / "environment_templates"
 )
 INITIALIZED_LAKE_ENVIRONMENT_FILES = ("main.jsonnet", "spec.json")
-GENERATED_LAKE_ENVIRONMENT_FILES = ("product.json", "product_fullspec.json")
 MAIN_JSONNET_TEMPLATE = "main_template.jsonnet"
 LAKE_ENVIRONMENT_ANNOTATION = "stelar.eu/lake-environment"
 LAKE_ENVIRONMENT_ANNOTATION_VALUE = "true"
+_WARNED_UNMANAGED_MAIN_JSONNET: set[Path] = set()
 SPEC_JSON_SKELETON = {
     "apiVersion": "tanka.dev/v1alpha1",
     "metadata": {
@@ -41,6 +50,8 @@ def init_lake_environment(
     progress: LakeEnvironmentProgress | None = None,
     *,
     adopt_existing_main: bool = False,
+    context_name: str | None = None,
+    namespace: str | None = None,
 ) -> None:
     """Initialize a Tanka environment folder for a lake.
 
@@ -53,6 +64,10 @@ def init_lake_environment(
     - Refuse implicit adoption when main.jsonnet already exists without the marker.
     """
     progress = progress or LakeEnvironmentProgress()
+    context_name, namespace = validate_environment_target_fields(
+        context_name=context_name,
+        namespace=namespace,
+    )
     workspace = validate_workspace(workspace_path)
     environment_dir = _ensure_lake_environment_dir(
         workspace.path,
@@ -60,23 +75,36 @@ def init_lake_environment(
         progress,
     )
 
+    spec_json_path = environment_dir / "spec.json"
+    _reject_existing_bootstrapped_environment(spec_json_path)
     _validate_existing_main_jsonnet_adoption(
+        workspace,
         environment_dir,
         adopt_existing_main=adopt_existing_main,
     )
     _ensure_main_jsonnet(workspace, environment_dir, progress)
     _ensure_spec_json(environment_dir, progress)
+    _warn_if_unmanaged_main_jsonnet(workspace, environment_dir)
+    _write_target_fields_if_requested(
+        spec_json_path,
+        context_name=context_name,
+        namespace=namespace,
+    )
 
 
 def remove_lake_environment(
     environment: str,
     workspace_path: Path = Path("."),
     progress: LakeEnvironmentProgress | None = None,
+    *,
+    force: bool = False,
 ) -> None:
     """Delete an initialized, stelarctl-marked lake environment directory."""
     progress = progress or LakeEnvironmentProgress()
     workspace = validate_workspace(workspace_path)
     environment_dir = initialized_lake_environment_dir(workspace, environment)
+    if not force:
+        _reject_unsafe_environment_removal(environment, environment_dir)
 
     try:
         progress.removing_environment(str(environment_dir))
@@ -84,6 +112,36 @@ def remove_lake_environment(
     except OSError as exc:
         raise CommandError(f"Could not remove {environment_dir}: {exc}") from exc
     progress.environment_removed(str(environment_dir))
+
+
+
+def _reject_unsafe_environment_removal(
+    environment: str,
+    environment_dir: Path,
+) -> None:
+    spec_json = read_environment_json(environment_dir / "spec.json")
+    stelar_spec = spec_json.get("spec", {})
+    if isinstance(stelar_spec, dict):
+        stelar_spec = stelar_spec.get("stelar", {})
+    if not isinstance(stelar_spec, dict):
+        stelar_spec = {}
+
+    reasons = []
+    if "active_product" in stelar_spec or "active_product_name" in stelar_spec:
+        reasons.append("an active product")
+    if bootstrapped_product_or_none(spec_json) is not None:
+        reasons.append("recorded bootstrap state")
+    if not reasons:
+        return
+
+    reason_text = " and ".join(reasons)
+    raise CommandError(
+        f"Refusing to remove lake environment {environment!r} because it still "
+        f"contains {reason_text}. Remove Kubernetes resources with `tk delete "
+        "ENV`, purge bootstrap Secrets with `stelarctl lake purge-secrets ENV` "
+        "when bootstrap state is recorded, then rerun. Use --force only if "
+        "you intentionally want to discard local cleanup metadata."
+    )
 
 
 def initialized_lake_environment_dir(
@@ -109,18 +167,8 @@ def initialized_lake_environment_dir(
         raise CommandError(
             f"Lake environment {environment!r} is missing the stelarctl marker"
         )
+    _warn_if_unmanaged_main_jsonnet(workspace, environment_dir)
 
-    return environment_dir
-
-
-def complete_lake_environment_dir(workspace: Workspace, environment: str) -> Path:
-    environment_dir = initialized_lake_environment_dir(workspace, environment)
-    for filename in GENERATED_LAKE_ENVIRONMENT_FILES:
-        path = environment_dir / filename
-        if not path.is_file():
-            raise CommandError(
-                f"Lake environment {environment!r} is missing {filename}"
-            )
     return environment_dir
 
 
@@ -224,6 +272,7 @@ def _ensure_lake_environment_dir(
 
 
 def _validate_existing_main_jsonnet_adoption(
+    workspace: Workspace,
     environment_dir: Path,
     *,
     adopt_existing_main: bool,
@@ -239,6 +288,7 @@ def _validate_existing_main_jsonnet_adoption(
         return
 
     if adopt_existing_main:
+        _validate_managed_main_jsonnet(workspace, main_jsonnet_path)
         return
 
     raise CommandError(
@@ -247,6 +297,64 @@ def _validate_existing_main_jsonnet_adoption(
         "existing Tanka entrypoint implicitly. Rerun with "
         "--adopt-existing-main if this directory should be managed by stelarctl."
     )
+
+
+
+def _validate_managed_main_jsonnet(
+    workspace: Workspace,
+    main_jsonnet_path: Path,
+) -> None:
+    mismatch = _managed_main_jsonnet_mismatch(workspace, main_jsonnet_path)
+    if mismatch is None:
+        return
+    raise CommandError(
+        f"{main_jsonnet_path} does not match the managed stelarctl entrypoint "
+        "template. Refusing to adopt it because `tk apply` may render "
+        "resources that are unrelated to spec.stelar.active_product."
+    )
+
+
+def _warn_if_unmanaged_main_jsonnet(
+    workspace: Workspace,
+    environment_dir: Path,
+) -> None:
+    main_jsonnet_path = environment_dir / "main.jsonnet"
+    warned_path = main_jsonnet_path.resolve()
+    if warned_path in _WARNED_UNMANAGED_MAIN_JSONNET:
+        return
+
+    mismatch = _managed_main_jsonnet_mismatch(workspace, main_jsonnet_path)
+    if mismatch is None:
+        return
+
+    _WARNED_UNMANAGED_MAIN_JSONNET.add(warned_path)
+    print(
+        "Warning: "
+        f"{main_jsonnet_path} is marked as a stelarctl lake environment, "
+        f"but {mismatch}. `tk apply` may render resources unrelated to "
+        "spec.stelar.active_product. Restore main.jsonnet from the managed "
+        "stelarctl template if this environment should be fully managed.",
+        file=sys.stderr,
+    )
+
+
+def _managed_main_jsonnet_mismatch(
+    workspace: Workspace,
+    main_jsonnet_path: Path,
+) -> str | None:
+    expected_path = workspace.path / ENVIRONMENT_TEMPLATE_DIR / MAIN_JSONNET_TEMPLATE
+    try:
+        expected = expected_path.read_text(encoding="utf-8")
+    except OSError as exc:
+        return f"the managed template {expected_path} could not be read: {exc}"
+    try:
+        current = main_jsonnet_path.read_text(encoding="utf-8")
+    except OSError as exc:
+        return f"main.jsonnet could not be read: {exc}"
+
+    if current == expected:
+        return None
+    return "main.jsonnet does not match the managed stelarctl entrypoint template"
 
 
 def _ensure_main_jsonnet(
@@ -293,11 +401,56 @@ def _ensure_spec_json(environment_dir: Path, progress: LakeEnvironmentProgress) 
     progress.file_written(str(spec_json_path))
 
 
-def _copy_environment_template(
+
+
+
+def _reject_existing_bootstrapped_environment(spec_json_path: Path) -> None:
+    if not spec_json_path.exists():
+        return
+    if not spec_json_path.is_file():
+        return
+    spec_json = read_environment_json(spec_json_path)
+    if bootstrapped_product_or_none(spec_json) is None:
+        return
+    raise CommandError(
+        "Environment has recorded bootstrap state; refusing to run lake add. "
+        "Restore spec.contextNames or spec.namespace manually if the target "
+        "fields need repair."
+    )
+
+
+def _write_target_fields_if_requested(
+    spec_json_path: Path,
+    *,
+    context_name: str | None,
+    namespace: str | None,
+) -> None:
+    context_name = _optional_target_value(context_name, "context")
+    namespace = _optional_target_value(namespace, "namespace")
+    if context_name is None and namespace is None:
+        return
+
+    spec_json = read_environment_json(spec_json_path)
+    tk_spec = ensure_object(spec_json, "spec")
+    if context_name is not None:
+        tk_spec["contextNames"] = [context_name]
+    if namespace is not None:
+        tk_spec["namespace"] = namespace
+    write_environment_json(spec_json_path, spec_json)
+
+
+def _optional_target_value(value: str | None, field_name: str) -> str | None:
+    if value is None:
+        return None
+    if not isinstance(value, str) or not value.strip():
+        raise CommandError(f"Lake environment {field_name} must be a non-empty string")
+    return value.strip()
+
+
+def _copy_template_file(
     workspace: Workspace,
     template_name: str,
     destination: Path,
-    progress: LakeEnvironmentProgress,
 ) -> None:
     source = workspace.path / ENVIRONMENT_TEMPLATE_DIR / template_name
     if not source.is_file():
@@ -306,8 +459,18 @@ def _copy_environment_template(
         )
 
     try:
-        progress.copying_template(str(source), str(destination))
         shutil.copyfile(source, destination)
     except OSError as exc:
         raise CommandError(f"Could not create {destination}: {exc}") from exc
+
+
+def _copy_environment_template(
+    workspace: Workspace,
+    template_name: str,
+    destination: Path,
+    progress: LakeEnvironmentProgress,
+) -> None:
+    source = workspace.path / ENVIRONMENT_TEMPLATE_DIR / template_name
+    progress.copying_template(str(source), str(destination))
+    _copy_template_file(workspace, template_name, destination)
     progress.template_copied(str(destination))

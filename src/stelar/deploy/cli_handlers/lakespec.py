@@ -12,19 +12,35 @@ from ..cli_help import LAKE_CREATE_EPILOG, LAKE_CREATE_HELP
 from ..models.product import ProductValidationFailure
 from ..operations import (
     CommandError,
+    activate_lake_product,
     lake_environment_info,
     product_data_to_fullspec,
+    product_fullspec_json_filename,
+    product_json_filename,
+    product_name_from_path,
     product_to_fullspec,
+)
+from ..operations.bootstrap_state import (
+    bootstrapped_product_or_none,
+    reject_bootstrap_target_overrides,
+)
+from ..operations.common import read_environment_json
+from ..operations.environment_spec import (
+    environment_active_product,
+    environment_active_product_name_or_none,
+    update_environment_target_fields,
+    validate_environment_target_fields,
 )
 from ..operations.minimal_product import infer_storage_classes_from_cluster
 from .minimal_product import echo_inferred_storage, prompt_minimal_product
+from .progress import TyperLakeActivationProgress
 
 
 def lake_create_command(
     product_or_env: Annotated[
         str,
         typer.Argument(
-            help="Product JSON/YAML file, or ENV when --minimal is used",
+            help="Product JSON/YAML file, or PRODUCT_NAME when --minimal is used",
         ),
     ],
     env: Annotated[
@@ -37,7 +53,6 @@ def lake_create_command(
         Path,
         typer.Option(
             "--workspace",
-            "-w",
             file_okay=False,
             dir_okay=True,
             readable=True,
@@ -50,8 +65,8 @@ def lake_create_command(
         typer.Option(
             "--context",
             help=(
-                "Write this kubectl context to spec.json; also used by "
-                "--infer-storage-from-cluster"
+                "Kubectl context to write to spec.json in --minimal mode; "
+                "also used by --infer-storage-from-cluster"
             ),
         ),
     ] = None,
@@ -60,7 +75,7 @@ def lake_create_command(
         typer.Option(
             "--namespace",
             "-n",
-            help="Write this Kubernetes namespace to spec.json",
+            help="Kubernetes namespace to write to spec.json in --minimal mode",
         ),
     ] = None,
     minimal: Annotated[
@@ -105,17 +120,30 @@ def lake_create_command(
     if env is None:
         raise typer.BadParameter(
             "Missing ENV argument. Use `lake create PRODUCT ENV` or "
-            "`lake create --minimal ENV`."
+            "`lake create --minimal PRODUCT_NAME ENV`."
         )
 
     product_path = _product_path(product_or_env)
     try:
+        product_name = product_name_from_path(product_path)
+        if context is not None or namespace is not None:
+            raise CommandError(
+                "lake create only transforms products; activate a generated "
+                "product with lake activate. Persist target fields with "
+                "lake add --context/--namespace, or pass them only to "
+                "lake verify for read-only checks."
+            )
         fullspec = product_to_fullspec(
             product_path,
             env,
             workspace,
-            context_name=context,
-            namespace=namespace,
+            product_name=product_name,
+        )
+        _warn_if_regenerated_active_product_is_stale(
+            env,
+            workspace,
+            product_name,
+            fullspec,
         )
     except CommandError as exc:
         raise typer.BadParameter(str(exc)) from exc
@@ -127,8 +155,8 @@ def lake_create_command(
 
 
 def _create_minimal_lake(
-    environment: str,
-    extra_env: str | None,
+    product_name: str,
+    environment: str | None,
     workspace: Path,
     *,
     context: str | None,
@@ -136,14 +164,28 @@ def _create_minimal_lake(
     manual_secrets: bool,
     infer_storage_from_cluster: bool,
 ) -> None:
-    if extra_env is not None:
+    if environment is None:
         raise typer.BadParameter(
-            "With --minimal, pass only ENV: `lake create --minimal ENV`."
+            "With --minimal, use `lake create --minimal PRODUCT_NAME ENV`."
         )
 
     try:
+        context, namespace = validate_environment_target_fields(
+            context_name=context,
+            namespace=namespace,
+        )
         environment_info = lake_environment_info(environment, workspace)
-        product_path = environment_info.path / "product.json"
+        spec_path = environment_info.path / "spec.json"
+        spec_json = read_environment_json(spec_path)
+        reject_bootstrap_target_overrides(
+            spec_json,
+            context=context,
+            namespace=namespace,
+        )
+        product_path = environment_info.path / product_json_filename(product_name)
+        product_fullspec_path = environment_info.path / product_fullspec_json_filename(
+            product_name
+        )
 
         inferred_storage = (
             infer_storage_classes_from_cluster(context)
@@ -156,22 +198,28 @@ def _create_minimal_lake(
         product = prompt_minimal_product(
             manual_secrets=manual_secrets,
             inferred_storage=inferred_storage,
-            namespace=namespace,
         )
         fullspec = product_data_to_fullspec(
             product,
             environment,
             workspace,
             product_source=product_path,
+            product_name=product_name,
+        )
+        update_environment_target_fields(
+            spec_path,
             context_name=context,
             namespace=namespace,
         )
+        _warn_if_regenerated_active_product_is_stale(
+            environment,
+            workspace,
+            product_name,
+            fullspec,
+        )
 
         typer.echo(f"Wrote minimal product: {product_path}")
-        typer.echo(
-            "Wrote product fullspec: "
-            f"{environment_info.path / 'product_fullspec.json'}"
-        )
+        typer.echo(f"Wrote product fullspec: {product_fullspec_path}")
     except CommandError as exc:
         raise typer.BadParameter(str(exc)) from exc
     except ProductValidationFailure as exc:
@@ -179,6 +227,48 @@ def _create_minimal_lake(
         raise typer.Exit(code=1) from exc
 
     typer.echo(json.dumps(fullspec, indent=2))
+
+
+
+def _warn_if_regenerated_active_product_is_stale(
+    environment: str,
+    workspace: Path,
+    product_name: str,
+    fullspec: dict[str, object],
+) -> None:
+    normalized_product_name = Path(product_json_filename(product_name)).stem
+    try:
+        environment_info = lake_environment_info(environment, workspace)
+        spec_json = read_environment_json(environment_info.path / "spec.json")
+        active_name = environment_active_product_name_or_none(spec_json)
+        if active_name != normalized_product_name:
+            return
+        active_fullspec = environment_active_product(spec_json)
+    except CommandError:
+        return
+
+    if active_fullspec == fullspec:
+        return
+    if bootstrapped_product_or_none(spec_json) is not None:
+        typer.echo(
+            "Warning: regenerated active product "
+            f"{normalized_product_name!r}, but this environment has recorded "
+            "bootstrap state for the previous fullspec. Purge old bootstrap "
+            f"Secrets with `stelarctl lake purge-secrets {environment}`, then "
+            f"run `stelarctl lake activate {normalized_product_name} "
+            f"{environment}`, then run `stelarctl lake bootstrap {environment}` "
+            "for the regenerated fullspec.",
+            err=True,
+        )
+        return
+    typer.echo(
+        "Warning: regenerated active product "
+        f"{normalized_product_name!r}, but spec.stelar.active_product still "
+        "contains the previous fullspec. Run `stelarctl lake activate "
+        f"{normalized_product_name} {environment}` to render the regenerated "
+        "fullspec.",
+        err=True,
+    )
 
 
 def _minimal_options_used(
@@ -194,3 +284,38 @@ def _product_path(product: str) -> Path:
     if not product_path.is_file():
         raise typer.BadParameter(f"Product file {product_path} does not exist")
     return product_path
+
+
+def lake_activate_command(
+    product_name: Annotated[
+        str,
+        typer.Argument(help="Generated product name, with or without .json"),
+    ],
+    env: Annotated[
+        str,
+        typer.Argument(help="Workspace-relative lake environment path"),
+    ],
+    workspace: Annotated[
+        Path,
+        typer.Option(
+            "--workspace",
+            file_okay=False,
+            dir_okay=True,
+            readable=True,
+            resolve_path=True,
+            help="Workspace root containing jsonnetfile.json",
+        ),
+    ] = Path("."),
+) -> None:
+    try:
+        fullspec = activate_lake_product(
+            product_name,
+            env,
+            workspace,
+            progress=TyperLakeActivationProgress(),
+        )
+    except CommandError as exc:
+        raise typer.BadParameter(str(exc)) from exc
+
+    typer.echo(f"Activated product: {product_name}")
+    typer.echo(json.dumps(fullspec, indent=2))

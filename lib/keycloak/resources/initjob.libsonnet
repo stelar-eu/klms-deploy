@@ -25,7 +25,7 @@ local env(config) = {
   KC_QUAY_GROUP_CLAIM: if std.objectHas(config, "quay") then config.quay.KC_ROLES_CLAIM else "",
   QUAY_PULLERS_ROLE: if std.objectHas(config, "quay") then config.quay.QUAY_PULLERS_ROLE else "",
   QUAY_PUSHERS_ROLE: if std.objectHas(config, "quay") then config.quay.QUAY_PUSHERS_ROLE else "",
-  KUBE_NAMESPACE: config.namespace,
+  KUBE_NAMESPACE: config.environment.namespace,
   KC_API_CLIENT_REDIRECT: config.SCHEME + "://" + config.PRIMARY_SUBDOMAIN + "." + config.ROOT_DOMAIN + "/*",
   KC_MINIO_CLIENT_REDIRECT: config.SCHEME + "://" + config.PRIMARY_SUBDOMAIN + "." + config.ROOT_DOMAIN + "/s3/oauth_callback",
   KC_CKAN_CLIENT_REDIRECT: config.SCHEME + "://" + config.PRIMARY_SUBDOMAIN + "." + config.ROOT_DOMAIN + "/*",

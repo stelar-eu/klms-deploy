@@ -1,4 +1,4 @@
 local build_lake = import "github.com/stelar-eu/klms-deploy/lib/util/build_lake.libsonnet";
-local product_fullspec = import "./product_fullspec.json";
+local environment_spec = import "./spec.json";
 
-build_lake(product_fullspec)
+build_lake(environment_spec)

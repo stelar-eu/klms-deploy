@@ -19,6 +19,7 @@ from ..cli_help import (
 )
 from ..operations import CommandError, init_lake_workspace, workspace_info
 from ..operations.lake_workspace import WorkspaceInfo
+from .formatting import item_list, presence, yes_no
 from .progress import TyperLakeWorkspaceProgress
 
 
@@ -93,10 +94,10 @@ def workspace_info_command(
 
 def _echo_workspace_info(info: WorkspaceInfo) -> None:
     typer.echo(f"Workspace: {info.path}")
-    typer.echo(f"initialized: {_yes_no(info.initialized)}")
-    typer.echo(f"jsonnetfile.json: {_presence(info.jsonnetfile)}")
-    typer.echo(f"lib/: {_presence(info.lib)}")
-    typer.echo(f"vendor/: {_presence(info.vendor)}")
+    typer.echo(f"initialized: {yes_no(info.initialized)}")
+    typer.echo(f"jsonnetfile.json: {presence(info.jsonnetfile)}")
+    typer.echo(f"lib/: {presence(info.lib)}")
+    typer.echo(f"vendor/: {presence(info.vendor)}")
     typer.echo(f"lake environments: {len(info.environments)}")
     typer.echo("Environments:")
     if not info.environments:
@@ -104,23 +105,15 @@ def _echo_workspace_info(info: WorkspaceInfo) -> None:
     else:
         for environment in info.environments:
             typer.echo(f"  - {environment.name}")
-            typer.echo(f"    main.jsonnet: {_presence(environment.main_jsonnet)}")
-            typer.echo(f"    spec.json: {_presence(environment.spec_json)}")
-            typer.echo(f"    product.json: {_presence(environment.product_json)}")
+            typer.echo(f"    main.jsonnet: {presence(environment.main_jsonnet)}")
+            typer.echo(f"    spec.json: {presence(environment.spec_json)}")
+            typer.echo(f"    active product: {presence(environment.active_product)}")
             typer.echo(
-                "    product_fullspec.json: "
-                f"{_presence(environment.product_fullspec_json)}"
+                "    generated products: "
+                f"{item_list(environment.generated_products)}"
             )
 
     if not info.initialized:
         typer.echo("")
         typer.echo("Next step:")
         typer.echo(f"  stelarctl workspace init {info.path}")
-
-
-def _yes_no(value: bool) -> str:
-    return "yes" if value else "no"
-
-
-def _presence(present: bool) -> str:
-    return "present" if present else "missing"

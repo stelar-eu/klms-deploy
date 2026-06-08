@@ -7,8 +7,10 @@ import pkgutil
 from dataclasses import dataclass
 from pathlib import Path
 
+from ..workspace import Workspace
 from .common import CommandError, validate_workspace
 from .lake_environment import (
+    _warn_if_unmanaged_main_jsonnet,
     initialized_lake_environment_dir,
     is_lake_environment_spec,
 )
@@ -26,8 +28,8 @@ class WorkspaceEnvironmentInfo:
     path: Path
     main_jsonnet: bool
     spec_json: bool
-    product_json: bool
-    product_fullspec_json: bool
+    active_product: bool
+    generated_products: tuple[str, ...]
 
 
 @dataclass(frozen=True)
@@ -100,9 +102,20 @@ def _marked_environment_infos(workspace: Path) -> tuple[WorkspaceEnvironmentInfo
         for spec_json in sorted(workspace.rglob("spec.json"))
         if is_lake_environment_spec(spec_json)
     ]
+    workspace_model = _workspace_model_or_none(workspace)
+    if workspace_model is not None:
+        for spec_json in spec_files:
+            _warn_if_unmanaged_main_jsonnet(workspace_model, spec_json.parent)
     return tuple(
         _environment_info(workspace, spec_json.parent) for spec_json in spec_files
     )
+
+
+def _workspace_model_or_none(workspace: Path) -> Workspace | None:
+    try:
+        return Workspace(workspace)
+    except ValueError:
+        return None
 
 
 def _environment_info(
@@ -116,9 +129,38 @@ def _environment_info(
         path=environment_dir,
         main_jsonnet=main_jsonnet.is_file(),
         spec_json=(environment_dir / "spec.json").is_file(),
-        product_json=(environment_dir / "product.json").is_file(),
-        product_fullspec_json=(environment_dir / "product_fullspec.json").is_file(),
+        active_product=_has_active_product(environment_dir / "spec.json"),
+        generated_products=_generated_product_names(environment_dir),
     )
+
+
+def _has_active_product(spec_json_path: Path) -> bool:
+    try:
+        with spec_json_path.open("r", encoding="utf-8") as spec_file:
+            spec_json = json.load(spec_file)
+    except (OSError, json.JSONDecodeError):
+        return False
+    if not isinstance(spec_json, dict):
+        return False
+    spec = spec_json.get("spec")
+    if not isinstance(spec, dict):
+        return False
+    stelar = spec.get("stelar")
+    if not isinstance(stelar, dict):
+        return False
+    return isinstance(stelar.get("active_product"), dict)
+
+
+def _generated_product_names(environment_dir: Path) -> tuple[str, ...]:
+    names: list[str] = []
+    suffix = "_fullspec.json"
+    for fullspec_path in sorted(environment_dir.glob(f"*{suffix}")):
+        name = fullspec_path.name[: -len(suffix)]
+        if name == "product":
+            continue
+        if (environment_dir / f"{name}.json").is_file():
+            names.append(name)
+    return tuple(names)
 
 
 def _ensure_directory(path: Path, progress: LakeWorkspaceProgress) -> None:

@@ -40,7 +40,6 @@ class MinimalSecretValues:
 class MinimalProductConfig:
     """User-controlled values for a minimal STELAR product."""
 
-    namespace: str
     root_domain: str
     primary_subdomain: str
     keycloak_subdomain: str
