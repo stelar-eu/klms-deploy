@@ -10,13 +10,13 @@ from .secret_resources import (
     validate_password,
 )
 
-TLS_MODES = {"no_tls", "cert_manager", "manual_tls", "self_signed"}
+TLS_MODES = {"no_tls", "cert_manager", "manual_tls"}
 
 
 def validate_fullspec_scheme_tls_consistency(
     fullspec: JsonObject,
     *,
-    source: str = "product_fullspec.json",
+    source: str = "product fullspec",
 ) -> None:
     """Validate that SCHEME and ingress.tls select a compatible mode."""
     config = fullspec.get("klms")
@@ -28,7 +28,7 @@ def validate_fullspec_scheme_tls_consistency(
 def validate_config_scheme_tls_consistency(
     config: JsonObject,
     *,
-    source: str = "product_fullspec.json",
+    source: str = "product fullspec",
 ) -> None:
     """Validate a KLMS config object for SCHEME/ingress.tls consistency."""
     scheme = config.get("SCHEME")
@@ -61,8 +61,8 @@ def validate_config_scheme_tls_consistency(
         _validate_http_minio_insecure(config, source=source)
     if scheme == "https" and tls_mode == "no_tls":
         raise CommandError(
-            f"{source} with SCHEME https must select cert_manager, manual_tls, "
-            "or self_signed in ingress.tls"
+            f"{source} with SCHEME https must select cert_manager or manual_tls "
+            "in ingress.tls"
         )
 
     if tls_mode == "manual_tls":

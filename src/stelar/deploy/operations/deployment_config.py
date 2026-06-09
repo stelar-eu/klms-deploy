@@ -11,10 +11,10 @@ STORAGE_CLASS_FIELDS = (
 
 
 def deployment_config(product_fullspec: JsonObject) -> JsonObject:
-    """Return the KLMS object from product_fullspec.json."""
+    """Return the KLMS object from spec.stelar.active_product."""
     config = product_fullspec.get("klms")
     if not isinstance(config, dict):
-        raise CommandError("product_fullspec.json must contain a klms object")
+        raise CommandError("spec.stelar.active_product must contain a klms object")
     return config
 
 
@@ -43,7 +43,7 @@ def storage_class_name_from(config: JsonObject, field_names: tuple[str, ...]) ->
             continue
         if not isinstance(storage_class_name, str) or not storage_class_name:
             raise CommandError(
-                f"product_fullspec.json must define {field_name} "
+                f"spec.stelar.active_product must define {field_name} "
                 "as a non-empty string"
             )
         return storage_class_name
@@ -52,14 +52,14 @@ def storage_class_name_from(config: JsonObject, field_names: tuple[str, ...]) ->
         expected_field = field_names[0]
     else:
         expected_field = f"{field_names[0]} or {', '.join(field_names[1:])}"
-    raise CommandError(f"product_fullspec.json must define {expected_field}")
+    raise CommandError(f"spec.stelar.active_product must define {expected_field}")
 
 
 def deployment_scheme(config: JsonObject) -> str:
     """Return the configured public URL scheme."""
     scheme = config.get("SCHEME", "http")
     if scheme not in {"http", "https"}:
-        raise CommandError("product_fullspec.json must define SCHEME as http or https")
+        raise CommandError("spec.stelar.active_product must define SCHEME as http or https")
     return scheme
 
 
@@ -69,26 +69,26 @@ def cluster_issuer_name(config: JsonObject, scheme: str) -> str:
     if ingress is None:
         if scheme == "http":
             return ""
-        raise CommandError("product_fullspec.json must define ingress")
+        raise CommandError("spec.stelar.active_product must define ingress")
     if not isinstance(ingress, dict):
-        raise CommandError("product_fullspec.json must define ingress as an object")
+        raise CommandError("spec.stelar.active_product must define ingress as an object")
 
     tls = ingress.get("tls", [])
     if not isinstance(tls, list) or not all(isinstance(item, str) for item in tls):
-        raise CommandError("product_fullspec.json must define ingress.tls as a list")
+        raise CommandError("spec.stelar.active_product must define ingress.tls as a list")
     if "cert_manager" not in tls:
         return ""
 
     cert_manager = ingress.get("cert_manager")
     if not isinstance(cert_manager, dict):
         raise CommandError(
-            "product_fullspec.json must define ingress.cert_manager when "
+            "spec.stelar.active_product must define ingress.cert_manager when "
             "ingress.tls selects cert_manager"
         )
     cluster_issuer = cert_manager.get("ClusterIssuer")
     if not isinstance(cluster_issuer, str) or not cluster_issuer:
         raise CommandError(
-            "product_fullspec.json must define ingress.cert_manager.ClusterIssuer "
+            "spec.stelar.active_product must define ingress.cert_manager.ClusterIssuer "
             "when ingress.tls selects cert_manager"
         )
     return cluster_issuer

@@ -49,8 +49,9 @@ local keycloak_config(config) = {
 };
 
 local namespace(config) =
-  assert std.objectHas(config, "namespace") : "config.namespace is required for the ckan init job";
-  config.namespace;
+  assert std.objectHas(config, "environment") : "config.environment is required for the ckan init job";
+  assert std.objectHas(config.environment, "namespace") : "config.environment.namespace is required for the ckan init job";
+  config.environment.namespace;
 
 {
   new(config):

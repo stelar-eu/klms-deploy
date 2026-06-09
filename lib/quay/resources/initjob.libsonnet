@@ -18,7 +18,7 @@ local envSource = k.core.v1.envVarSource;
       container.new("quayinit-container", config.quay.INIT_IMAGE)
       + container.withImagePullPolicy("Always")
       + container.withEnvMap({
-        KUBE_NAMESPACE: config.namespace,
+        KUBE_NAMESPACE: config.environment.namespace,
         KC_ISSUER: keycloak_external_url + "/realms/" + config.keycloak.REALM + "/",
         KC_QUAY_PUSHERS: config.quay.QUAY_PUSHERS_ROLE,
         KC_QUAY_PULLERS: config.quay.QUAY_PULLERS_ROLE,

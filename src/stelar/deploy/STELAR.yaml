@@ -3,8 +3,6 @@ name: STELAR
 root:
   name: klms
   attributes:
-    namespace:
-      type: string
     dynamicStorageClass:
       type: string
     dynamic_volume_storage_class:
@@ -626,7 +624,6 @@ root:
                       type: string
                     REGISTRY_TLS_SECRET_NAME:
                       type: string
-                - name: self_signed
 
         - name: network_policy
 

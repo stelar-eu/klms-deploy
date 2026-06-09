@@ -64,6 +64,15 @@ def manual_tls_selected(config: JsonObject) -> bool:
     return isinstance(tls, list) and "manual_tls" in tls
 
 
+def manual_tls_secret_names(config: JsonObject) -> tuple[str, ...]:
+    """Return the Kubernetes Secret names expected for manual TLS endpoints."""
+    expected_names = _manual_tls_expected_secret_names(config)
+    return tuple(
+        _required_manual_tls_secret_name(expected_names, endpoint.secret_field)
+        for endpoint in MANUAL_TLS_ENDPOINTS
+    )
+
+
 def read_manual_tls_secrets(
     manual_tls_path: Path,
     config: JsonObject,
@@ -136,7 +145,7 @@ def _required_manual_tls_secret_name(
     value = manual_tls.get(field_name)
     if not isinstance(value, str) or not value:
         raise CommandError(
-            f"product_fullspec.json must define ingress.manual_tls.{field_name} "
+            f"spec.stelar.active_product must define ingress.manual_tls.{field_name} "
             "as a non-empty string"
         )
     return value
@@ -161,11 +170,11 @@ def _read_manual_tls_file(manual_tls_path: Path) -> JsonObject:
 def _manual_tls_expected_secret_names(config: JsonObject) -> JsonObject:
     ingress = config.get("ingress")
     if not isinstance(ingress, dict):
-        raise CommandError("product_fullspec.json must define ingress as an object")
+        raise CommandError("spec.stelar.active_product must define ingress as an object")
     manual_tls = ingress.get("manual_tls")
     if not isinstance(manual_tls, dict):
         raise CommandError(
-            "product_fullspec.json must define ingress.manual_tls as an object"
+            "spec.stelar.active_product must define ingress.manual_tls as an object"
         )
     return manual_tls
 

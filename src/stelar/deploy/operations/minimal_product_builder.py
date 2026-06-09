@@ -57,7 +57,6 @@ def build_minimal_product(config: MinimalProductConfig) -> JsonObject:
     primary_domain = f"{scheme}://{config.primary_subdomain}.{config.root_domain}"
 
     spec: JsonObject = {
-        "namespace": config.namespace,
         "dynamicStorageClass": config.dynamic_storage_class,
         "dynamic_volume_storage_class": config.provisioning_storage_class,
         "SCHEME": scheme,

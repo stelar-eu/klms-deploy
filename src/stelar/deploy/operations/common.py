@@ -9,7 +9,6 @@ from typing import Any
 import yaml
 from pydantic import ValidationError
 
-from ..environ import Environment
 from ..models.product import Product
 from ..workspace import Workspace
 
@@ -53,15 +52,6 @@ def load_product_data(product_path: Path) -> JsonObject:
     return product_data
 
 
-def validate_environment(workspace_path: Path, environment: str) -> Environment:
-    """Validate that a workspace and environment exist."""
-    workspace = validate_workspace(workspace_path)
-    try:
-        return workspace.env(environment)
-    except ValueError as exc:
-        raise CommandError(str(exc)) from exc
-
-
 def validate_product_data(product_path: Path, product_data: JsonObject) -> Product:
     try:
         return Product.model_validate(product_data)
@@ -96,17 +86,6 @@ def product_spec(product_data: JsonObject) -> JsonObject:
     if not isinstance(spec, dict):
         raise CommandError("Product file must contain a spec object")
     return spec
-
-
-def product_author(product_data: JsonObject) -> str | None:
-    author = product_data.get("author")
-    if author is None:
-        author = product_spec(product_data).get("author")
-    if author is None:
-        return None
-    if not isinstance(author, str) or not author:
-        raise CommandError("Product author must be a non-empty string")
-    return author
 
 
 def ensure_object(data: JsonObject, key: str) -> JsonObject:

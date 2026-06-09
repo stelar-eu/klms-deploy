@@ -1,7 +1,8 @@
-"""Kubernetes Secret application helpers for init-lake cluster."""
+"""Kubernetes Secret application helpers for lake bootstrap."""
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Any
 
 from kubernetes import client as kube_client
@@ -18,29 +19,67 @@ from .secret_resources import (
 )
 
 
+@dataclass(frozen=True)
+class SecretExistenceResult:
+    """Existing and missing Secret names for a bootstrap state check."""
+
+    existing: tuple[str, ...]
+    missing: tuple[str, ...]
+
+    @property
+    def all_exist(self) -> bool:
+        return not self.missing
+
+
+class SecretReadForbidden(CommandError):
+    """Raised when RBAC prevents reading Secrets for bootstrap state."""
+
+
 def apply_product_secrets(
     namespace: str,
-    spec: JsonObject,
+    config: JsonObject,
     progress: ClusterProgress,
+    *,
+    check_existing: bool = True,
 ) -> None:
-    """Create required product-derived Kubernetes Secrets when missing."""
+    """Create required fullspec-derived Kubernetes Secrets when missing."""
     core_api = kube_client.CoreV1Api()
 
-    for secret_name, secret_data in product_secrets(spec):
-        apply_secret_if_missing(
+    for secret_name, secret_data in product_secrets(config):
+        if check_existing:
+            apply_secret_if_missing(
+                core_api,
+                namespace,
+                secret_name,
+                secret_data,
+                progress,
+            )
+        else:
+            create_secret(
+                core_api,
+                namespace,
+                secret_name,
+                secret_data,
+                progress,
+                allow_conflict=False,
+            )
+
+    if check_existing:
+        apply_ckan_auth_secret_if_missing(
             core_api,
             namespace,
-            secret_name,
-            secret_data,
+            CKAN_AUTH_SECRET_NAME,
             progress,
         )
-
-    apply_ckan_auth_secret_if_missing(
-        core_api,
-        namespace,
-        CKAN_AUTH_SECRET_NAME,
-        progress,
-    )
+    else:
+        create_secret(
+            core_api,
+            namespace,
+            CKAN_AUTH_SECRET_NAME,
+            ckan_auth_secret_data(),
+            progress,
+            allow_conflict=False,
+        )
 
 
 def apply_tls_secret_if_missing(
@@ -50,8 +89,22 @@ def apply_tls_secret_if_missing(
     cert_pem: str,
     key_pem: str,
     progress: ClusterProgress,
+    *,
+    check_existing: bool = True,
 ) -> None:
     """Create a Kubernetes TLS Secret when it is missing."""
+    if not check_existing:
+        create_tls_secret(
+            core_api,
+            namespace,
+            secret_name,
+            cert_pem,
+            key_pem,
+            progress,
+            allow_conflict=False,
+        )
+        return
+
     if secret_exists(core_api, namespace, secret_name):
         progress.secret_exists(secret_name)
         return
@@ -88,6 +141,23 @@ def apply_ckan_auth_secret_if_missing(
     create_secret(core_api, namespace, secret_name, ckan_auth_secret_data(), progress)
 
 
+def check_secret_existence(
+    namespace: str,
+    secret_names: tuple[str, ...],
+) -> SecretExistenceResult:
+    """Read expected bootstrap Secrets and classify them as existing or missing."""
+    core_api = kube_client.CoreV1Api()
+    existing = []
+    missing = []
+    for secret_name in secret_names:
+        exists = secret_exists(core_api, namespace, secret_name)
+        if exists:
+            existing.append(secret_name)
+        else:
+            missing.append(secret_name)
+    return SecretExistenceResult(tuple(existing), tuple(missing))
+
+
 def secret_exists(core_api: Any, namespace: str, secret_name: str) -> bool:
     """Return whether a namespaced Secret exists, mapping Kubernetes errors."""
     try:
@@ -95,7 +165,7 @@ def secret_exists(core_api: Any, namespace: str, secret_name: str) -> bool:
         return True
     except ApiException as exc:
         if is_forbidden(exc):
-            raise CommandError(
+            raise SecretReadForbidden(
                 f"Kubernetes user is not authorized to validate Secret "
                 f"{secret_name!r} in namespace {namespace!r}. Ask a cluster "
                 "administrator for permission to get secrets or rerun with an "
@@ -115,6 +185,8 @@ def create_secret(
     secret_name: str,
     data: dict[str, str],
     progress: ClusterProgress,
+    *,
+    allow_conflict: bool = True,
 ) -> None:
     """Create an opaque Kubernetes Secret and report progress."""
     progress.generating_secret(secret_name)
@@ -125,6 +197,15 @@ def create_secret(
         core_api.create_namespaced_secret(namespace=namespace, body=secret)
     except ApiException as exc:
         if exc.status == 409:
+            if not allow_conflict:
+                raise CommandError(
+                    f"Secret {secret_name!r} already exists in namespace "
+                    f"{namespace!r}, but stelarctl could not validate bootstrap "
+                    "state before creating Secrets. Refusing to record bootstrap "
+                    "state because existing Secret values may belong to another "
+                    "bootstrap. Rerun with a Kubernetes user allowed to get "
+                    "secrets or purge the existing bootstrap Secrets intentionally."
+                ) from exc
             progress.secret_exists(secret_name)
             return
         if is_forbidden(exc):
@@ -148,6 +229,8 @@ def create_tls_secret(
     cert_pem: str,
     key_pem: str,
     progress: ClusterProgress,
+    *,
+    allow_conflict: bool = True,
 ) -> None:
     """Create a Kubernetes TLS Secret and report progress."""
     progress.generating_secret(secret_name)
@@ -158,6 +241,16 @@ def create_tls_secret(
         core_api.create_namespaced_secret(namespace=namespace, body=secret)
     except ApiException as exc:
         if exc.status == 409:
+            if not allow_conflict:
+                raise CommandError(
+                    f"Manual TLS Secret {secret_name!r} already exists in "
+                    f"namespace {namespace!r}, but stelarctl could not validate "
+                    "bootstrap state before creating Secrets. Refusing to record "
+                    "bootstrap state because existing Secret values may belong "
+                    "to another bootstrap. Rerun with a Kubernetes user allowed "
+                    "to get secrets or purge the existing bootstrap Secrets "
+                    "intentionally."
+                ) from exc
             progress.secret_exists(secret_name)
             return
         if is_forbidden(exc):

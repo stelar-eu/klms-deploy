@@ -1,4 +1,4 @@
-"""Read-only Kubernetes prerequisite checks for `init-lake cluster`."""
+"""Read-only Kubernetes prerequisite checks for `lake bootstrap`."""
 
 from __future__ import annotations
 
@@ -112,7 +112,7 @@ def _validate_namespace(namespace: str, context: PreflightContext) -> None:
         if getattr(exc, "status", None) == 404:
             raise CommandError(
                 f"Namespace {namespace!r} does not exist in the selected cluster. "
-                "Create the namespace or update product.json spec.namespace."
+                "Create the namespace or update ENV/spec.json with `lake add --namespace` before bootstrap."
             ) from exc
         raise CommandError(
             f"Could not validate Namespace {namespace!r}: {exc}"
@@ -135,7 +135,7 @@ def _validate_storage_class(
         if getattr(exc, "status", None) == 404:
             raise CommandError(
                 f"StorageClass {storage_class_name!r} does not exist in the "
-                "selected cluster. Update product_fullspec.json storage class "
+                "selected cluster. Update spec.stelar.active_product storage class "
                 "fields or install the StorageClass."
             ) from exc
         raise CommandError(

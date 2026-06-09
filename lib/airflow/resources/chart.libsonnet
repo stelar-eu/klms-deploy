@@ -10,7 +10,7 @@ local env_list(config) = [
 {
   new(config):
     helm.template(config.release.name, config.release.chart_path, {
-      namespace: config.namespace,
+      namespace: config.environment.namespace,
       values: {
         images: config.images,
         webserver: {

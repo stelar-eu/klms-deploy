@@ -8,11 +8,11 @@ from __future__ import annotations
 
 import typer
 
-from .init_lake import register_init_lake_commands
-from .product import register_product_commands
+from .lake import register_lake_commands
+from .workspace import register_workspace_commands
 
 
 def register_commands(app: typer.Typer) -> None:
     """Register every command group on the root CLI app."""
-    register_product_commands(app)
-    register_init_lake_commands(app)
+    register_workspace_commands(app)
+    register_lake_commands(app)

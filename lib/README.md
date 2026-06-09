@@ -59,7 +59,7 @@ local service = import "resources/service.libsonnet";
 
 ## Environment template
 
-`lib/environment_templates/main.jsonnet` is the target static environment template.
+`lib/environment_templates/main_template.jsonnet` is the target static environment template.
 
 It is intended to be copied into an environment directory and then consume a
 generated product fullspec JSON file. In that model:
