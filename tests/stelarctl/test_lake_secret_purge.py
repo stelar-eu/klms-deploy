@@ -6,7 +6,7 @@ import pytest
 from typer.testing import CliRunner
 
 from stelar.deploy.cli import app
-from stelar.deploy.operations import CommandError, init_lake_environment
+from stelar.deploy.operations import CommandError, add_lake_environment
 from stelar.deploy.operations import lake_secret_purge as purge_commands
 from stelar.deploy.operations.bootstrap_state import product_sha256, target_sha256
 from stelar.deploy.operations import plan_lake_secret_purge, purge_lake_secrets
@@ -39,7 +39,7 @@ def make_workspace(path: Path) -> Path:
 
 
 def write_purge_environment(workspace: Path, fullspec: dict) -> Path:
-    init_lake_environment("dev", workspace)
+    add_lake_environment("dev", workspace)
     environment_dir = workspace / "dev"
     spec = {
         "apiVersion": "tanka.dev/v1alpha1",

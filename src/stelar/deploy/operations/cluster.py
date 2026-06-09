@@ -234,8 +234,6 @@ def _active_product_name_or_none(
     suffix = "_fullspec.json"
     for fullspec_path in sorted(environment_dir.glob(f"*{suffix}")):
         product_name = fullspec_path.name[: -len(suffix)]
-        if product_name == "product":
-            continue
         if not (environment_dir / f"{product_name}.json").is_file():
             continue
         try:

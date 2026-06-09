@@ -9,15 +9,15 @@ from typer.testing import CliRunner
 
 from stelar.deploy.operations import cluster as cluster_commands
 from stelar.deploy.operations import lake_environment as lake_environment_commands
-from stelar.deploy.operations import lakespec as lakespec_commands
+from stelar.deploy.operations import lake_product as lake_product_ops
 from stelar.deploy.operations import lake_workspace as workspace_commands
 from stelar.deploy.cli import app
 from stelar.deploy.operations import (
     CommandError,
     check_lake_cluster,
     bootstrap_lake,
-    init_lake_environment,
-    init_lake_workspace,
+    add_lake_environment,
+    init_workspace,
     lake_environment_info,
     list_lake_environments,
     remove_lake_environment,
@@ -682,11 +682,11 @@ class RecordingLakeWorkspaceProgress:
         self.events.append(("file_updated", path))
 
 
-def test_init_lake_workspace_creates_directory_lib_and_jsonnetfile(tmp_path):
+def test_init_workspace_creates_directory_lib_and_jsonnetfile(tmp_path):
     workspace = tmp_path / "workspace"
     progress = RecordingLakeWorkspaceProgress()
 
-    init_lake_workspace(workspace, progress=progress)
+    init_workspace(workspace, progress=progress)
 
     assert workspace.is_dir()
     assert (workspace / "lib").is_dir()
@@ -723,7 +723,7 @@ def test_init_lake_workspace_creates_directory_lib_and_jsonnetfile(tmp_path):
     ]
 
 
-def test_init_lake_workspace_adds_missing_dependencies_to_existing_jsonnetfile(
+def test_init_workspace_adds_missing_dependencies_to_existing_jsonnetfile(
     tmp_path,
 ):
     workspace = tmp_path / "workspace"
@@ -750,7 +750,7 @@ def test_init_lake_workspace_adds_missing_dependencies_to_existing_jsonnetfile(
     )
     progress = RecordingLakeWorkspaceProgress()
 
-    init_lake_workspace(workspace, progress=progress)
+    init_workspace(workspace, progress=progress)
 
     assert (workspace / "lib").is_dir()
     jsonnetfile = read_jsonnetfile(workspace)
@@ -766,12 +766,12 @@ def test_init_lake_workspace_adds_missing_dependencies_to_existing_jsonnetfile(
     ]
 
 
-def test_init_lake_workspace_skips_complete_existing_jsonnetfile(tmp_path):
+def test_init_workspace_skips_complete_existing_jsonnetfile(tmp_path):
     workspace = tmp_path / "workspace"
-    init_lake_workspace(workspace)
+    init_workspace(workspace)
     progress = RecordingLakeWorkspaceProgress()
 
-    init_lake_workspace(workspace, progress=progress)
+    init_workspace(workspace, progress=progress)
 
     assert progress.events == [
         ("directory_exists", str(workspace)),
@@ -780,7 +780,7 @@ def test_init_lake_workspace_skips_complete_existing_jsonnetfile(tmp_path):
     ]
 
 
-def test_init_lake_workspace_force_rewrites_existing_jsonnetfile(tmp_path):
+def test_init_workspace_force_rewrites_existing_jsonnetfile(tmp_path):
     workspace = tmp_path / "workspace"
     workspace.mkdir()
     (workspace / "lib").mkdir()
@@ -790,7 +790,7 @@ def test_init_lake_workspace_force_rewrites_existing_jsonnetfile(tmp_path):
     )
     progress = RecordingLakeWorkspaceProgress()
 
-    init_lake_workspace(workspace, force=True, progress=progress)
+    init_workspace(workspace, force=True, progress=progress)
 
     assert read_jsonnetfile(workspace)["dependencies"][0]["source"]["git"] == {
         "remote": "https://github.com/stelar-eu/klms-deploy.git",
@@ -804,30 +804,30 @@ def test_init_lake_workspace_force_rewrites_existing_jsonnetfile(tmp_path):
     ]
 
 
-def test_init_lake_workspace_rejects_existing_file_path(tmp_path):
+def test_init_workspace_rejects_existing_file_path(tmp_path):
     workspace = tmp_path / "workspace"
     workspace.write_text("not a directory", encoding="utf-8")
 
     with pytest.raises(CommandError, match="exists but is not a directory"):
-        init_lake_workspace(workspace)
+        init_workspace(workspace)
 
 
-def test_init_lake_workspace_rejects_existing_lib_file(tmp_path):
+def test_init_workspace_rejects_existing_lib_file(tmp_path):
     workspace = tmp_path / "workspace"
     workspace.mkdir()
     (workspace / "lib").write_text("not a directory", encoding="utf-8")
 
     with pytest.raises(CommandError, match="exists but is not a directory"):
-        init_lake_workspace(workspace)
+        init_workspace(workspace)
 
 
-def test_init_lake_workspace_rejects_jsonnetfile_directory(tmp_path):
+def test_init_workspace_rejects_jsonnetfile_directory(tmp_path):
     workspace = tmp_path / "workspace"
     workspace.mkdir()
     (workspace / "jsonnetfile.json").mkdir()
 
     with pytest.raises(CommandError, match="exists but is not a file"):
-        init_lake_workspace(workspace)
+        init_workspace(workspace)
 
 
 @pytest.mark.parametrize(
@@ -839,7 +839,7 @@ def test_init_lake_workspace_rejects_jsonnetfile_directory(tmp_path):
         ('{"dependencies": ["bad"]}\n', "dependencies must contain objects"),
     ],
 )
-def test_init_lake_workspace_rejects_invalid_jsonnetfile(
+def test_init_workspace_rejects_invalid_jsonnetfile(
     tmp_path,
     content,
     message,
@@ -849,10 +849,10 @@ def test_init_lake_workspace_rejects_invalid_jsonnetfile(
     (workspace / "jsonnetfile.json").write_text(content, encoding="utf-8")
 
     with pytest.raises(CommandError, match=message):
-        init_lake_workspace(workspace)
+        init_workspace(workspace)
 
 
-def test_init_lake_workspace_merges_missing_top_level_fields(tmp_path):
+def test_init_workspace_merges_missing_top_level_fields(tmp_path):
     workspace = tmp_path / "workspace"
     workspace.mkdir()
     (workspace / "jsonnetfile.json").write_text(
@@ -860,7 +860,7 @@ def test_init_lake_workspace_merges_missing_top_level_fields(tmp_path):
         encoding="utf-8",
     )
 
-    init_lake_workspace(workspace)
+    init_workspace(workspace)
 
     jsonnetfile = read_jsonnetfile(workspace)
     assert jsonnetfile["version"] == 1
@@ -868,7 +868,7 @@ def test_init_lake_workspace_merges_missing_top_level_fields(tmp_path):
     assert len(jsonnetfile["dependencies"]) == 6
 
 
-def test_init_lake_workspace_rejects_missing_packaged_template(
+def test_init_workspace_rejects_missing_packaged_template(
     tmp_path,
     monkeypatch,
 ):
@@ -876,14 +876,14 @@ def test_init_lake_workspace_rejects_missing_packaged_template(
     monkeypatch.setattr(workspace_commands.pkgutil, "get_data", lambda *_: None)
 
     with pytest.raises(CommandError, match="Packaged workspace template"):
-        init_lake_workspace(workspace)
+        init_workspace(workspace)
 
 
-def test_init_lake_environment_creates_directory_and_copies_templates(tmp_path):
+def test_add_lake_environment_creates_directory_and_copies_templates(tmp_path):
     workspace = make_workspace(tmp_path / "workspace")
     progress = RecordingLakeEnvironmentProgress()
 
-    init_lake_environment("dev", workspace, progress=progress)
+    add_lake_environment("dev", workspace, progress=progress)
 
     environment_dir = workspace / "dev"
     assert environment_dir.is_dir()
@@ -909,10 +909,10 @@ def test_init_lake_environment_creates_directory_and_copies_templates(tmp_path):
 
 
 
-def test_init_lake_environment_writes_context_and_namespace(tmp_path):
+def test_add_lake_environment_writes_context_and_namespace(tmp_path):
     workspace = make_workspace(tmp_path / "workspace")
 
-    init_lake_environment(
+    add_lake_environment(
         "dev",
         workspace,
         context_name="okeanos-context",
@@ -933,7 +933,7 @@ def test_init_lake_environment_writes_context_and_namespace(tmp_path):
     }
 
 
-def test_init_lake_environment_writes_only_provided_target_fields(tmp_path):
+def test_add_lake_environment_writes_only_provided_target_fields(tmp_path):
     workspace = make_workspace(tmp_path / "workspace")
     environment_dir = workspace / "dev"
     environment_dir.mkdir(parents=True)
@@ -951,7 +951,7 @@ def test_init_lake_environment_writes_only_provided_target_fields(tmp_path):
         encoding="utf-8",
     )
 
-    init_lake_environment("dev", workspace, context_name="new-context")
+    add_lake_environment("dev", workspace, context_name="new-context")
 
     assert read_json(environment_dir / "spec.json")["spec"] == {
         "namespace": "existing-namespace",
@@ -961,11 +961,11 @@ def test_init_lake_environment_writes_only_provided_target_fields(tmp_path):
 
 
 
-def test_init_lake_environment_rejects_rerun_after_bootstrap_state(
+def test_add_lake_environment_rejects_rerun_after_bootstrap_state(
     tmp_path,
 ):
     workspace = make_workspace(tmp_path / "workspace")
-    init_lake_environment("dev", workspace)
+    add_lake_environment("dev", workspace)
     environment_dir = write_generated_lake_files(workspace)
     spec = read_json(environment_dir / "spec.json")
     spec["spec"]["contextNames"] = ["current-context"]
@@ -979,7 +979,7 @@ def test_init_lake_environment_rejects_rerun_after_bootstrap_state(
     write_json(environment_dir / "spec.json", spec)
 
     with pytest.raises(CommandError, match="refusing to run lake add"):
-        init_lake_environment(
+        add_lake_environment(
             "dev",
             workspace,
         )
@@ -992,7 +992,7 @@ def test_init_lake_environment_rejects_rerun_after_bootstrap_state(
 
 
 
-def test_init_lake_environment_rejects_bootstrapped_spec_without_copying_main(
+def test_add_lake_environment_rejects_bootstrapped_spec_without_copying_main(
     tmp_path,
 ):
     workspace = make_workspace(tmp_path / "workspace")
@@ -1019,13 +1019,13 @@ def test_init_lake_environment_rejects_bootstrapped_spec_without_copying_main(
     write_json(environment_dir / "spec.json", spec)
 
     with pytest.raises(CommandError, match="refusing to run lake add"):
-        init_lake_environment("dev", workspace)
+        add_lake_environment("dev", workspace)
 
     assert not (environment_dir / "main.jsonnet").exists()
     assert read_json(environment_dir / "spec.json") == spec
 
 
-def test_init_lake_environment_rejects_bootstrapped_unmarked_spec_without_adopting(
+def test_add_lake_environment_rejects_bootstrapped_unmarked_spec_without_adopting(
     tmp_path,
 ):
     workspace = make_workspace(tmp_path / "workspace")
@@ -1050,30 +1050,30 @@ def test_init_lake_environment_rejects_bootstrapped_unmarked_spec_without_adopti
     write_json(environment_dir / "spec.json", spec)
 
     with pytest.raises(CommandError, match="refusing to run lake add"):
-        init_lake_environment("dev", workspace, adopt_existing_main=True)
+        add_lake_environment("dev", workspace, adopt_existing_main=True)
 
     assert read_json(environment_dir / "spec.json") == spec
 
 
-def test_init_lake_environment_preserves_environments_prefixed_name(tmp_path):
+def test_add_lake_environment_preserves_environments_prefixed_name(tmp_path):
     workspace = make_workspace(tmp_path / "workspace")
 
-    init_lake_environment("environments/dev", workspace)
+    add_lake_environment("environments/dev", workspace)
 
     assert (workspace / "environments" / "dev" / "main.jsonnet").is_file()
     assert (workspace / "environments" / "dev" / "spec.json").is_file()
 
 
-def test_init_lake_environment_creates_nested_environment(tmp_path):
+def test_add_lake_environment_creates_nested_environment(tmp_path):
     workspace = make_workspace(tmp_path / "workspace")
 
-    init_lake_environment("team/dev", workspace)
+    add_lake_environment("team/dev", workspace)
 
     assert (workspace / "team" / "dev" / "main.jsonnet").is_file()
     assert (workspace / "team" / "dev" / "spec.json").is_file()
 
 
-def test_init_lake_environment_rejects_existing_unmarked_main_by_default(tmp_path):
+def test_add_lake_environment_rejects_existing_unmarked_main_by_default(tmp_path):
     workspace = make_workspace(tmp_path / "workspace")
     environment_dir = workspace / "dev"
     environment_dir.mkdir(parents=True)
@@ -1083,12 +1083,12 @@ def test_init_lake_environment_rejects_existing_unmarked_main_by_default(tmp_pat
     )
 
     with pytest.raises(CommandError, match="Refusing to adopt"):
-        init_lake_environment("dev", workspace)
+        add_lake_environment("dev", workspace)
 
     assert not (environment_dir / "spec.json").exists()
 
 
-def test_init_lake_environment_adopts_existing_main_when_requested(tmp_path):
+def test_add_lake_environment_adopts_existing_main_when_requested(tmp_path):
     workspace = make_workspace(tmp_path / "workspace")
     environment_dir = workspace / "dev"
     environment_dir.mkdir(parents=True)
@@ -1097,7 +1097,7 @@ def test_init_lake_environment_adopts_existing_main_when_requested(tmp_path):
         encoding="utf-8",
     )
 
-    init_lake_environment("dev", workspace, adopt_existing_main=True)
+    add_lake_environment("dev", workspace, adopt_existing_main=True)
 
     assert (environment_dir / "main.jsonnet").read_text(
         encoding="utf-8"
@@ -1108,7 +1108,7 @@ def test_init_lake_environment_adopts_existing_main_when_requested(tmp_path):
 
 
 
-def test_init_lake_environment_rejects_incompatible_existing_main_when_adopting(tmp_path):
+def test_add_lake_environment_rejects_incompatible_existing_main_when_adopting(tmp_path):
     workspace = make_workspace(tmp_path / "workspace")
     environment_dir = workspace / "dev"
     environment_dir.mkdir(parents=True)
@@ -1118,13 +1118,13 @@ def test_init_lake_environment_rejects_incompatible_existing_main_when_adopting(
     )
 
     with pytest.raises(CommandError, match="does not match the managed stelarctl entrypoint"):
-        init_lake_environment("dev", workspace, adopt_existing_main=True)
+        add_lake_environment("dev", workspace, adopt_existing_main=True)
 
     assert not (environment_dir / "spec.json").exists()
 
 
 
-def test_init_lake_environment_preserves_existing_files_and_marks_spec(tmp_path):
+def test_add_lake_environment_preserves_existing_files_and_marks_spec(tmp_path):
     workspace = make_workspace(tmp_path / "workspace")
     environment_dir = workspace / "dev"
     environment_dir.mkdir(parents=True)
@@ -1142,7 +1142,7 @@ def test_init_lake_environment_preserves_existing_files_and_marks_spec(tmp_path)
     )
     progress = RecordingLakeEnvironmentProgress()
 
-    init_lake_environment(
+    add_lake_environment(
         "dev",
         workspace,
         progress=progress,
@@ -1170,7 +1170,7 @@ def test_init_lake_environment_preserves_existing_files_and_marks_spec(tmp_path)
 
 
 
-def test_init_lake_environment_keeps_marked_existing_environment_idempotent(
+def test_add_lake_environment_keeps_marked_existing_environment_idempotent(
     tmp_path,
     capsys,
 ):
@@ -1187,7 +1187,7 @@ def test_init_lake_environment_keeps_marked_existing_environment_idempotent(
     )
     progress = RecordingLakeEnvironmentProgress()
 
-    init_lake_environment("dev", workspace, progress=progress)
+    add_lake_environment("dev", workspace, progress=progress)
 
     warning = capsys.readouterr().err
     assert "Warning:" in warning
@@ -1206,42 +1206,42 @@ def test_init_lake_environment_keeps_marked_existing_environment_idempotent(
     ]
 
 
-def test_init_lake_environment_validates_workspace(tmp_path):
+def test_add_lake_environment_validates_workspace(tmp_path):
     workspace = tmp_path / "workspace"
     workspace.mkdir()
 
     with pytest.raises(CommandError, match="jsonnetfile.json"):
-        init_lake_environment("dev", workspace)
+        add_lake_environment("dev", workspace)
 
 
-def test_init_lake_environment_ignores_unrelated_environments_file(tmp_path):
+def test_add_lake_environment_ignores_unrelated_environments_file(tmp_path):
     workspace = make_workspace(tmp_path / "workspace")
     (workspace / "environments").write_text("not a directory", encoding="utf-8")
 
-    init_lake_environment("dev", workspace)
+    add_lake_environment("dev", workspace)
 
     assert (workspace / "dev" / "main.jsonnet").is_file()
 
 
-def test_init_lake_environment_rejects_environment_file(tmp_path):
+def test_add_lake_environment_rejects_environment_file(tmp_path):
     workspace = make_workspace(tmp_path / "workspace")
     (workspace / "dev").write_text("not a directory", encoding="utf-8")
 
     with pytest.raises(CommandError, match="exists but is not a directory"):
-        init_lake_environment("dev", workspace)
+        add_lake_environment("dev", workspace)
 
 
-def test_init_lake_environment_rejects_existing_main_jsonnet_directory(tmp_path):
+def test_add_lake_environment_rejects_existing_main_jsonnet_directory(tmp_path):
     workspace = make_workspace(tmp_path / "workspace")
     environment_dir = workspace / "dev"
     environment_dir.mkdir(parents=True)
     (environment_dir / "main.jsonnet").mkdir()
 
     with pytest.raises(CommandError, match="exists but is not a file"):
-        init_lake_environment("dev", workspace)
+        add_lake_environment("dev", workspace)
 
 
-def test_init_lake_environment_rejects_existing_spec_json_directory(tmp_path):
+def test_add_lake_environment_rejects_existing_spec_json_directory(tmp_path):
     workspace = make_workspace(tmp_path / "workspace")
     environment_dir = workspace / "dev"
     environment_dir.mkdir(parents=True)
@@ -1249,27 +1249,27 @@ def test_init_lake_environment_rejects_existing_spec_json_directory(tmp_path):
     (environment_dir / "spec.json").mkdir()
 
     with pytest.raises(CommandError, match="exists but is not a file"):
-        init_lake_environment("dev", workspace)
+        add_lake_environment("dev", workspace)
 
 
-def test_init_lake_environment_requires_vendored_main_template(tmp_path):
+def test_add_lake_environment_requires_vendored_main_template(tmp_path):
     workspace = tmp_path / "workspace"
     workspace.mkdir()
     (workspace / "jsonnetfile.json").write_text("{}", encoding="utf-8")
 
     with pytest.raises(CommandError, match="Run jb install first"):
-        init_lake_environment("dev", workspace)
+        add_lake_environment("dev", workspace)
 
 
 @pytest.mark.parametrize("environment", ["", "/dev", "../dev", "dev/../prod"])
-def test_init_lake_environment_rejects_invalid_environment_names(
+def test_add_lake_environment_rejects_invalid_environment_names(
     tmp_path,
     environment,
 ):
     workspace = make_workspace(tmp_path / "workspace")
 
     with pytest.raises(CommandError):
-        init_lake_environment(environment, workspace)
+        add_lake_environment(environment, workspace)
 
 
 def test_check_lake_cluster_requires_initialized_environment(tmp_path):
@@ -1281,7 +1281,7 @@ def test_check_lake_cluster_requires_initialized_environment(tmp_path):
 
 def test_check_lake_cluster_requires_fullspec(tmp_path):
     workspace = make_workspace(tmp_path / "workspace")
-    init_lake_environment("dev", workspace)
+    add_lake_environment("dev", workspace)
 
     with pytest.raises(CommandError, match="spec.stelar.active_product"):
         check_lake_cluster("dev", workspace, context="current-context", namespace="test")
@@ -1289,7 +1289,7 @@ def test_check_lake_cluster_requires_fullspec(tmp_path):
 
 def test_check_lake_cluster_requires_context_or_flag(tmp_path):
     workspace = make_workspace(tmp_path / "workspace")
-    init_lake_environment("dev", workspace)
+    add_lake_environment("dev", workspace)
     write_generated_lake_files(workspace)
 
     with pytest.raises(CommandError, match="--context CONTEXT"):
@@ -1298,7 +1298,7 @@ def test_check_lake_cluster_requires_context_or_flag(tmp_path):
 
 def test_check_lake_cluster_requires_namespace_or_flag(tmp_path, monkeypatch):
     workspace = make_workspace(tmp_path / "workspace")
-    init_lake_environment("dev", workspace)
+    add_lake_environment("dev", workspace)
     environment_dir = write_generated_lake_files(workspace)
     spec_json = read_json(environment_dir / "spec.json")
     spec_json["spec"] = {"contextNames": ["current-context"]}
@@ -1314,7 +1314,7 @@ def test_check_lake_cluster_uses_flags_without_mutating_spec_json(
     monkeypatch,
 ):
     workspace = make_workspace(tmp_path / "workspace")
-    init_lake_environment("dev", workspace)
+    add_lake_environment("dev", workspace)
     environment_dir = write_generated_lake_files(workspace)
     spec_before = read_json(environment_dir / "spec.json")
     calls = set_cluster_preflight(monkeypatch)
@@ -1338,7 +1338,7 @@ def test_check_lake_cluster_uses_spec_context_and_namespace_without_product_json
     monkeypatch,
 ):
     workspace = make_workspace(tmp_path / "workspace")
-    init_lake_environment("dev", workspace)
+    add_lake_environment("dev", workspace)
     environment_dir = write_generated_lake_files(workspace)
     (environment_dir / "product.json").unlink()
     spec_json = read_json(environment_dir / "spec.json")
@@ -1364,7 +1364,7 @@ def test_bootstrap_lake_requires_initialized_environment(tmp_path):
 
 def test_bootstrap_lake_requires_active_product(tmp_path):
     workspace = make_workspace(tmp_path / "workspace")
-    init_lake_environment("dev", workspace)
+    add_lake_environment("dev", workspace)
 
     with pytest.raises(CommandError, match="spec.stelar.active_product"):
         bootstrap_lake("dev", workspace)
@@ -1372,7 +1372,7 @@ def test_bootstrap_lake_requires_active_product(tmp_path):
 
 def test_bootstrap_lake_requires_generated_fullspec_file(tmp_path):
     workspace = make_workspace(tmp_path / "workspace")
-    init_lake_environment("dev", workspace)
+    add_lake_environment("dev", workspace)
     environment_dir = workspace / "dev"
     (environment_dir / "product.json").write_text(
         '{"spec": {}}\n',
@@ -1385,7 +1385,7 @@ def test_bootstrap_lake_requires_generated_fullspec_file(tmp_path):
 
 def test_bootstrap_lake_does_not_require_product_json_spec(tmp_path, monkeypatch):
     workspace = make_workspace(tmp_path / "workspace")
-    init_lake_environment("dev", workspace)
+    add_lake_environment("dev", workspace)
     environment_dir = write_generated_lake_files(workspace)
     write_json(environment_dir / "product.json", {})
     calls = set_cluster_preflight(monkeypatch)
@@ -1400,7 +1400,7 @@ def test_bootstrap_lake_uses_spec_namespace_not_product_namespace(
     monkeypatch,
 ):
     workspace = make_workspace(tmp_path / "workspace")
-    init_lake_environment("dev", workspace)
+    add_lake_environment("dev", workspace)
     environment_dir = write_generated_lake_files(workspace)
     product = read_json(environment_dir / "product.json")
     product["spec"].pop("namespace")
@@ -1414,7 +1414,7 @@ def test_bootstrap_lake_uses_spec_namespace_not_product_namespace(
 
 def test_bootstrap_lake_rejects_fullspec_without_klms(tmp_path, monkeypatch):
     workspace = make_workspace(tmp_path / "workspace")
-    init_lake_environment("dev", workspace)
+    add_lake_environment("dev", workspace)
     environment_dir = write_generated_lake_files(workspace)
     write_json(environment_dir / "product_fullspec.json", {})
     set_cluster_preflight(monkeypatch)
@@ -1428,7 +1428,7 @@ def test_bootstrap_lake_rejects_missing_dynamic_storage_class(
     monkeypatch,
 ):
     workspace = make_workspace(tmp_path / "workspace")
-    init_lake_environment("dev", workspace)
+    add_lake_environment("dev", workspace)
     environment_dir = write_generated_lake_files(workspace)
     fullspec = read_json(environment_dir / "product_fullspec.json")
     fullspec["klms"].pop("dynamicStorageClass")
@@ -1444,7 +1444,7 @@ def test_bootstrap_lake_rejects_missing_provisioning_storage_field(
     monkeypatch,
 ):
     workspace = make_workspace(tmp_path / "workspace")
-    init_lake_environment("dev", workspace)
+    add_lake_environment("dev", workspace)
     environment_dir = write_generated_lake_files(workspace)
     fullspec = read_json(environment_dir / "product_fullspec.json")
     fullspec["klms"].pop("dynamic_volume_storage_class")
@@ -1460,7 +1460,7 @@ def test_bootstrap_lake_accepts_provisioning_storage_alias(
     monkeypatch,
 ):
     workspace = make_workspace(tmp_path / "workspace")
-    init_lake_environment("dev", workspace)
+    add_lake_environment("dev", workspace)
     environment_dir = write_generated_lake_files(workspace)
     fullspec = read_json(environment_dir / "product_fullspec.json")
     fullspec["klms"].pop("dynamic_volume_storage_class")
@@ -1475,7 +1475,7 @@ def test_bootstrap_lake_accepts_provisioning_storage_alias(
 
 def test_bootstrap_lake_deduplicates_storage_classes(tmp_path, monkeypatch):
     workspace = make_workspace(tmp_path / "workspace")
-    init_lake_environment("dev", workspace)
+    add_lake_environment("dev", workspace)
     write_generated_lake_files(
         workspace,
         dynamic_storage_class="shared-storage",
@@ -1490,7 +1490,7 @@ def test_bootstrap_lake_deduplicates_storage_classes(tmp_path, monkeypatch):
 
 def test_bootstrap_lake_rejects_invalid_scheme(tmp_path, monkeypatch):
     workspace = make_workspace(tmp_path / "workspace")
-    init_lake_environment("dev", workspace)
+    add_lake_environment("dev", workspace)
     write_generated_lake_files(workspace, scheme="ftp")
     set_cluster_preflight(monkeypatch)
 
@@ -1502,7 +1502,7 @@ def test_bootstrap_lake_does_not_write_target_when_fullspec_is_invalid(
     tmp_path,
 ):
     workspace = make_workspace(tmp_path / "workspace")
-    init_lake_environment("dev", workspace)
+    add_lake_environment("dev", workspace)
     environment_dir = write_generated_lake_files(workspace, scheme="ftp")
     spec_before = read_json(environment_dir / "spec.json")
 
@@ -1516,7 +1516,7 @@ def test_bootstrap_lake_checks_bootstrap_target_before_invalid_fullspec(
     tmp_path,
 ):
     workspace = make_workspace(tmp_path / "workspace")
-    init_lake_environment("dev", workspace)
+    add_lake_environment("dev", workspace)
     environment_dir = write_generated_lake_files(workspace, scheme="ftp")
     spec = read_json(environment_dir / "spec.json")
     stelar_spec = spec["spec"]["stelar"]
@@ -1556,7 +1556,7 @@ def test_bootstrap_lake_rejects_invalid_minio_credentials_in_fullspec(
     message,
 ):
     workspace = make_workspace(tmp_path / "workspace")
-    init_lake_environment("dev", workspace)
+    add_lake_environment("dev", workspace)
     environment_dir = write_generated_lake_files(workspace)
     fullspec = read_json(environment_dir / "product_fullspec.json")
     fullspec["klms"]["minio"][field_name] = value
@@ -1569,7 +1569,7 @@ def test_bootstrap_lake_rejects_invalid_minio_credentials_in_fullspec(
 
 def test_bootstrap_lake_rejects_short_password_in_fullspec(tmp_path, monkeypatch):
     workspace = make_workspace(tmp_path / "workspace")
-    init_lake_environment("dev", workspace)
+    add_lake_environment("dev", workspace)
     environment_dir = write_generated_lake_files(workspace)
     fullspec = read_json(environment_dir / "product_fullspec.json")
     fullspec["klms"]["ckan"] = {"CKAN_ADMIN_PASSWORD": "1234"}
@@ -1585,7 +1585,7 @@ def test_bootstrap_lake_rejects_short_password_in_fullspec(tmp_path, monkeypatch
 
 def test_bootstrap_lake_rejects_http_with_tls_mode(tmp_path, monkeypatch):
     workspace = make_workspace(tmp_path / "workspace")
-    init_lake_environment("dev", workspace)
+    add_lake_environment("dev", workspace)
     environment_dir = write_generated_lake_files(workspace, scheme="http")
     fullspec = read_json(environment_dir / "product_fullspec.json")
     fullspec["klms"]["ingress"] = {
@@ -1601,7 +1601,7 @@ def test_bootstrap_lake_rejects_http_with_tls_mode(tmp_path, monkeypatch):
 
 def test_bootstrap_lake_rejects_https_without_tls_mode(tmp_path, monkeypatch):
     workspace = make_workspace(tmp_path / "workspace")
-    init_lake_environment("dev", workspace)
+    add_lake_environment("dev", workspace)
     environment_dir = write_generated_lake_files(workspace, scheme="https")
     fullspec = read_json(environment_dir / "product_fullspec.json")
     fullspec["klms"]["ingress"] = {"tls": ["no_tls"], "no_tls": {}}
@@ -1617,7 +1617,7 @@ def test_bootstrap_lake_accepts_manual_tls_without_cert_manager_preflight(
     monkeypatch,
 ):
     workspace = make_workspace(tmp_path / "workspace")
-    init_lake_environment("dev", workspace)
+    add_lake_environment("dev", workspace)
     environment_dir = write_generated_lake_files(workspace, scheme="https")
     fullspec = read_json(environment_dir / "product_fullspec.json")
     fullspec["klms"]["ingress"] = {
@@ -1646,7 +1646,7 @@ def test_bootstrap_lake_requires_manual_tls_environment_file(
     monkeypatch,
 ):
     workspace = make_workspace(tmp_path / "workspace")
-    init_lake_environment("dev", workspace)
+    add_lake_environment("dev", workspace)
     environment_dir = write_generated_lake_files(workspace, scheme="https")
     configure_manual_tls_fullspec(environment_dir)
     set_cluster_preflight(monkeypatch)
@@ -1663,7 +1663,7 @@ def test_bootstrap_lake_applies_manual_tls_secrets_from_environment_file(
     monkeypatch,
 ):
     workspace = make_workspace(tmp_path / "workspace")
-    init_lake_environment("dev", workspace)
+    add_lake_environment("dev", workspace)
     environment_dir = write_generated_lake_files(workspace, scheme="https")
     configure_manual_tls_fullspec(environment_dir)
     write_manual_tls_input(environment_dir)
@@ -1693,7 +1693,7 @@ def test_bootstrap_lake_rejects_invalid_manual_tls_directory_value(
     monkeypatch,
 ):
     workspace = make_workspace(tmp_path / "workspace")
-    init_lake_environment("dev", workspace)
+    add_lake_environment("dev", workspace)
     environment_dir = write_generated_lake_files(workspace, scheme="https")
     configure_manual_tls_fullspec(environment_dir)
     manual_tls = {
@@ -1719,7 +1719,7 @@ def test_bootstrap_lake_rejects_invalid_manual_tls_secret_files(
     monkeypatch,
 ):
     workspace = make_workspace(tmp_path / "workspace")
-    init_lake_environment("dev", workspace)
+    add_lake_environment("dev", workspace)
     environment_dir = write_generated_lake_files(workspace, scheme="https")
     configure_manual_tls_fullspec(environment_dir)
     write_manual_tls_input(environment_dir, omit_key_for="registry")
@@ -1734,7 +1734,7 @@ def test_bootstrap_lake_rejects_invalid_manual_tls_pem_base64(
     monkeypatch,
 ):
     workspace = make_workspace(tmp_path / "workspace")
-    init_lake_environment("dev", workspace)
+    add_lake_environment("dev", workspace)
     environment_dir = write_generated_lake_files(workspace, scheme="https")
     configure_manual_tls_fullspec(environment_dir)
     write_manual_tls_input(environment_dir)
@@ -1753,7 +1753,7 @@ def test_bootstrap_lake_reports_manual_tls_secret_create_forbidden(
     monkeypatch,
 ):
     workspace = make_workspace(tmp_path / "workspace")
-    init_lake_environment("dev", workspace)
+    add_lake_environment("dev", workspace)
     environment_dir = write_generated_lake_files(workspace, scheme="https")
     configure_manual_tls_fullspec(environment_dir)
     write_manual_tls_input(environment_dir)
@@ -1768,7 +1768,7 @@ def test_bootstrap_lake_reports_manual_tls_secret_create_forbidden(
 
 def test_bootstrap_lake_requires_manual_tls_secret_names(tmp_path, monkeypatch):
     workspace = make_workspace(tmp_path / "workspace")
-    init_lake_environment("dev", workspace)
+    add_lake_environment("dev", workspace)
     environment_dir = write_generated_lake_files(workspace, scheme="https")
     fullspec = read_json(environment_dir / "product_fullspec.json")
     fullspec["klms"]["ingress"] = {
@@ -1791,7 +1791,7 @@ def test_bootstrap_lake_requires_cluster_issuer_for_https(
     monkeypatch,
 ):
     workspace = make_workspace(tmp_path / "workspace")
-    init_lake_environment("dev", workspace)
+    add_lake_environment("dev", workspace)
     write_generated_lake_files(workspace, scheme="https", cluster_issuer=None)
     set_cluster_preflight(monkeypatch)
 
@@ -1801,7 +1801,7 @@ def test_bootstrap_lake_requires_cluster_issuer_for_https(
 
 def test_bootstrap_lake_runs_cluster_preflight(tmp_path, monkeypatch):
     workspace = make_workspace(tmp_path / "workspace")
-    init_lake_environment("dev", workspace)
+    add_lake_environment("dev", workspace)
     write_generated_lake_files(workspace)
     calls = set_cluster_preflight(monkeypatch)
 
@@ -1833,7 +1833,7 @@ def test_bootstrap_lake_runs_cluster_preflight(tmp_path, monkeypatch):
 
 def test_bootstrap_lake_applies_fullspec_config_secrets(tmp_path, monkeypatch):
     workspace = make_workspace(tmp_path / "workspace")
-    init_lake_environment("dev", workspace)
+    add_lake_environment("dev", workspace)
     environment_dir = write_generated_lake_files(workspace)
     product_spec = read_active_config(environment_dir)
     calls = set_cluster_preflight(monkeypatch)
@@ -1893,7 +1893,7 @@ def test_bootstrap_lake_rejects_recorded_bootstrap_state_with_missing_target_fie
     missing_field,
 ):
     workspace = make_workspace(tmp_path / "workspace")
-    init_lake_environment("dev", workspace)
+    add_lake_environment("dev", workspace)
     environment_dir = write_generated_lake_files(workspace)
     spec = read_json(environment_dir / "spec.json")
     stelar_spec = spec["spec"]["stelar"]
@@ -1924,7 +1924,7 @@ def test_bootstrap_lake_rejects_bootstrap_target_hash_mismatch(
     monkeypatch,
 ):
     workspace = make_workspace(tmp_path / "workspace")
-    init_lake_environment("dev", workspace)
+    add_lake_environment("dev", workspace)
     environment_dir = write_generated_lake_files(workspace)
     spec = read_json(environment_dir / "spec.json")
     spec["spec"]["contextNames"] = ["current-context"]
@@ -1949,7 +1949,7 @@ def test_bootstrap_lake_checks_target_hash_before_resolving_context(
     monkeypatch,
 ):
     workspace = make_workspace(tmp_path / "workspace")
-    init_lake_environment("dev", workspace)
+    add_lake_environment("dev", workspace)
     environment_dir = write_generated_lake_files(workspace)
     spec = read_json(environment_dir / "spec.json")
     spec["spec"]["contextNames"] = ["missing-context"]
@@ -1972,7 +1972,7 @@ def test_check_lake_cluster_rejects_recorded_bootstrap_state_with_missing_target
     tmp_path,
 ):
     workspace = make_workspace(tmp_path / "workspace")
-    init_lake_environment("dev", workspace)
+    add_lake_environment("dev", workspace)
     environment_dir = write_generated_lake_files(workspace)
     spec = read_json(environment_dir / "spec.json")
     stelar_spec = spec["spec"]["stelar"]
@@ -1998,7 +1998,7 @@ def test_check_lake_cluster_rejects_bootstrap_target_overrides_after_bootstrap(
     tmp_path,
 ):
     workspace = make_workspace(tmp_path / "workspace")
-    init_lake_environment("dev", workspace)
+    add_lake_environment("dev", workspace)
     environment_dir = write_generated_lake_files(workspace)
     spec = read_json(environment_dir / "spec.json")
     spec["spec"]["contextNames"] = ["current-context"]
@@ -2025,7 +2025,7 @@ def test_check_lake_cluster_rejects_bootstrap_target_hash_mismatch(
     monkeypatch,
 ):
     workspace = make_workspace(tmp_path / "workspace")
-    init_lake_environment("dev", workspace)
+    add_lake_environment("dev", workspace)
     environment_dir = write_generated_lake_files(workspace)
     spec = read_json(environment_dir / "spec.json")
     spec["spec"]["contextNames"] = ["current-context"]
@@ -2047,7 +2047,7 @@ def test_check_lake_cluster_checks_target_hash_before_resolving_context(
     monkeypatch,
 ):
     workspace = make_workspace(tmp_path / "workspace")
-    init_lake_environment("dev", workspace)
+    add_lake_environment("dev", workspace)
     environment_dir = write_generated_lake_files(workspace)
     spec = read_json(environment_dir / "spec.json")
     spec["spec"]["contextNames"] = ["missing-context"]
@@ -2069,7 +2069,7 @@ def test_bootstrap_lake_rejects_already_bootstrapped_environment(
     monkeypatch,
 ):
     workspace = make_workspace(tmp_path / "workspace")
-    init_lake_environment("dev", workspace)
+    add_lake_environment("dev", workspace)
     environment_dir = write_generated_lake_files(workspace)
     product_spec = read_active_config(environment_dir)
     existing_secrets = secret_names_from_config(product_spec)
@@ -2094,7 +2094,7 @@ def test_bootstrap_lake_rejects_partial_bootstrap_state(
     monkeypatch,
 ):
     workspace = make_workspace(tmp_path / "workspace")
-    init_lake_environment("dev", workspace)
+    add_lake_environment("dev", workspace)
     environment_dir = write_generated_lake_files(workspace)
     product_spec = read_active_config(environment_dir)
     existing_secret = product_spec["postgres"]["POSTGRES_DB_PASSWORD_SECRET_NAME"]
@@ -2114,7 +2114,7 @@ def test_bootstrap_lake_warns_and_creates_when_secret_reads_are_forbidden(
     monkeypatch,
 ):
     workspace = make_workspace(tmp_path / "workspace")
-    init_lake_environment("dev", workspace)
+    add_lake_environment("dev", workspace)
     environment_dir = write_generated_lake_files(workspace)
     product_spec = read_active_config(environment_dir)
     calls = set_cluster_preflight(monkeypatch, missing="secret_read_forbidden")
@@ -2134,7 +2134,7 @@ def test_bootstrap_lake_rejects_conflict_when_secret_reads_are_forbidden(
     monkeypatch,
 ):
     workspace = make_workspace(tmp_path / "workspace")
-    init_lake_environment("dev", workspace)
+    add_lake_environment("dev", workspace)
     environment_dir = write_generated_lake_files(workspace)
     calls = set_cluster_preflight(
         monkeypatch,
@@ -2155,7 +2155,7 @@ def test_bootstrap_lake_rejects_manual_tls_conflict_when_secret_reads_are_forbid
     monkeypatch,
 ):
     workspace = make_workspace(tmp_path / "workspace")
-    init_lake_environment("dev", workspace)
+    add_lake_environment("dev", workspace)
     environment_dir = write_generated_lake_files(workspace)
     configure_manual_tls_fullspec(environment_dir)
     write_manual_tls_input(environment_dir)
@@ -2182,7 +2182,7 @@ def test_bootstrap_lake_applies_optional_llm_search_secret(
     monkeypatch,
 ):
     workspace = make_workspace(tmp_path / "workspace")
-    init_lake_environment("dev", workspace)
+    add_lake_environment("dev", workspace)
     environment_dir = write_generated_lake_files(workspace)
     fullspec = read_json(environment_dir / "product_fullspec.json")
     fullspec["klms"]["llm_search"] = {
@@ -2208,7 +2208,7 @@ def test_bootstrap_lake_treats_secret_create_conflict_as_existing(
     monkeypatch,
 ):
     workspace = make_workspace(tmp_path / "workspace")
-    init_lake_environment("dev", workspace)
+    add_lake_environment("dev", workspace)
     write_generated_lake_files(workspace)
     set_cluster_preflight(monkeypatch, missing="secret_conflict")
     progress = RecordingClusterProgress()
@@ -2220,7 +2220,7 @@ def test_bootstrap_lake_treats_secret_create_conflict_as_existing(
 
 def test_bootstrap_lake_rejects_secret_read_error(tmp_path, monkeypatch):
     workspace = make_workspace(tmp_path / "workspace")
-    init_lake_environment("dev", workspace)
+    add_lake_environment("dev", workspace)
     write_generated_lake_files(workspace)
     set_cluster_preflight(monkeypatch, missing="secret_read_error")
 
@@ -2230,7 +2230,7 @@ def test_bootstrap_lake_rejects_secret_read_error(tmp_path, monkeypatch):
 
 def test_bootstrap_lake_rejects_secret_create_error(tmp_path, monkeypatch):
     workspace = make_workspace(tmp_path / "workspace")
-    init_lake_environment("dev", workspace)
+    add_lake_environment("dev", workspace)
     write_generated_lake_files(workspace)
     set_cluster_preflight(monkeypatch, missing="secret_create_error")
 
@@ -2274,7 +2274,7 @@ def test_bootstrap_lake_rejects_invalid_secret_source_fields(
     message,
 ):
     workspace = make_workspace(tmp_path / "workspace")
-    init_lake_environment("dev", workspace)
+    add_lake_environment("dev", workspace)
     environment_dir = write_generated_lake_files(workspace)
     fullspec = read_json(environment_dir / "product_fullspec.json")
     mutate_config(fullspec["klms"])
@@ -2287,7 +2287,7 @@ def test_bootstrap_lake_rejects_invalid_secret_source_fields(
 
 def test_bootstrap_lake_rejects_missing_namespace(tmp_path, monkeypatch):
     workspace = make_workspace(tmp_path / "workspace")
-    init_lake_environment("dev", workspace)
+    add_lake_environment("dev", workspace)
     write_generated_lake_files(workspace)
     set_cluster_preflight(monkeypatch, missing="namespace")
 
@@ -2297,7 +2297,7 @@ def test_bootstrap_lake_rejects_missing_namespace(tmp_path, monkeypatch):
 
 def test_bootstrap_lake_rejects_context_list_failure(tmp_path, monkeypatch):
     workspace = make_workspace(tmp_path / "workspace")
-    init_lake_environment("dev", workspace)
+    add_lake_environment("dev", workspace)
     write_generated_lake_files(workspace)
     set_cluster_preflight(monkeypatch, missing="contexts")
 
@@ -2307,7 +2307,7 @@ def test_bootstrap_lake_rejects_context_list_failure(tmp_path, monkeypatch):
 
 def test_bootstrap_lake_rejects_missing_active_context(tmp_path, monkeypatch):
     workspace = make_workspace(tmp_path / "workspace")
-    init_lake_environment("dev", workspace)
+    add_lake_environment("dev", workspace)
     write_generated_lake_files(workspace)
     set_cluster_preflight(monkeypatch, active_context=None)
 
@@ -2317,7 +2317,7 @@ def test_bootstrap_lake_rejects_missing_active_context(tmp_path, monkeypatch):
 
 def test_bootstrap_lake_rejects_context_load_failure(tmp_path, monkeypatch):
     workspace = make_workspace(tmp_path / "workspace")
-    init_lake_environment("dev", workspace)
+    add_lake_environment("dev", workspace)
     write_generated_lake_files(workspace)
     set_cluster_preflight(monkeypatch, missing="load_context")
 
@@ -2327,7 +2327,7 @@ def test_bootstrap_lake_rejects_context_load_failure(tmp_path, monkeypatch):
 
 def test_bootstrap_lake_rejects_missing_storage_class(tmp_path, monkeypatch):
     workspace = make_workspace(tmp_path / "workspace")
-    init_lake_environment("dev", workspace)
+    add_lake_environment("dev", workspace)
     write_generated_lake_files(workspace)
     set_cluster_preflight(monkeypatch, missing="storage_class")
 
@@ -2343,7 +2343,7 @@ def test_bootstrap_lake_rejects_missing_provisioning_storage_class(
     monkeypatch,
 ):
     workspace = make_workspace(tmp_path / "workspace")
-    init_lake_environment("dev", workspace)
+    add_lake_environment("dev", workspace)
     write_generated_lake_files(workspace)
     set_cluster_preflight(
         monkeypatch,
@@ -2359,7 +2359,7 @@ def test_bootstrap_lake_rejects_missing_provisioning_storage_class(
 
 def test_bootstrap_lake_rejects_missing_ingress_controller(tmp_path, monkeypatch):
     workspace = make_workspace(tmp_path / "workspace")
-    init_lake_environment("dev", workspace)
+    add_lake_environment("dev", workspace)
     write_generated_lake_files(workspace)
     set_cluster_preflight(monkeypatch, missing="ingress_controller")
 
@@ -2372,7 +2372,7 @@ def test_bootstrap_lake_rejects_missing_ingress_controller(tmp_path, monkeypatch
 
 def test_bootstrap_lake_rejects_missing_ingress_class(tmp_path, monkeypatch):
     workspace = make_workspace(tmp_path / "workspace")
-    init_lake_environment("dev", workspace)
+    add_lake_environment("dev", workspace)
     write_generated_lake_files(workspace)
     set_cluster_preflight(monkeypatch, missing="ingress_class")
 
@@ -2384,7 +2384,7 @@ def test_bootstrap_lake_accepts_rke2_ingress_controller(
     tmp_path, monkeypatch
 ):
     workspace = make_workspace(tmp_path / "workspace")
-    init_lake_environment("dev", workspace)
+    add_lake_environment("dev", workspace)
     write_generated_lake_files(workspace)
     calls = set_cluster_preflight(
         monkeypatch,
@@ -2402,7 +2402,7 @@ def test_bootstrap_lake_accepts_name_only_ingress_controller(
     tmp_path, monkeypatch
 ):
     workspace = make_workspace(tmp_path / "workspace")
-    init_lake_environment("dev", workspace)
+    add_lake_environment("dev", workspace)
     write_generated_lake_files(workspace)
     calls = set_cluster_preflight(
         monkeypatch,
@@ -2419,7 +2419,7 @@ def test_bootstrap_lake_accepts_name_only_ingress_controller(
 
 def test_bootstrap_lake_rejects_unready_cluster_issuer(tmp_path, monkeypatch):
     workspace = make_workspace(tmp_path / "workspace")
-    init_lake_environment("dev", workspace)
+    add_lake_environment("dev", workspace)
     write_generated_lake_files(workspace)
     set_cluster_preflight(monkeypatch, issuer_ready=False)
 
@@ -2432,7 +2432,7 @@ def test_bootstrap_lake_rejects_unready_cluster_issuer(tmp_path, monkeypatch):
 
 def test_bootstrap_lake_rejects_missing_cert_manager_crd(tmp_path, monkeypatch):
     workspace = make_workspace(tmp_path / "workspace")
-    init_lake_environment("dev", workspace)
+    add_lake_environment("dev", workspace)
     write_generated_lake_files(workspace)
     set_cluster_preflight(monkeypatch, missing="crd")
 
@@ -2445,7 +2445,7 @@ def test_bootstrap_lake_rejects_missing_cert_manager_deployment(
     monkeypatch,
 ):
     workspace = make_workspace(tmp_path / "workspace")
-    init_lake_environment("dev", workspace)
+    add_lake_environment("dev", workspace)
     write_generated_lake_files(workspace)
     set_cluster_preflight(monkeypatch, missing="cert_manager_deployment")
 
@@ -2458,7 +2458,7 @@ def test_bootstrap_lake_rejects_unready_cert_manager_deployment(
     monkeypatch,
 ):
     workspace = make_workspace(tmp_path / "workspace")
-    init_lake_environment("dev", workspace)
+    add_lake_environment("dev", workspace)
     write_generated_lake_files(workspace)
     set_cluster_preflight(monkeypatch, missing="cert_manager_unready")
 
@@ -2468,7 +2468,7 @@ def test_bootstrap_lake_rejects_unready_cert_manager_deployment(
 
 def test_bootstrap_lake_rejects_missing_cluster_issuer(tmp_path, monkeypatch):
     workspace = make_workspace(tmp_path / "workspace")
-    init_lake_environment("dev", workspace)
+    add_lake_environment("dev", workspace)
     write_generated_lake_files(workspace)
     set_cluster_preflight(monkeypatch, missing="cluster_issuer")
 
@@ -2498,7 +2498,7 @@ def test_bootstrap_lake_reports_forbidden_preflight_checks(
     expected_check,
 ):
     workspace = make_workspace(tmp_path / "workspace")
-    init_lake_environment("dev", workspace)
+    add_lake_environment("dev", workspace)
     write_generated_lake_files(workspace)
     set_cluster_preflight(monkeypatch, missing=missing)
 
@@ -2516,7 +2516,7 @@ def test_bootstrap_lake_preflight_skip_bypasses_read_only_checks(
     monkeypatch,
 ):
     workspace = make_workspace(tmp_path / "workspace")
-    init_lake_environment("dev", workspace)
+    add_lake_environment("dev", workspace)
     write_generated_lake_files(workspace)
     calls = set_cluster_preflight(monkeypatch, missing="storage_class_forbidden")
 
@@ -2532,7 +2532,7 @@ def test_bootstrap_lake_preflight_skip_bypasses_read_only_checks(
 
 def test_bootstrap_lake_skips_cert_manager_for_http(tmp_path, monkeypatch):
     workspace = make_workspace(tmp_path / "workspace")
-    init_lake_environment("dev", workspace)
+    add_lake_environment("dev", workspace)
     write_generated_lake_files(workspace, scheme="http", cluster_issuer=None)
     calls = set_cluster_preflight(monkeypatch)
 
@@ -2703,7 +2703,7 @@ def test_lake_add_cli_rejects_empty_target_before_creating_environment(tmp_path)
 
 def test_lake_add_cli_rejects_rerun_after_bootstrap_state(tmp_path):
     workspace = make_workspace(tmp_path / "workspace")
-    init_lake_environment("dev", workspace)
+    add_lake_environment("dev", workspace)
     environment_dir = write_generated_lake_files(workspace)
     spec = read_json(environment_dir / "spec.json")
     spec["spec"]["contextNames"] = ["current-context"]
@@ -2736,7 +2736,7 @@ def test_lake_add_cli_rejects_rerun_after_bootstrap_state(tmp_path):
 
 def test_workspace_info_operation_reports_environment_files(tmp_path):
     workspace = make_workspace(tmp_path / "workspace")
-    init_lake_environment("dev", workspace)
+    add_lake_environment("dev", workspace)
     info = workspace_info(workspace)
 
     assert info.path == workspace
@@ -2770,8 +2770,8 @@ def test_workspace_info_ignores_unmarked_tanka_environments(tmp_path):
 
 def test_list_lake_environments_reports_marked_environments_only(tmp_path):
     workspace = make_workspace(tmp_path / "workspace")
-    init_lake_environment("dev", workspace)
-    init_lake_environment("lakes/prod", workspace)
+    add_lake_environment("dev", workspace)
+    add_lake_environment("lakes/prod", workspace)
     plain_dir = workspace / "plain"
     plain_dir.mkdir()
     (plain_dir / "main.jsonnet").write_text("{}\n", encoding="utf-8")
@@ -2816,7 +2816,7 @@ def test_list_lake_environments_warns_for_marked_unmanaged_main(
 
 def test_lake_environment_info_reports_specified_environment(tmp_path):
     workspace = make_workspace(tmp_path / "workspace")
-    init_lake_environment("lakes/prod", workspace)
+    add_lake_environment("lakes/prod", workspace)
     write_generated_lake_files(workspace, "lakes/prod")
 
     environment = lake_environment_info("lakes/prod", workspace)
@@ -2826,7 +2826,7 @@ def test_lake_environment_info_reports_specified_environment(tmp_path):
     assert environment.main_jsonnet is True
     assert environment.spec_json is True
     assert environment.active_product is True
-    assert environment.generated_products == ("generated",)
+    assert environment.generated_products == ("generated", "product")
 
 
 def test_lake_environment_info_warns_once_for_marked_unmanaged_main(
@@ -2874,7 +2874,7 @@ def test_lake_environment_info_rejects_unmarked_environment(tmp_path):
 
 def test_remove_lake_environment_deletes_marked_environment(tmp_path):
     workspace = make_workspace(tmp_path / "workspace")
-    init_lake_environment("dev", workspace)
+    add_lake_environment("dev", workspace)
     environment_dir = workspace / "dev"
     progress = RecordingLakeEnvironmentProgress()
 
@@ -2889,7 +2889,7 @@ def test_remove_lake_environment_deletes_marked_environment(tmp_path):
 
 def test_remove_lake_environment_rejects_active_environment_without_force(tmp_path):
     workspace = make_workspace(tmp_path / "workspace")
-    init_lake_environment("dev", workspace)
+    add_lake_environment("dev", workspace)
     environment_dir = write_generated_lake_files(workspace)
 
     with pytest.raises(CommandError, match="active product"):
@@ -2901,7 +2901,7 @@ def test_remove_lake_environment_rejects_active_environment_without_force(tmp_pa
 
 def test_remove_lake_environment_rejects_bootstrapped_environment_without_force(tmp_path):
     workspace = make_workspace(tmp_path / "workspace")
-    init_lake_environment("dev", workspace)
+    add_lake_environment("dev", workspace)
     environment_dir = workspace / "dev"
     spec = read_json(environment_dir / "spec.json")
     spec["spec"] = {
@@ -2926,7 +2926,7 @@ def test_remove_lake_environment_rejects_bootstrapped_environment_without_force(
 
 def test_remove_lake_environment_force_deletes_active_environment(tmp_path):
     workspace = make_workspace(tmp_path / "workspace")
-    init_lake_environment("dev", workspace)
+    add_lake_environment("dev", workspace)
     environment_dir = write_generated_lake_files(workspace)
 
     remove_lake_environment("dev", workspace, force=True)
@@ -2952,7 +2952,7 @@ def test_remove_lake_environment_rejects_unmarked_environment(tmp_path):
 
 def test_workspace_info_cli_reports_workspace_state(tmp_path):
     workspace = make_workspace(tmp_path / "workspace")
-    init_lake_environment("dev", workspace)
+    add_lake_environment("dev", workspace)
 
     result = runner.invoke(app, ["workspace", "info", str(workspace)])
 
@@ -2989,7 +2989,7 @@ def test_workspace_info_cli_reports_uninitialized_workspace(tmp_path):
     assert f"stelarctl workspace init {workspace}" in result.stdout
 
 
-def test_init_lake_environment_cli_creates_environment(tmp_path):
+def test_add_lake_environment_cli_creates_environment(tmp_path):
     workspace = make_workspace(tmp_path / "workspace")
 
     result = runner.invoke(
@@ -3030,7 +3030,7 @@ def test_init_lake_environment_cli_creates_environment(tmp_path):
     )
 
 
-def test_init_lake_environment_cli_rejects_implicit_main_adoption(tmp_path):
+def test_add_lake_environment_cli_rejects_implicit_main_adoption(tmp_path):
     workspace = make_workspace(tmp_path / "workspace")
     environment_dir = workspace / "dev"
     environment_dir.mkdir()
@@ -3052,7 +3052,7 @@ def test_init_lake_environment_cli_rejects_implicit_main_adoption(tmp_path):
     assert "--adopt-existing-main" in result.output
 
 
-def test_init_lake_environment_cli_adopts_existing_main_when_requested(tmp_path):
+def test_add_lake_environment_cli_adopts_existing_main_when_requested(tmp_path):
     workspace = make_workspace(tmp_path / "workspace")
     environment_dir = workspace / "dev"
     environment_dir.mkdir()
@@ -3082,8 +3082,8 @@ def test_init_lake_environment_cli_adopts_existing_main_when_requested(tmp_path)
 
 def test_lake_list_cli_reports_lake_environments(tmp_path):
     workspace = make_workspace(tmp_path / "workspace")
-    init_lake_environment("dev", workspace)
-    init_lake_environment("lakes/prod", workspace)
+    add_lake_environment("dev", workspace)
+    add_lake_environment("lakes/prod", workspace)
 
     result = runner.invoke(
         app,
@@ -3124,7 +3124,7 @@ def test_lake_list_cli_reports_no_environments(tmp_path):
 
 def test_lake_info_cli_reports_lake_environment(tmp_path):
     workspace = make_workspace(tmp_path / "workspace")
-    init_lake_environment("dev", workspace)
+    add_lake_environment("dev", workspace)
 
     result = runner.invoke(
         app,
@@ -3148,7 +3148,7 @@ def test_lake_info_cli_reports_lake_environment(tmp_path):
 
 def test_lake_remove_cli_deletes_environment_with_yes(tmp_path):
     workspace = make_workspace(tmp_path / "workspace")
-    init_lake_environment("dev", workspace)
+    add_lake_environment("dev", workspace)
     environment_dir = workspace / "dev"
 
     result = runner.invoke(
@@ -3171,7 +3171,7 @@ def test_lake_remove_cli_deletes_environment_with_yes(tmp_path):
 
 def test_lake_remove_cli_rejects_active_environment_without_force(tmp_path):
     workspace = make_workspace(tmp_path / "workspace")
-    init_lake_environment("dev", workspace)
+    add_lake_environment("dev", workspace)
     environment_dir = write_generated_lake_files(workspace)
 
     result = runner.invoke(
@@ -3195,7 +3195,7 @@ def test_lake_remove_cli_rejects_active_environment_without_force(tmp_path):
 
 def test_lake_remove_cli_force_deletes_active_environment(tmp_path):
     workspace = make_workspace(tmp_path / "workspace")
-    init_lake_environment("dev", workspace)
+    add_lake_environment("dev", workspace)
     environment_dir = write_generated_lake_files(workspace)
 
     result = runner.invoke(
@@ -3217,7 +3217,7 @@ def test_lake_remove_cli_force_deletes_active_environment(tmp_path):
 
 def test_lake_remove_cli_aborts_without_confirmation(tmp_path):
     workspace = make_workspace(tmp_path / "workspace")
-    init_lake_environment("dev", workspace)
+    add_lake_environment("dev", workspace)
     environment_dir = workspace / "dev"
 
     result = runner.invoke(
@@ -3242,7 +3242,7 @@ def test_lake_verify_cli_accepts_flags_without_mutating_spec(
     monkeypatch,
 ):
     workspace = make_workspace(tmp_path / "workspace")
-    init_lake_environment("dev", workspace)
+    add_lake_environment("dev", workspace)
     environment_dir = write_generated_lake_files(workspace)
     spec_before = read_json(environment_dir / "spec.json")
     set_cluster_preflight(monkeypatch)
@@ -3269,7 +3269,7 @@ def test_lake_verify_cli_accepts_flags_without_mutating_spec(
 
 def test_lake_verify_cli_prompts_for_missing_context_flag(tmp_path):
     workspace = make_workspace(tmp_path / "workspace")
-    init_lake_environment("dev", workspace)
+    add_lake_environment("dev", workspace)
     write_generated_lake_files(workspace)
 
     result = runner.invoke(
@@ -3292,7 +3292,7 @@ def test_lake_verify_cli_prompts_for_missing_context_flag(tmp_path):
 
 def test_bootstrap_lake_cli_accepts_initialized_environment(tmp_path, monkeypatch):
     workspace = make_workspace(tmp_path / "workspace")
-    init_lake_environment("dev", workspace)
+    add_lake_environment("dev", workspace)
     write_generated_lake_files(workspace)
     set_cluster_preflight(monkeypatch)
 
@@ -3322,7 +3322,7 @@ def test_bootstrap_lake_cli_reports_preflight_rbac_failure(
     monkeypatch,
 ):
     workspace = make_workspace(tmp_path / "workspace")
-    init_lake_environment("dev", workspace)
+    add_lake_environment("dev", workspace)
     write_generated_lake_files(workspace)
     set_cluster_preflight(monkeypatch, missing="storage_class_forbidden")
 
@@ -3345,7 +3345,7 @@ def test_bootstrap_lake_cli_reports_preflight_rbac_failure(
 
 def test_bootstrap_lake_cli_accepts_preflight_skip(tmp_path, monkeypatch):
     workspace = make_workspace(tmp_path / "workspace")
-    init_lake_environment("dev", workspace)
+    add_lake_environment("dev", workspace)
     write_generated_lake_files(workspace)
     set_cluster_preflight(monkeypatch, missing="storage_class_forbidden")
 
@@ -3370,7 +3370,7 @@ def test_bootstrap_lake_cli_reports_already_bootstrapped(
     monkeypatch,
 ):
     workspace = make_workspace(tmp_path / "workspace")
-    init_lake_environment("dev", workspace)
+    add_lake_environment("dev", workspace)
     environment_dir = write_generated_lake_files(workspace)
     product_spec = read_active_config(environment_dir)
     set_cluster_preflight(
@@ -3399,7 +3399,7 @@ def test_bootstrap_lake_cli_warns_when_secret_state_check_forbidden(
     monkeypatch,
 ):
     workspace = make_workspace(tmp_path / "workspace")
-    init_lake_environment("dev", workspace)
+    add_lake_environment("dev", workspace)
     write_generated_lake_files(workspace)
     set_cluster_preflight(monkeypatch, missing="secret_read_forbidden")
 
@@ -3564,13 +3564,6 @@ def test_lake_verify_help_documents_read_only_behavior():
     assert "No Kubernetes Secrets are created" in output
 
 
-def test_lake_check_cluster_command_is_not_registered():
-    result = runner.invoke(app, ["lake", "check-cluster", "--help"])
-
-    assert result.exit_code == 2
-    assert "No such command 'check-cluster'" in result.output
-
-
 class FakeProductValidator:
     def __init__(self, feature_model):
         self.feature_model = feature_model
@@ -3668,13 +3661,13 @@ def test_lake_create_cli_writes_files_and_prints_fullspec(
     monkeypatch,
 ):
     workspace = make_workspace(tmp_path / "workspace")
-    init_lake_environment("dev", workspace)
+    add_lake_environment("dev", workspace)
     product_path = tmp_path / "analytics.yaml"
     product_path.write_text(
         "author: operator@example.com\nspec:\n  namespace: test\n",
         encoding="utf-8",
     )
-    monkeypatch.setattr(lakespec_commands, "ProductValidator", FakeProductValidator)
+    monkeypatch.setattr(lake_product_ops, "ProductValidator", FakeProductValidator)
 
     result = runner.invoke(
         app,
@@ -3726,7 +3719,7 @@ def test_lake_create_cli_writes_files_and_prints_fullspec(
 
 def test_lake_create_cli_rejects_target_flags_with_actionable_message(tmp_path):
     workspace = make_workspace(tmp_path / "workspace")
-    init_lake_environment("dev", workspace)
+    add_lake_environment("dev", workspace)
     product_path = tmp_path / "analytics.yaml"
     product_path.write_text("spec:\n  namespace: test\n", encoding="utf-8")
 
@@ -3775,10 +3768,10 @@ def test_lake_create_cli_reports_product_validation_failure(
     monkeypatch,
 ):
     workspace = make_workspace(tmp_path / "workspace")
-    init_lake_environment("dev", workspace)
+    add_lake_environment("dev", workspace)
     product_path = tmp_path / "product.yaml"
     product_path.write_text("spec:\n  namespace: test\n", encoding="utf-8")
-    monkeypatch.setattr(lakespec_commands, "ProductValidator", FailingProductValidator)
+    monkeypatch.setattr(lake_product_ops, "ProductValidator", FailingProductValidator)
 
     result = runner.invoke(
         app,
@@ -3821,7 +3814,7 @@ def test_product_to_fullspec_requires_initialized_environment(tmp_path, monkeypa
     workspace = make_workspace(tmp_path / "workspace")
     product_path = tmp_path / "product.yaml"
     product_path.write_text("spec:\n  namespace: test\n", encoding="utf-8")
-    monkeypatch.setattr(lakespec_commands, "ProductValidator", FakeProductValidator)
+    monkeypatch.setattr(lake_product_ops, "ProductValidator", FakeProductValidator)
 
     with pytest.raises(CommandError, match="has not been initialized"):
         product_to_fullspec(product_path, "dev", workspace)
@@ -3834,7 +3827,7 @@ def test_product_to_fullspec_requires_environment_spec_json(tmp_path, monkeypatc
     (environment_dir / "main.jsonnet").write_text("{}", encoding="utf-8")
     product_path = tmp_path / "product.yaml"
     product_path.write_text("spec:\n  namespace: test\n", encoding="utf-8")
-    monkeypatch.setattr(lakespec_commands, "ProductValidator", FakeProductValidator)
+    monkeypatch.setattr(lake_product_ops, "ProductValidator", FakeProductValidator)
 
     with pytest.raises(CommandError, match="missing spec.json"):
         product_to_fullspec(product_path, "dev", workspace)
@@ -3879,13 +3872,13 @@ def expected_tanka_spec(
 
 def test_product_to_fullspec_writes_product_and_fullspec(tmp_path, monkeypatch):
     workspace = make_workspace(tmp_path / "workspace")
-    init_lake_environment("dev", workspace)
+    add_lake_environment("dev", workspace)
     product_path = tmp_path / "analytics.yaml"
     product_path.write_text(
         "author: operator@example.com\nspec:\n  namespace: test\n",
         encoding="utf-8",
     )
-    monkeypatch.setattr(lakespec_commands, "ProductValidator", FakeProductValidator)
+    monkeypatch.setattr(lake_product_ops, "ProductValidator", FakeProductValidator)
 
     fullspec = product_to_fullspec(product_path, "dev", workspace)
 
@@ -3932,7 +3925,7 @@ def test_product_to_fullspec_rejects_bootstrap_target_hash_mismatch(
     monkeypatch,
 ):
     workspace = make_workspace(tmp_path / "workspace")
-    init_lake_environment("dev", workspace)
+    add_lake_environment("dev", workspace)
     environment_dir = write_generated_lake_files(workspace)
     spec = read_json(environment_dir / "spec.json")
     spec["spec"]["contextNames"] = ["current-context"]
@@ -3946,7 +3939,7 @@ def test_product_to_fullspec_rejects_bootstrap_target_hash_mismatch(
     write_json(environment_dir / "spec.json", spec)
     product_path = tmp_path / "other.yaml"
     product_path.write_text("spec:\n  namespace: other\n", encoding="utf-8")
-    monkeypatch.setattr(lakespec_commands, "ProductValidator", FakeProductValidator)
+    monkeypatch.setattr(lake_product_ops, "ProductValidator", FakeProductValidator)
 
     with pytest.raises(CommandError, match="Refusing to act"):
         product_to_fullspec(product_path, "dev", workspace)
@@ -3960,7 +3953,7 @@ def test_product_to_fullspec_preserves_environment_entrypoint(
     monkeypatch,
 ):
     workspace = make_workspace(tmp_path / "workspace")
-    init_lake_environment("dev", workspace)
+    add_lake_environment("dev", workspace)
     environment_dir = workspace / "dev"
     main_jsonnet_path = environment_dir / "main.jsonnet"
     original_main_jsonnet = main_jsonnet_path.read_text(encoding="utf-8")
@@ -3969,7 +3962,7 @@ def test_product_to_fullspec_preserves_environment_entrypoint(
         "author: operator@example.com\nspec:\n  namespace: test\n",
         encoding="utf-8",
     )
-    monkeypatch.setattr(lakespec_commands, "ProductValidator", FakeProductValidator)
+    monkeypatch.setattr(lake_product_ops, "ProductValidator", FakeProductValidator)
 
     product_to_fullspec(product_path, "dev", workspace)
 
@@ -3981,10 +3974,10 @@ def test_activate_lake_product_sets_active_product(
     monkeypatch,
 ):
     workspace = make_workspace(tmp_path / "workspace")
-    init_lake_environment("dev", workspace)
+    add_lake_environment("dev", workspace)
     product_path = tmp_path / "analytics.yaml"
     product_path.write_text("spec:\n  namespace: product-ns\n", encoding="utf-8")
-    monkeypatch.setattr(lakespec_commands, "ProductValidator", FakeProductValidator)
+    monkeypatch.setattr(lake_product_ops, "ProductValidator", FakeProductValidator)
     fullspec = product_to_fullspec(product_path, "dev", workspace)
 
     activated = activate_lake_product("analytics", "dev", workspace)
@@ -4000,7 +3993,7 @@ def test_activate_lake_product_rejects_bootstrap_target_hash_mismatch(
     monkeypatch,
 ):
     workspace = make_workspace(tmp_path / "workspace")
-    init_lake_environment("dev", workspace)
+    add_lake_environment("dev", workspace)
     environment_dir = write_generated_lake_files(workspace, environment="dev")
     second_product = read_json(environment_dir / "generated.json")
     second_fullspec = read_json(environment_dir / "generated_fullspec.json")
@@ -4029,7 +4022,7 @@ def test_activate_lake_product_checks_bootstrap_target_before_invalid_fullspec(
     tmp_path,
 ):
     workspace = make_workspace(tmp_path / "workspace")
-    init_lake_environment("dev", workspace)
+    add_lake_environment("dev", workspace)
     environment_dir = write_generated_lake_files(workspace, environment="dev")
     second_product = read_json(environment_dir / "generated.json")
     second_fullspec = read_json(environment_dir / "generated_fullspec.json")
@@ -4057,7 +4050,7 @@ def test_activate_lake_product_rejects_bootstrap_product_hash_mismatch(
     monkeypatch,
 ):
     workspace = make_workspace(tmp_path / "workspace")
-    init_lake_environment("dev", workspace)
+    add_lake_environment("dev", workspace)
     environment_dir = write_generated_lake_files(workspace, environment="dev")
     current_fullspec = read_json(environment_dir / "generated_fullspec.json")
 
@@ -4094,10 +4087,10 @@ def test_lake_create_cli_warns_when_regenerating_active_product_name(
     monkeypatch,
 ):
     workspace = make_workspace(tmp_path / "workspace")
-    init_lake_environment("dev", workspace)
+    add_lake_environment("dev", workspace)
     product_path = tmp_path / "analytics.yaml"
     product_path.write_text("spec:\n  variant: first\n", encoding="utf-8")
-    monkeypatch.setattr(lakespec_commands, "ProductValidator", FakeProductValidator)
+    monkeypatch.setattr(lake_product_ops, "ProductValidator", FakeProductValidator)
     first_fullspec = product_to_fullspec(product_path, "dev", workspace)
 
     product_path.write_text("spec:\n  variant: second\n", encoding="utf-8")
@@ -4127,10 +4120,10 @@ def test_lake_create_cli_warns_to_purge_when_regenerating_bootstrapped_active_pr
     monkeypatch,
 ):
     workspace = make_workspace(tmp_path / "workspace")
-    init_lake_environment("dev", workspace)
+    add_lake_environment("dev", workspace)
     product_path = tmp_path / "analytics.yaml"
     product_path.write_text("spec:\n  variant: first\n", encoding="utf-8")
-    monkeypatch.setattr(lakespec_commands, "ProductValidator", FakeProductValidator)
+    monkeypatch.setattr(lake_product_ops, "ProductValidator", FakeProductValidator)
     first_fullspec = product_to_fullspec(product_path, "dev", workspace)
     environment_dir = workspace / "dev"
     spec = read_json(environment_dir / "spec.json")
@@ -4173,12 +4166,12 @@ def test_product_to_fullspec_does_not_activate_subsequent_products(
     monkeypatch,
 ):
     workspace = make_workspace(tmp_path / "workspace")
-    init_lake_environment("dev", workspace)
+    add_lake_environment("dev", workspace)
     first_path = tmp_path / "first.yaml"
     second_path = tmp_path / "second.yaml"
     first_path.write_text("spec:\n  variant: first\n", encoding="utf-8")
     second_path.write_text("spec:\n  variant: second\n", encoding="utf-8")
-    monkeypatch.setattr(lakespec_commands, "ProductValidator", FakeProductValidator)
+    monkeypatch.setattr(lake_product_ops, "ProductValidator", FakeProductValidator)
 
     first_fullspec = product_to_fullspec(first_path, "dev", workspace)
     second_fullspec = product_to_fullspec(second_path, "dev", workspace)
@@ -4194,7 +4187,7 @@ def test_activate_lake_product_warns_and_proceeds_when_current_bootstrap_secrets
     monkeypatch,
 ):
     workspace = make_workspace(tmp_path / "workspace")
-    init_lake_environment("dev", workspace)
+    add_lake_environment("dev", workspace)
     environment_dir = write_generated_lake_files(workspace, environment="dev")
 
     second_product = read_json(environment_dir / "generated.json")
@@ -4210,7 +4203,7 @@ def test_activate_lake_product_warns_and_proceeds_when_current_bootstrap_secrets
     write_json(environment_dir / "spec.json", spec)
     existing_secrets = tuple(product_spec_secret_order(read_active_config(environment_dir)))
     set_cluster_preflight(monkeypatch, existing_secrets=set(existing_secrets))
-    monkeypatch.setattr(lakespec_commands, "load_kube_context", lambda _context: None)
+    monkeypatch.setattr(lake_product_ops, "load_kube_context", lambda _context: None)
     progress = RecordingLakeActivationProgress()
 
     activated = activate_lake_product("second", "dev", workspace, progress=progress)
@@ -4233,7 +4226,7 @@ def test_activate_lake_product_allows_switch_when_current_bootstrap_secrets_are_
     monkeypatch,
 ):
     workspace = make_workspace(tmp_path / "workspace")
-    init_lake_environment("dev", workspace)
+    add_lake_environment("dev", workspace)
     environment_dir = write_generated_lake_files(workspace, environment="dev")
 
     second_product = read_json(environment_dir / "generated.json")
@@ -4248,7 +4241,7 @@ def test_activate_lake_product_allows_switch_when_current_bootstrap_secrets_are_
     spec["spec"]["namespace"] = "test"
     write_json(environment_dir / "spec.json", spec)
     set_cluster_preflight(monkeypatch)
-    monkeypatch.setattr(lakespec_commands, "load_kube_context", lambda _context: None)
+    monkeypatch.setattr(lake_product_ops, "load_kube_context", lambda _context: None)
     progress = RecordingLakeActivationProgress()
 
     activated = activate_lake_product("second", "dev", workspace, progress=progress)
@@ -4263,7 +4256,7 @@ def test_activate_lake_product_warns_and_proceeds_when_bootstrap_secret_check_fa
     monkeypatch,
 ):
     workspace = make_workspace(tmp_path / "workspace")
-    init_lake_environment("dev", workspace)
+    add_lake_environment("dev", workspace)
     environment_dir = write_generated_lake_files(workspace, environment="dev")
 
     second_product = read_json(environment_dir / "generated.json")
@@ -4278,7 +4271,7 @@ def test_activate_lake_product_warns_and_proceeds_when_bootstrap_secret_check_fa
     spec["spec"]["namespace"] = "test"
     write_json(environment_dir / "spec.json", spec)
     set_cluster_preflight(monkeypatch, missing="secret_read_forbidden")
-    monkeypatch.setattr(lakespec_commands, "load_kube_context", lambda _context: None)
+    monkeypatch.setattr(lake_product_ops, "load_kube_context", lambda _context: None)
     progress = RecordingLakeActivationProgress()
 
     activated = activate_lake_product("second", "dev", workspace, progress=progress)
@@ -4294,7 +4287,7 @@ def test_activate_lake_product_warns_and_proceeds_when_context_load_fails(
     monkeypatch,
 ):
     workspace = make_workspace(tmp_path / "workspace")
-    init_lake_environment("dev", workspace)
+    add_lake_environment("dev", workspace)
     environment_dir = write_generated_lake_files(workspace, environment="dev")
 
     second_product = read_json(environment_dir / "generated.json")
@@ -4313,7 +4306,7 @@ def test_activate_lake_product_warns_and_proceeds_when_context_load_fails(
     def load_kube_context(_context):
         raise CommandError("Could not load kubectl context 'stale-context'")
 
-    monkeypatch.setattr(lakespec_commands, "load_kube_context", load_kube_context)
+    monkeypatch.setattr(lake_product_ops, "load_kube_context", load_kube_context)
     progress = RecordingLakeActivationProgress()
 
     activated = activate_lake_product("second", "dev", workspace, progress=progress)
@@ -4335,7 +4328,7 @@ def test_activate_lake_product_informs_when_same_product_is_already_bootstrapped
     monkeypatch,
 ):
     workspace = make_workspace(tmp_path / "workspace")
-    init_lake_environment("dev", workspace)
+    add_lake_environment("dev", workspace)
     environment_dir = write_generated_lake_files(workspace, environment="dev")
 
     spec = read_json(environment_dir / "spec.json")
@@ -4344,7 +4337,7 @@ def test_activate_lake_product_informs_when_same_product_is_already_bootstrapped
     write_json(environment_dir / "spec.json", spec)
     existing_secrets = tuple(product_spec_secret_order(read_active_config(environment_dir)))
     set_cluster_preflight(monkeypatch, existing_secrets=set(existing_secrets))
-    monkeypatch.setattr(lakespec_commands, "load_kube_context", lambda _context: None)
+    monkeypatch.setattr(lake_product_ops, "load_kube_context", lambda _context: None)
     progress = RecordingLakeActivationProgress()
 
     activated = activate_lake_product("generated", "dev", workspace, progress=progress)
@@ -4360,7 +4353,7 @@ def test_lake_activate_cli_warns_and_proceeds_when_bootstrap_secrets_exist(
     monkeypatch,
 ):
     workspace = make_workspace(tmp_path / "workspace")
-    init_lake_environment("dev", workspace)
+    add_lake_environment("dev", workspace)
     environment_dir = write_generated_lake_files(workspace, environment="dev")
 
     second_product = read_json(environment_dir / "generated.json")
@@ -4378,7 +4371,7 @@ def test_lake_activate_cli_warns_and_proceeds_when_bootstrap_secrets_exist(
         monkeypatch,
         existing_secrets=secret_names_from_config(read_active_config(environment_dir)),
     )
-    monkeypatch.setattr(lakespec_commands, "load_kube_context", lambda _context: None)
+    monkeypatch.setattr(lake_product_ops, "load_kube_context", lambda _context: None)
 
     result = runner.invoke(
         app,
@@ -4427,10 +4420,10 @@ def test_product_to_fullspec_rejects_scheme_tls_mismatch(
     message,
 ):
     workspace = make_workspace(tmp_path / "workspace")
-    init_lake_environment("dev", workspace)
+    add_lake_environment("dev", workspace)
     product_path = tmp_path / "product.yaml"
     product_path.write_text("spec:\n  namespace: test\n", encoding="utf-8")
-    monkeypatch.setattr(lakespec_commands, "ProductValidator", validator)
+    monkeypatch.setattr(lake_product_ops, "ProductValidator", validator)
 
     with pytest.raises(CommandError, match=message):
         product_to_fullspec(product_path, "dev", workspace)
@@ -4441,7 +4434,7 @@ def test_bootstrap_lake_infers_missing_namespace_from_configured_context(
     monkeypatch,
 ):
     workspace = make_workspace(tmp_path / "workspace")
-    init_lake_environment("dev", workspace)
+    add_lake_environment("dev", workspace)
     environment_dir = write_generated_lake_files(workspace)
     spec_json = read_json(environment_dir / "spec.json")
     spec_json["spec"] = {"contextNames": ["current-context"]}
@@ -4468,7 +4461,7 @@ def test_bootstrap_lake_infers_missing_context_without_overwriting_namespace(
     monkeypatch,
 ):
     workspace = make_workspace(tmp_path / "workspace")
-    init_lake_environment("dev", workspace)
+    add_lake_environment("dev", workspace)
     environment_dir = write_generated_lake_files(workspace)
     spec_json = read_json(environment_dir / "spec.json")
     spec_json["spec"] = {"namespace": "configured-namespace"}
@@ -4496,7 +4489,7 @@ def test_bootstrap_lake_uses_configured_context(
     monkeypatch,
 ):
     workspace = make_workspace(tmp_path / "workspace")
-    init_lake_environment("dev", workspace)
+    add_lake_environment("dev", workspace)
     environment_dir = write_generated_lake_files(workspace)
     spec_json = read_json(environment_dir / "spec.json")
     spec_json["spec"]["contextNames"] = ["other-context"]
@@ -4526,7 +4519,7 @@ def test_bootstrap_lake_removes_placeholder_author_annotation(
     monkeypatch,
 ):
     workspace = make_workspace(tmp_path / "workspace")
-    init_lake_environment("dev", workspace)
+    add_lake_environment("dev", workspace)
     environment_dir = write_generated_lake_files(workspace)
     spec_json = read_json(environment_dir / "spec.json")
     spec_json["spec"] = {
@@ -4546,7 +4539,7 @@ def test_bootstrap_lake_removes_placeholder_author_annotation(
 
 def test_bootstrap_lake_rejects_unknown_configured_context(tmp_path, monkeypatch):
     workspace = make_workspace(tmp_path / "workspace")
-    init_lake_environment("dev", workspace)
+    add_lake_environment("dev", workspace)
     environment_dir = write_generated_lake_files(workspace)
     spec_json = read_json(environment_dir / "spec.json")
     spec_json["spec"]["contextNames"] = ["missing-context"]

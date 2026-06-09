@@ -8,13 +8,13 @@ from typer.testing import CliRunner
 
 from stelar.deploy import feature_model
 from stelar.deploy.cli import app
-from stelar.deploy.cli_handlers import lakespec as lakespec_cli
+from stelar.deploy.cli_handlers import lake_product as lake_product_cli
 from stelar.deploy.models.product import (
     Product,
     ProductValidationFailure,
     ProductValidator,
 )
-from stelar.deploy.operations import init_lake_environment, minimal_product
+from stelar.deploy.operations import add_lake_environment, minimal_product
 from stelar.deploy.operations.minimal_product import (
     CommandError,
     InferredStorageClasses,
@@ -291,7 +291,7 @@ def test_infer_storage_classes_from_cluster_prefers_known_storage_name(monkeypat
 
 def test_lake_create_minimal_cli_generates_product_with_default_secret_values(tmp_path):
     workspace = make_workspace(tmp_path / "workspace")
-    init_lake_environment("dev", workspace)
+    add_lake_environment("dev", workspace)
     product_path = workspace / "dev" / "minimal.json"
 
     result = runner.invoke(
@@ -355,7 +355,7 @@ def test_lake_create_minimal_cli_generates_product_with_default_secret_values(tm
 
 def test_lake_create_minimal_cli_rejects_target_flags_after_bootstrap(tmp_path):
     workspace = make_workspace(tmp_path / "workspace")
-    init_lake_environment("dev", workspace)
+    add_lake_environment("dev", workspace)
     spec_path = workspace / "dev" / "spec.json"
     spec = json.loads(spec_path.read_text(encoding="utf-8"))
     spec["spec"] = {
@@ -397,7 +397,7 @@ def test_lake_create_minimal_cli_rejects_target_flags_after_bootstrap(tmp_path):
 
 def test_lake_create_minimal_cli_rejects_empty_target_before_writing_product(tmp_path):
     workspace = make_workspace(tmp_path / "workspace")
-    init_lake_environment("dev", workspace)
+    add_lake_environment("dev", workspace)
     spec_before = json.loads((workspace / "dev" / "spec.json").read_text(encoding="utf-8"))
 
     result = runner.invoke(
@@ -425,10 +425,10 @@ def test_lake_create_minimal_cli_rejects_empty_target_before_writing_product(tmp
 
 def test_lake_create_minimal_cli_can_infer_storage_from_cluster(tmp_path, monkeypatch):
     workspace = make_workspace(tmp_path / "workspace")
-    init_lake_environment("dev", workspace)
+    add_lake_environment("dev", workspace)
     product_path = workspace / "dev" / "minimal.json"
     monkeypatch.setattr(
-        lakespec_cli,
+        lake_product_cli,
         "infer_storage_classes_from_cluster",
         lambda context: InferredStorageClasses(
             context=context,
@@ -510,7 +510,7 @@ def test_lake_manual_tls_template_cli_rejects_existing_file(tmp_path):
 
 def test_lake_create_minimal_cli_manual_secrets_prompts_for_values(tmp_path):
     workspace = make_workspace(tmp_path / "workspace")
-    init_lake_environment("dev", workspace)
+    add_lake_environment("dev", workspace)
     product_path = workspace / "dev" / "minimal.json"
 
     result = runner.invoke(

@@ -16,7 +16,7 @@ TLS_MODES = {"no_tls", "cert_manager", "manual_tls"}
 def validate_fullspec_scheme_tls_consistency(
     fullspec: JsonObject,
     *,
-    source: str = "product_fullspec.json",
+    source: str = "product fullspec",
 ) -> None:
     """Validate that SCHEME and ingress.tls select a compatible mode."""
     config = fullspec.get("klms")
@@ -28,7 +28,7 @@ def validate_fullspec_scheme_tls_consistency(
 def validate_config_scheme_tls_consistency(
     config: JsonObject,
     *,
-    source: str = "product_fullspec.json",
+    source: str = "product fullspec",
 ) -> None:
     """Validate a KLMS config object for SCHEME/ingress.tls consistency."""
     scheme = config.get("SCHEME")

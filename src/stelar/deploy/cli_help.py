@@ -73,11 +73,14 @@ ROOT_EPILOG = dedent(
           options: --workspace WORKSPACE, --skip-preflight
 
     Typical workflow: run `workspace init`, then `jb install`, then
-    `lake add`, then `lake create --minimal PRODUCT_NAME ENV` or `lake create PRODUCT ENV`,
-    then `lake activate PRODUCT_NAME ENV`, then `lake manual-tls-template` if
-    manual TLS is selected, optionally `lake verify`, then `lake bootstrap`, and
-    finally `tk apply ENV`. Cleanup is explicit too: run `tk delete ENV` for
-    rendered manifests, then `lake purge-secrets ENV` if bootstrap Secrets
+    `lake add`, then `lake create --minimal PRODUCT_NAME ENV` or `lake create PRODUCT ENV`.
+    The first created product is activated automatically; run
+    `lake activate PRODUCT_NAME ENV` only when switching products or after
+    regenerating the active product. If manual TLS is selected, create
+    `ENV/manual_tls.yaml` with `lake manual-tls-template`. Optionally run
+    `lake verify`, then `lake bootstrap`, and finally `tk apply ENV`. Cleanup
+    is explicit too: run `tk delete ENV` for rendered manifests, then
+    `lake purge-secrets ENV` if bootstrap Secrets
     should also be removed.
 
     Main concepts: a workspace is the root with jsonnetfile.json, vendor/, and
@@ -204,15 +207,16 @@ WORKSPACE_INFO_EPILOG = dedent(
     """
 ).strip()
 
-INIT_LAKE_HELP = (
+LAKE_HELP = (
     "Manage lake environments inside an existing workspace. Use this group to "
     "add, list, inspect, remove, and prepare environments for Kubernetes."
 )
-INIT_LAKE_EPILOG = dedent(
+LAKE_EPILOG = dedent(
     """
     Required order: workspace init, then jb install from the workspace root,
-    then lake add, then lake create, then lake activate, then lake verify or lake bootstrap.
-    Use lake list and lake info to inspect local environments. Use lake status
+    then lake add, then lake create. The first created product is activated
+    automatically; use lake activate only to switch products or refresh a
+    regenerated active product. Use lake list and lake info to inspect local environments. Use lake status
     to inspect the target cluster. The final Kubernetes apply is explicit: run
     tk apply ENV after lake bootstrap succeeds. Cleanup is also explicit: run
     tk delete ENV for rendered resources and lake purge-secrets ENV for
@@ -220,14 +224,14 @@ INIT_LAKE_EPILOG = dedent(
     """
 ).strip()
 
-INIT_LAKE_ENVIRONMENT_HELP = (
+LAKE_ADD_HELP = (
     "Create one Tanka environment at ENV relative to the workspace. The "
     "spec.json marker identifies it as a stelarctl lake environment. The "
     "environment later receives "
     "named product artifacts, activation state in spec.json, "
     "and optional manual_tls.yaml."
 )
-INIT_LAKE_ENVIRONMENT_EPILOG = dedent(
+LAKE_ADD_EPILOG = dedent(
     """
     This command expects jb install to have populated vendor/ because the Tanka
     main_template.jsonnet is copied from the vendored STELAR deployment library
@@ -366,7 +370,7 @@ LAKE_PURGE_SECRETS_EPILOG = dedent(
 LAKE_BOOTSTRAP_HELP = (
     "Prepare an initialized environment for Kubernetes. The command completes "
     "missing spec.json context/namespace from kubeconfig, validates cluster "
-    "prerequisites, and creates missing fullspec/manual-TLS Secrets."
+    "prerequisites, and creates required fullspec/manual-TLS Secrets from a clean bootstrap state."
 )
 LAKE_BOOTSTRAP_EPILOG = dedent(
     """

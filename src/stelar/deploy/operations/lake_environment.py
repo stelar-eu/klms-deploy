@@ -44,7 +44,7 @@ SPEC_JSON_SKELETON = {
 }
 
 
-def init_lake_environment(
+def add_lake_environment(
     environment: str,
     workspace_path: Path = Path("."),
     progress: LakeEnvironmentProgress | None = None,

@@ -10,8 +10,9 @@ This repository includes `stelarctl`, the operator CLI for preparing a STELAR
 KLMS lake deployment before running Tanka. It creates the workspace layout,
 creates Tanka environment directories, validates product specs, generates
 `<productName>_fullspec.json`, records the active fullspec at
-`spec.stelar.active_product`, updates `main.jsonnet`/`spec.json`, runs
-cluster preflight checks, and creates missing deployment Secrets.
+`spec.stelar.active_product`, writes `spec.json`, runs cluster preflight checks,
+and creates missing deployment Secrets. `lake add` copies the managed
+`main.jsonnet` entrypoint from the vendored deployment library.
 
 The intended operator install path is:
 
@@ -28,12 +29,15 @@ cd ./lake-workspace
 jb install
 stelarctl lake add dev --context my-kube-context --namespace stelar-dev
 stelarctl lake create --minimal minimal dev --namespace stelar-dev
-stelarctl lake activate minimal dev
 stelarctl lake verify dev --context my-kube-context --namespace stelar-dev
 stelarctl lake bootstrap dev
 tk apply dev
 stelarctl lake status dev
 ```
+
+The first created product is activated automatically. Use
+`stelarctl lake activate PRODUCT_NAME ENV` only when switching to a different
+generated product or after regenerating an existing active product.
 
 Cleanup is split by ownership: use `tk delete dev` for Tanka-rendered
 resources, and `stelarctl lake purge-secrets dev` when you also want to delete

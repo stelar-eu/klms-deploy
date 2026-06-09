@@ -7,7 +7,7 @@ from types import SimpleNamespace
 from typer.testing import CliRunner
 
 from stelar.deploy.cli import app
-from stelar.deploy.operations import CommandError, init_lake_environment, inspect_lake_status
+from stelar.deploy.operations import CommandError, add_lake_environment, inspect_lake_status
 from stelar.deploy.operations.bootstrap_state import product_sha256, target_sha256
 from stelar.deploy.operations import lake_status as status_commands
 
@@ -39,7 +39,7 @@ def make_workspace(path: Path) -> Path:
 
 
 def write_status_environment(workspace: Path, fullspec: dict) -> Path:
-    init_lake_environment("dev", workspace)
+    add_lake_environment("dev", workspace)
     environment_dir = workspace / "dev"
     spec = {
         "apiVersion": "tanka.dev/v1alpha1",

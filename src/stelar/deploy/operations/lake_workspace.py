@@ -45,7 +45,7 @@ class WorkspaceInfo:
     environments: tuple[WorkspaceEnvironmentInfo, ...]
 
 
-def init_lake_workspace(
+def init_workspace(
     workspace_path: Path,
     *,
     force: bool = False,
@@ -156,8 +156,6 @@ def _generated_product_names(environment_dir: Path) -> tuple[str, ...]:
     suffix = "_fullspec.json"
     for fullspec_path in sorted(environment_dir.glob(f"*{suffix}")):
         name = fullspec_path.name[: -len(suffix)]
-        if name == "product":
-            continue
         if (environment_dir / f"{name}.json").is_file():
             names.append(name)
     return tuple(names)

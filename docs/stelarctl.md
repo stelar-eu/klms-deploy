@@ -85,12 +85,15 @@ cd ./lake-workspace
 jb install
 stelarctl lake add dev --context my-kube-context --namespace stelar-dev
 stelarctl lake create --minimal minimal dev --namespace stelar-dev
-stelarctl lake activate minimal dev
 stelarctl lake verify dev --context my-kube-context --namespace stelar-dev
 stelarctl lake bootstrap dev
 tk apply dev
 stelarctl lake status dev
 ```
+
+The first created product is activated automatically. Run
+`stelarctl lake activate PRODUCT_NAME ENV` only when switching to another
+generated product or after regenerating the active product.
 
 The environment argument is a workspace-relative path. `dev` creates `dev/`; `lakes/prod` creates `lakes/prod/`.
 
@@ -116,6 +119,8 @@ stelarctl lake create --minimal PRODUCT_NAME ENV
              --manual-secrets, --infer-storage-from-cluster
 stelarctl lake activate PRODUCT_NAME ENV
     options: --workspace WORKSPACE
+stelarctl lake manual-tls-template [OUTPUT]
+    options: --force
 stelarctl lake verify ENV
     options: --workspace WORKSPACE, --context CONTEXT, --namespace NAMESPACE
 stelarctl lake status ENV
@@ -125,8 +130,6 @@ stelarctl lake purge-secrets ENV
     options: --workspace WORKSPACE, --context CONTEXT, --namespace NAMESPACE, --yes
 stelarctl lake bootstrap ENV
     options: --workspace WORKSPACE, --skip-preflight
-stelarctl lake manual-tls-template [OUTPUT]
-    options: --force
 ```
 
 ## Commands
@@ -518,7 +521,10 @@ git push origin stelarctl-v0.1.12
 
 The tag must use `stelarctl-vMAJOR.MINOR.PATCH` or
 `stelarctl-vMAJOR.MINOR.PATCH.postN`. The workflow copies that version into
-`pyproject.toml` before building and publishing the wheel.
+`pyproject.toml` before building and publishing the wheel. PyPI versions are
+immutable: if the same `stelarctl-v...` version was already uploaded, the
+publish job fails with a file-already-exists error. Use a new patch version
+or a `.postN` tag for every new package upload.
 
 ## Code layout
 

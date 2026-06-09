@@ -9,7 +9,6 @@ from typing import Any
 import yaml
 from pydantic import ValidationError
 
-from ..environ import Environment
 from ..models.product import Product
 from ..workspace import Workspace
 
@@ -51,15 +50,6 @@ def load_product_data(product_path: Path) -> JsonObject:
         raise CommandError(f"Product file {product_path} must contain an object")
 
     return product_data
-
-
-def validate_environment(workspace_path: Path, environment: str) -> Environment:
-    """Validate that a workspace and environment exist."""
-    workspace = validate_workspace(workspace_path)
-    try:
-        return workspace.env(environment)
-    except ValueError as exc:
-        raise CommandError(str(exc)) from exc
 
 
 def validate_product_data(product_path: Path, product_data: JsonObject) -> Product:

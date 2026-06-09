@@ -15,10 +15,10 @@ from ..cli_help import (
     LAKE_BOOTSTRAP_HELP,
     LAKE_VERIFY_EPILOG,
     LAKE_VERIFY_HELP,
-    INIT_LAKE_ENVIRONMENT_EPILOG,
-    INIT_LAKE_ENVIRONMENT_HELP,
-    INIT_LAKE_EPILOG,
-    INIT_LAKE_HELP,
+    LAKE_ADD_EPILOG,
+    LAKE_ADD_HELP,
+    LAKE_EPILOG,
+    LAKE_HELP,
     LAKE_CREATE_EPILOG,
     LAKE_CREATE_HELP,
     LAKE_INFO_EPILOG,
@@ -37,7 +37,7 @@ from ..cli_help import (
 )
 from ..operations.lake_workspace import WorkspaceEnvironmentInfo
 from .formatting import item_list, presence
-from .lakespec import lake_activate_command, lake_create_command
+from .lake_product import lake_activate_command, lake_create_command
 from .progress import (
     TyperClusterProgress,
     TyperLakeEnvironmentProgress,
@@ -48,7 +48,7 @@ from ..operations import (
     PreflightAccessError,
     bootstrap_lake,
     check_lake_cluster,
-    init_lake_environment,
+    add_lake_environment,
     inspect_lake_status,
     lake_environment_info,
     plan_lake_secret_purge,
@@ -59,85 +59,85 @@ from ..operations import (
 )
 
 
-def register_init_lake_commands(app: typer.Typer) -> None:
+def register_lake_commands(app: typer.Typer) -> None:
     """Register `lake` and its subcommands on the root CLI app."""
-    init_lake_app = typer.Typer(
-        help=INIT_LAKE_HELP,
-        epilog=INIT_LAKE_EPILOG,
+    lake_app = typer.Typer(
+        help=LAKE_HELP,
+        epilog=LAKE_EPILOG,
         invoke_without_command=True,
         callback=show_help_on_no_args,
         context_settings=CONTEXT_SETTINGS,
     )
-    init_lake_app.command(
+    lake_app.command(
         "add",
-        help=INIT_LAKE_ENVIRONMENT_HELP,
-        epilog=INIT_LAKE_ENVIRONMENT_EPILOG,
+        help=LAKE_ADD_HELP,
+        epilog=LAKE_ADD_EPILOG,
         short_help="Add an environment directory",
-    )(init_lake_environment_command)
-    init_lake_app.command(
+    )(lake_add_command)
+    lake_app.command(
         "create",
         help=LAKE_CREATE_HELP,
         epilog=LAKE_CREATE_EPILOG,
         short_help="Create product files",
     )(lake_create_command)
-    init_lake_app.command(
+    lake_app.command(
         "activate",
         help=LAKE_ACTIVATE_HELP,
         epilog=LAKE_ACTIVATE_EPILOG,
         short_help="Set active product",
     )(lake_activate_command)
-    init_lake_app.command(
+    lake_app.command(
         "list",
         help=LAKE_LIST_HELP,
         epilog=LAKE_LIST_EPILOG,
         short_help="List lake environments",
     )(lake_list_command)
-    init_lake_app.command(
+    lake_app.command(
         "info",
         help=LAKE_INFO_HELP,
         epilog=LAKE_INFO_EPILOG,
         short_help="Show one lake environment",
     )(lake_info_command)
-    init_lake_app.command(
+    lake_app.command(
         "remove",
         help=LAKE_REMOVE_HELP,
         epilog=LAKE_REMOVE_EPILOG,
         short_help="Remove a lake environment",
     )(lake_remove_command)
-    init_lake_app.command(
+    lake_app.command(
         "manual-tls-template",
         help=LAKE_MANUAL_TLS_TEMPLATE_HELP,
         epilog=LAKE_MANUAL_TLS_TEMPLATE_EPILOG,
         short_help="Write manual TLS template",
     )(lake_manual_tls_template_command)
-    init_lake_app.command(
+    lake_app.command(
         "verify",
         help=LAKE_VERIFY_HELP,
         epilog=LAKE_VERIFY_EPILOG,
         short_help="Verify cluster readiness",
     )(lake_verify_command)
-    init_lake_app.command(
+    lake_app.command(
         "status",
         help=LAKE_STATUS_HELP,
         epilog=LAKE_STATUS_EPILOG,
         short_help="Inspect deployment status",
     )(lake_status_command)
-    init_lake_app.command(
+    lake_app.command(
         "purge-secrets",
         help=LAKE_PURGE_SECRETS_HELP,
         epilog=LAKE_PURGE_SECRETS_EPILOG,
         short_help="Delete bootstrap Secrets",
     )(lake_purge_secrets_command)
-    init_lake_app.command(
+    lake_app.command(
         "bootstrap",
         help=LAKE_BOOTSTRAP_HELP,
         epilog=LAKE_BOOTSTRAP_EPILOG,
         short_help="Prepare cluster metadata and secrets",
     )(lake_bootstrap_command)
-    app.add_typer(init_lake_app, name="lake")
+    app.add_typer(lake_app, name="lake")
 
 
-def init_lake_environment_command(
+def lake_add_command(
     env: Annotated[
         str,
         typer.Argument(help="Workspace-relative lake environment path"),
@@ -180,7 +180,7 @@ def init_lake_environment_command(
     ] = False,
 ) -> None:
     try:
-        init_lake_environment(
+        add_lake_environment(
             env,
             workspace,
             progress=TyperLakeEnvironmentProgress(),

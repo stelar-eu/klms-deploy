@@ -17,7 +17,7 @@ from ..cli_help import (
     WORKSPACE_INIT_HELP,
     show_help_on_no_args,
 )
-from ..operations import CommandError, init_lake_workspace, workspace_info
+from ..operations import CommandError, init_workspace, workspace_info
 from ..operations.lake_workspace import WorkspaceInfo
 from .formatting import item_list, presence, yes_no
 from .progress import TyperLakeWorkspaceProgress
@@ -63,7 +63,7 @@ def workspace_init_command(
     ] = False,
 ) -> None:
     try:
-        init_lake_workspace(
+        init_workspace(
             workspace,
             force=force,
             progress=TyperLakeWorkspaceProgress(),
