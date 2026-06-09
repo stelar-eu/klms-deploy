@@ -13,9 +13,7 @@ from kubernetes.client.rest import ApiException
 from .bootstrap_state import (
     bootstrap_secret_names,
     bootstrapped_product_or_none,
-    bootstrapped_target_fields_or_none,
     record_bootstrapped_product,
-    reject_bootstrap_target_overrides,
     validate_bootstrap_product_matches,
     validate_bootstrap_target_matches,
 )
@@ -30,13 +28,12 @@ from .deployment_config import (
 from .environment_spec import (
     environment_active_product,
     environment_active_product_name_or_none,
-    environment_context_name_or_none,
     environment_namespace,
-    environment_namespace_or_none,
     update_environment_spec_json,
 )
+from .environment_target import EnvironmentTarget, resolve_environment_target
 from .fullspec_validation import validate_config_scheme_tls_consistency
-from .kube_context import load_kube_context, resolve_kube_context, resolve_kube_namespace
+from .kube_context import load_kube_context
 from .kubernetes_secrets import (
     SecretReadForbidden,
     apply_product_secrets,
@@ -71,7 +68,6 @@ def bootstrap_lake(
     progress = progress or ClusterProgress()
     workspace = validate_workspace(workspace_path)
     environment_dir = initialized_lake_environment_dir(workspace, environment)
-    product_data: dict[str, object] = {}
     spec_path = environment_dir / "spec.json"
     spec_json = read_environment_json(spec_path)
     product_fullspec = environment_active_product(spec_json)
@@ -84,7 +80,7 @@ def bootstrap_lake(
     if bootstrapped_product_or_none(spec_json) is not None:
         # Once bootstrap state exists, target restoration is the first invariant.
         # Do not mask a broken target with unrelated product validation errors.
-        context_name, namespace = _resolve_bootstrap_target(spec_json, progress)
+        target = _resolve_bootstrap_target(environment, spec_json, progress)
         validate_bootstrap_product_matches(spec_json, product_fullspec)
         config = deployment_config(product_fullspec)
         validate_config_scheme_tls_consistency(
@@ -99,8 +95,10 @@ def bootstrap_lake(
             config,
             source="spec.stelar.active_product",
         )
-        context_name, namespace = _resolve_bootstrap_target(spec_json, progress)
+        target = _resolve_bootstrap_target(environment, spec_json, progress)
 
+    context_name = target.context
+    namespace = target.namespace
     storage_class_names = configured_storage_class_names(config)
     scheme = deployment_scheme(config)
     cluster_issuer = cluster_issuer_name(config, scheme)
@@ -109,7 +107,6 @@ def bootstrap_lake(
     update_environment_spec_json(
         spec_path,
         environment_name,
-        product_data,
         context_name=context_name,
         namespace=namespace,
     )
@@ -173,26 +170,18 @@ def check_lake_cluster(
     spec_json = read_environment_json(environment_dir / "spec.json")
     product_fullspec = environment_active_product(spec_json)
 
-    bootstrapped_target = bootstrapped_target_fields_or_none(spec_json)
-    if bootstrapped_target is not None:
-        validate_bootstrap_target_matches(spec_json, *bootstrapped_target)
-        reject_bootstrap_target_overrides(
-            spec_json,
-            context=context,
-            namespace=namespace,
-        )
-        context_name = resolve_kube_context(bootstrapped_target[0])
-        check_namespace = bootstrapped_target[1]
-    else:
-        context_name = _required_check_context(environment, spec_json, context)
-        check_namespace = _required_check_namespace(environment, spec_json, namespace)
+    target = resolve_environment_target(
+        environment,
+        spec_json,
+        context=context,
+        namespace=namespace,
+    )
 
     config = deployment_config(product_fullspec)
     validate_config_scheme_tls_consistency(
         config,
         source="spec.stelar.active_product",
     )
-    validate_bootstrap_target_matches(spec_json, context_name, check_namespace)
     validate_bootstrap_product_matches(spec_json, product_fullspec)
     storage_class_names = configured_storage_class_names(config)
     scheme = deployment_scheme(config)
@@ -200,9 +189,9 @@ def check_lake_cluster(
 
     _validate_manual_tls_inputs_if_selected(environment_dir, config)
 
-    load_kube_context(context_name)
+    load_kube_context(target.context)
     run_preflight_checks(
-        check_namespace,
+        target.namespace,
         storage_class_names,
         cluster_issuer,
         kube_client_module=kube_client,
@@ -211,32 +200,26 @@ def check_lake_cluster(
 
 
 def _resolve_bootstrap_target(
+    environment: str,
     spec_json: dict[str, object],
     progress: ClusterProgress,
-) -> tuple[str, str]:
-    configured_context = environment_context_name_or_none(spec_json)
-    configured_namespace = environment_namespace_or_none(spec_json)
-
-    bootstrapped_target = bootstrapped_target_fields_or_none(spec_json)
-    if bootstrapped_target is not None:
-        validate_bootstrap_target_matches(spec_json, *bootstrapped_target)
-        context_name = resolve_kube_context(bootstrapped_target[0])
-        namespace = bootstrapped_target[1]
-        return context_name, namespace
-
-    if configured_context is None:
-        context_name = resolve_kube_context(None)
-        _notify(progress, "inferred_context", context_name)
-    else:
-        context_name = resolve_kube_context(configured_context)
-
-    if configured_namespace is None:
-        namespace = resolve_kube_namespace(context_name)
-        _notify(progress, "inferred_namespace", namespace, context_name)
-    else:
-        namespace = configured_namespace
-
-    return context_name, namespace
+) -> EnvironmentTarget:
+    return resolve_environment_target(
+        environment,
+        spec_json,
+        infer_missing=True,
+        on_inferred_context=lambda context_name: _notify(
+            progress,
+            "inferred_context",
+            context_name,
+        ),
+        on_inferred_namespace=lambda namespace, context_name: _notify(
+            progress,
+            "inferred_namespace",
+            namespace,
+            context_name,
+        ),
+    )
 
 
 def _active_product_name_or_none(
@@ -264,48 +247,6 @@ def _active_product_name_or_none(
     return None
 
 
-def _required_check_context(
-    environment: str,
-    spec_json: dict[str, object],
-    context: str | None,
-) -> str:
-    if context is not None:
-        return resolve_kube_context(_required_flag_value(context, "context"))
-
-    configured_context = environment_context_name_or_none(spec_json)
-    if configured_context is None:
-        raise CommandError(
-            f"Lake environment {environment!r} has no context in spec.json. "
-            "Rerun with --context CONTEXT, or let `stelarctl lake bootstrap` "
-            "infer and write it."
-        )
-    return resolve_kube_context(configured_context)
-
-
-def _required_check_namespace(
-    environment: str,
-    spec_json: dict[str, object],
-    namespace: str | None,
-) -> str:
-    if namespace is not None:
-        return _required_flag_value(namespace, "namespace")
-
-    configured_namespace = environment_namespace_or_none(spec_json)
-    if configured_namespace is None:
-        raise CommandError(
-            f"Lake environment {environment!r} has no namespace in spec.json. "
-            "Rerun with --namespace NAMESPACE, or let `stelarctl lake bootstrap` "
-            "infer and write it."
-        )
-    return configured_namespace
-
-
-def _required_flag_value(value: str, name: str) -> str:
-    if not isinstance(value, str) or not value.strip():
-        raise CommandError(f"--{name} must be a non-empty value")
-    return value.strip()
-
-
 def _validate_manual_tls_inputs_if_selected(
     environment_dir: Path,
     config: dict[str, object],
@@ -322,7 +263,6 @@ def _validate_manual_tls_inputs_if_selected(
             "lake verify."
         )
     read_manual_tls_secrets(manual_tls_path, config)
-
 
 
 def _notify(progress: ClusterProgress, hook: str, *args: object) -> None:

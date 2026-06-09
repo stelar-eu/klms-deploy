@@ -13,20 +13,15 @@ from kubernetes.client.rest import ApiException
 from . import kube_context as kube_context_helpers
 from .bootstrap_state import (
     bootstrap_secret_names,
-    bootstrapped_target_fields_or_none,
-    reject_bootstrap_target_overrides,
+    bootstrapped_product_or_none,
     validate_bootstrap_product_matches,
-    validate_bootstrap_target_matches,
 )
 from .common import CommandError, JsonObject, read_environment_json, validate_workspace
 from .deployment_config import deployment_config
-from .environment_spec import (
-    environment_active_product,
-    environment_context_name_or_none,
-    environment_namespace_or_none,
-)
+from .environment_spec import environment_active_product
+from .environment_target import resolve_environment_target
 from .fullspec_validation import validate_config_scheme_tls_consistency
-from .kube_context import load_kube_context, resolve_kube_context
+from .kube_context import load_kube_context
 from .lake_environment import initialized_lake_environment_dir
 from .secret_resources import expected_bootstrap_secret_names
 
@@ -155,29 +150,32 @@ def inspect_lake_status(
     spec_json = read_environment_json(environment_dir / "spec.json")
     product_fullspec = environment_active_product(spec_json)
 
-    bootstrapped_target = bootstrapped_target_fields_or_none(spec_json)
-    if bootstrapped_target is not None:
-        validate_bootstrap_target_matches(spec_json, *bootstrapped_target)
-        reject_bootstrap_target_overrides(
+    if bootstrapped_product_or_none(spec_json) is None:
+        config = deployment_config(product_fullspec)
+        validate_config_scheme_tls_consistency(
+            config,
+            source="spec.stelar.active_product",
+        )
+        target = resolve_environment_target(
+            environment,
             spec_json,
             context=context,
             namespace=namespace,
         )
-        context_name = resolve_kube_context(bootstrapped_target[0])
-        status_namespace = bootstrapped_target[1]
-        config = deployment_config(product_fullspec)
-        validate_config_scheme_tls_consistency(
-            config,
-            source="spec.stelar.active_product",
-        )
     else:
+        target = resolve_environment_target(
+            environment,
+            spec_json,
+            context=context,
+            namespace=namespace,
+        )
         config = deployment_config(product_fullspec)
         validate_config_scheme_tls_consistency(
             config,
             source="spec.stelar.active_product",
         )
-        context_name = _status_context(environment, spec_json, context)
-        status_namespace = _status_namespace(environment, spec_json, namespace)
+    context_name = target.context
+    status_namespace = target.namespace
 
     selected_components = extract_selected_components(config)
     expected_secrets = bootstrap_secret_names(
@@ -609,44 +607,6 @@ def _sde_components(config: JsonObject) -> tuple[str, ...]:
         if isinstance(components, list) and all(isinstance(item, str) for item in components):
             return tuple(components)
     return SDE_DEFAULT_COMPONENTS
-
-
-def _status_context(
-    environment: str,
-    spec_json: JsonObject,
-    context: str | None,
-) -> str:
-    if context is not None:
-        return resolve_kube_context(_required_flag_value(context, "context"))
-    configured_context = environment_context_name_or_none(spec_json)
-    if configured_context is None:
-        raise CommandError(
-            f"Lake environment {environment!r} has no context in spec.json. "
-            "Rerun with --context CONTEXT or run lake bootstrap to infer and write it."
-        )
-    return resolve_kube_context(configured_context)
-
-
-def _status_namespace(
-    environment: str,
-    spec_json: JsonObject,
-    namespace: str | None,
-) -> str:
-    if namespace is not None:
-        return _required_flag_value(namespace, "namespace")
-    configured_namespace = environment_namespace_or_none(spec_json)
-    if configured_namespace is None:
-        raise CommandError(
-            f"Lake environment {environment!r} has no namespace in spec.json. "
-            "Rerun with --namespace NAMESPACE or run lake bootstrap to infer and write it."
-        )
-    return configured_namespace
-
-
-def _required_flag_value(value: str, name: str) -> str:
-    if not isinstance(value, str) or not value.strip():
-        raise CommandError(f"--{name} must be a non-empty value")
-    return value.strip()
 
 
 def _string_list(value: object, field_name: str) -> tuple[str, ...]:

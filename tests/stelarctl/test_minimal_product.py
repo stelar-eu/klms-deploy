@@ -176,8 +176,13 @@ def test_feature_model_rejects_short_minio_root_user():
 
 def test_feature_model_rejects_multiple_tls_modes():
     product = build_minimal_product(minimal_config())
-    product["spec"]["ingress"]["tls"] = ["cert_manager", "self_signed"]
-    product["spec"]["ingress"]["self_signed"] = {}
+    product["spec"]["ingress"]["tls"] = ["cert_manager", "manual_tls"]
+    product["spec"]["ingress"]["manual_tls"] = {
+        "PRIMARY_TLS_SECRET_NAME": "klms-manual-tls",
+        "KEYCLOAK_TLS_SECRET_NAME": "kc-manual-tls",
+        "MINIO_API_TLS_SECRET_NAME": "minio-manual-tls",
+        "REGISTRY_TLS_SECRET_NAME": "img-manual-tls",
+    }
 
     with pytest.raises(ProductValidationFailure, match="Exactly one member of group tls"):
         ProductValidator(feature_model).validate(Product.model_validate(product))

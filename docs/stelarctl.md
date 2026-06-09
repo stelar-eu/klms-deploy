@@ -252,7 +252,7 @@ Important validation rules:
 
 - `SCHEME: http` requires `ingress.tls: [no_tls]`.
 - `SCHEME: http` requires `minio.INSECURE_MC_CLIENT: "true"`.
-- `SCHEME: https` requires one TLS mode: `cert_manager`, `manual_tls`, or `self_signed`.
+- `SCHEME: https` requires one TLS mode: `cert_manager` or `manual_tls`.
 - `manual_tls` requires `PRIMARY_TLS_SECRET_NAME`, `KEYCLOAK_TLS_SECRET_NAME`, `MINIO_API_TLS_SECRET_NAME`, and `REGISTRY_TLS_SECRET_NAME`.
 
 If validation fails, no deployable fullspec should be treated as ready.

@@ -156,13 +156,11 @@ CKAN auth Secret behavior is currently inconsistent with the fullspec inventory.
 
 `SCHEME: http` requires `ingress.tls: [no_tls]` and `minio.INSECURE_MC_CLIENT: "true"`.
 
-`SCHEME: https` rejects `no_tls`. The model and validator currently accept `cert_manager`, `manual_tls`, and `self_signed`.
+`SCHEME: https` rejects `no_tls`. The model and validator currently accept `cert_manager` and `manual_tls`.
 
 `cert_manager` TLS expects `ingress.cert_manager.ClusterIssuer`. Preflight validates cert-manager CRDs, cert-manager deployments, and the configured ClusterIssuer. Jsonnet renders cert-manager Certificate resources for the known exposed domains.
 
 `manual_tls` expects four Secret names in the active fullspec and a local `ENV/manual_tls.yaml` mapping endpoint names to directories containing `tls.crt` and `tls.key`. Bootstrap validates and applies those TLS Secrets.
-
-`self_signed` is currently accepted by the feature model and validator but is not implemented by bootstrap or Jsonnet rendering. HTTPS ingresses will reference TLS Secret names that are not created by stelarctl. This is a known issue.
 
 The feature model currently lists both `nginx` and `traefik` ingress controllers. Rendering and preflight currently hardcode nginx. A product selecting `traefik` is valid in the model but will still render and verify against nginx. This is a known issue.
 
@@ -212,7 +210,6 @@ Component rendering is static-registry based. Jsonnet computed imports are not u
 
 CKAN auth Secret creation is not fully fullspec-driven. Fix by deriving the Secret name and values from `config.ckan.CKAN_AUTH_SECRET_NAME`, `config.ckan.CKAN_SESSION_KEY`, and `config.ckan.CKAN_JWT_KEY`.
 
-`self_signed` TLS is model-valid but not operationally implemented. Either implement Secret/certificate creation for self-signed mode or remove/reject it.
 
 `traefik` ingress controller selection is model-valid but rendering/preflight are nginx-only. Either implement controller-specific behavior or remove/reject `traefik`.
 

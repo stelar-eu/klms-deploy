@@ -137,7 +137,7 @@ LAKE_CREATE_EPILOG = dedent(
     manual-tls-template when manually supplied certificates are needed.
 
     Validation highlights: http requires no_tls and minio.INSECURE_MC_CLIENT=true;
-    https requires cert_manager, manual_tls, or self_signed; manual_tls requires
+    https requires cert_manager or manual_tls; manual_tls requires
     PRIMARY_TLS_SECRET_NAME, KEYCLOAK_TLS_SECRET_NAME, MINIO_API_TLS_SECRET_NAME,
     and REGISTRY_TLS_SECRET_NAME.
     """

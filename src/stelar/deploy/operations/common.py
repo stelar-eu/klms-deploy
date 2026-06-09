@@ -98,20 +98,6 @@ def product_spec(product_data: JsonObject) -> JsonObject:
     return spec
 
 
-def product_author(product_data: JsonObject) -> str | None:
-    author = product_data.get("author")
-    if author is None:
-        spec = product_data.get("spec")
-        if not isinstance(spec, dict):
-            return None
-        author = spec.get("author")
-    if author is None:
-        return None
-    if not isinstance(author, str) or not author:
-        raise CommandError("Product author must be a non-empty string")
-    return author
-
-
 def ensure_object(data: JsonObject, key: str) -> JsonObject:
     value = data.setdefault(key, {})
     if not isinstance(value, dict):

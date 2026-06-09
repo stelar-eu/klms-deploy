@@ -1588,7 +1588,10 @@ def test_bootstrap_lake_rejects_http_with_tls_mode(tmp_path, monkeypatch):
     init_lake_environment("dev", workspace)
     environment_dir = write_generated_lake_files(workspace, scheme="http")
     fullspec = read_json(environment_dir / "product_fullspec.json")
-    fullspec["klms"]["ingress"] = {"tls": ["self_signed"], "self_signed": {}}
+    fullspec["klms"]["ingress"] = {
+        "tls": ["cert_manager"],
+        "cert_manager": {"ClusterIssuer": "letsencrypt-production"},
+    }
     write_json(environment_dir / "product_fullspec.json", fullspec)
     set_cluster_preflight(monkeypatch)
 

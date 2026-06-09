@@ -9,7 +9,6 @@ from .common import (
     JsonObject,
     ensure_object,
     existing_object,
-    product_author,
     read_environment_json,
     write_environment_json,
 )
@@ -136,21 +135,17 @@ def validate_environment_target_fields(
 def update_environment_spec_json(
     spec_path: Path,
     environment_name: Path,
-    product_data: JsonObject,
     *,
     context_name: str | None = None,
     namespace: str | None = None,
-    active_product: JsonObject | None = None,
 ) -> None:
     """Write Tanka metadata and any provided context/namespace into spec.json."""
     spec_json = read_environment_json(spec_path)
     update_environment_spec(
         spec_json,
         environment_name,
-        product_data,
         context_name=context_name,
         namespace=namespace,
-        active_product=active_product,
     )
     write_environment_json(spec_path, spec_json)
 
@@ -158,11 +153,9 @@ def update_environment_spec_json(
 def update_environment_spec(
     spec_json: JsonObject,
     environment_name: Path,
-    product_data: JsonObject,
     *,
     context_name: str | None = None,
     namespace: str | None = None,
-    active_product: JsonObject | None = None,
 ) -> None:
     """Mutate a spec.json object with Tanka metadata and optional cluster fields."""
     context_name = _validate_optional_string(context_name, "context")
@@ -173,8 +166,6 @@ def update_environment_spec(
     metadata["namespace"] = f"{environment_entrypoint}/main.jsonnet"
 
     tk_spec = ensure_object(spec_json, "spec")
-    if active_product is not None:
-        set_active_product(spec_json, active_product)
     if context_name is not None:
         tk_spec["contextNames"] = [context_name]
     if namespace is not None:
@@ -189,10 +180,7 @@ def update_environment_spec(
     labels.setdefault("stelar.deployment", "main")
 
     annotations = ensure_object(resource_defaults, "annotations")
-    author = product_author(product_data)
-    if author is not None:
-        annotations["stelar.eu/author"] = author
-    elif annotations.get("stelar.eu/author") == "<author>":
+    if annotations.get("stelar.eu/author") == "<author>":
         del annotations["stelar.eu/author"]
 
 

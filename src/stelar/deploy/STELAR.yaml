@@ -624,7 +624,6 @@ root:
                       type: string
                     REGISTRY_TLS_SECRET_NAME:
                       type: string
-                - name: self_signed
 
         - name: network_policy
 
