@@ -102,22 +102,27 @@ def update_environment_target_fields(
     *,
     context_name: str | None = None,
     namespace: str | None = None,
-) -> None:
-    """Write optional Kubernetes target fields without changing product state."""
+) -> set[str]:
+    """Write optional Kubernetes target fields and return changed field names."""
     context_name, namespace = validate_environment_target_fields(
         context_name=context_name,
         namespace=namespace,
     )
     if context_name is None and namespace is None:
-        return
+        return set()
 
+    updated_fields: set[str] = set()
     spec_json = read_environment_json(spec_path)
     tk_spec = ensure_object(spec_json, "spec")
-    if context_name is not None:
+    if context_name is not None and tk_spec.get("contextNames") != [context_name]:
         tk_spec["contextNames"] = [context_name]
-    if namespace is not None:
+        updated_fields.add("context")
+    if namespace is not None and tk_spec.get("namespace") != namespace:
         tk_spec["namespace"] = namespace
-    write_environment_json(spec_path, spec_json)
+        updated_fields.add("namespace")
+    if updated_fields:
+        write_environment_json(spec_path, spec_json)
+    return updated_fields
 
 
 def validate_environment_target_fields(

@@ -99,6 +99,13 @@ def lake_create_command(
             help="Infer minimal-product StorageClass values from kubectl",
         ),
     ] = False,
+    print_fullspec: Annotated[
+        bool,
+        typer.Option(
+            "--print-fullspec",
+            help="Print the generated fullspec JSON to stdout",
+        ),
+    ] = False,
 ) -> None:
     if minimal:
         _create_minimal_lake(
@@ -109,6 +116,7 @@ def lake_create_command(
             namespace=namespace,
             manual_secrets=manual_secrets,
             infer_storage_from_cluster=infer_storage_from_cluster,
+            print_fullspec=print_fullspec,
         )
         return
 
@@ -139,6 +147,12 @@ def lake_create_command(
             workspace,
             product_name=product_name,
         )
+        _echo_generated_product_paths(
+            env,
+            workspace,
+            product_name,
+            err=print_fullspec,
+        )
         _warn_if_regenerated_active_product_is_stale(
             env,
             workspace,
@@ -151,7 +165,8 @@ def lake_create_command(
         typer.echo(str(exc), err=True)
         raise typer.Exit(code=1) from exc
 
-    typer.echo(json.dumps(fullspec, indent=2))
+    if print_fullspec:
+        typer.echo(json.dumps(fullspec, indent=2))
 
 
 def _create_minimal_lake(
@@ -163,6 +178,7 @@ def _create_minimal_lake(
     namespace: str | None,
     manual_secrets: bool,
     infer_storage_from_cluster: bool,
+    print_fullspec: bool,
 ) -> None:
     if environment is None:
         raise typer.BadParameter(
@@ -206,11 +222,12 @@ def _create_minimal_lake(
             product_source=product_path,
             product_name=product_name,
         )
-        update_environment_target_fields(
+        updated_target_fields = update_environment_target_fields(
             spec_path,
             context_name=context,
             namespace=namespace,
         )
+        _echo_updated_target_fields(updated_target_fields, err=print_fullspec)
         _warn_if_regenerated_active_product_is_stale(
             environment,
             workspace,
@@ -218,16 +235,42 @@ def _create_minimal_lake(
             fullspec,
         )
 
-        typer.echo(f"Wrote minimal product: {product_path}")
-        typer.echo(f"Wrote product fullspec: {product_fullspec_path}")
+        typer.echo(f"Wrote minimal product: {product_path}", err=print_fullspec)
+        typer.echo(f"Wrote product fullspec: {product_fullspec_path}", err=print_fullspec)
     except CommandError as exc:
         raise typer.BadParameter(str(exc)) from exc
     except ProductValidationFailure as exc:
         typer.echo(str(exc), err=True)
         raise typer.Exit(code=1) from exc
 
-    typer.echo(json.dumps(fullspec, indent=2))
+    if print_fullspec:
+        typer.echo(json.dumps(fullspec, indent=2))
 
+
+def _echo_generated_product_paths(
+    environment: str,
+    workspace: Path,
+    product_name: str,
+    *,
+    err: bool,
+) -> None:
+    environment_path = lake_environment_info(environment, workspace).path
+    typer.echo(
+        f"Wrote product: {environment_path / product_json_filename(product_name)}",
+        err=err,
+    )
+    typer.echo(
+        "Wrote product fullspec: "
+        f"{environment_path / product_fullspec_json_filename(product_name)}",
+        err=err,
+    )
+
+
+def _echo_updated_target_fields(updated_fields: set[str], *, err: bool) -> None:
+    if "context" in updated_fields:
+        typer.echo("Updated environment context in spec.json", err=err)
+    if "namespace" in updated_fields:
+        typer.echo("Updated environment namespace in spec.json", err=err)
 
 
 def _warn_if_regenerated_active_product_is_stale(

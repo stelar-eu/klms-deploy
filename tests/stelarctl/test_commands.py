@@ -3656,7 +3656,7 @@ class HttpsNoTlsProductValidator:
         }
 
 
-def test_lake_create_cli_writes_files_and_prints_fullspec(
+def test_lake_create_cli_writes_files_without_printing_fullspec_by_default(
     tmp_path,
     monkeypatch,
 ):
@@ -3682,6 +3682,61 @@ def test_lake_create_cli_writes_files_and_prints_fullspec(
     )
 
     assert result.exit_code == 0
+    assert "Wrote product:" in result.output
+    assert "Wrote product fullspec:" in result.output
+    assert "analytics_fullspec.json" in result.output
+    assert '"klms"' not in result.output
+    environment_dir = workspace / "dev"
+    assert (environment_dir / "analytics.json").is_file()
+    expected_fullspec = {
+        "klms": {
+            "generated": True,
+            "SCHEME": "http",
+            "minio": {
+                "INSECURE_MC_CLIENT": "true",
+                "MINIO_ROOT_USER": "root",
+                "MINIO_ROOT_PASSWORD": "minio-root-password",
+            },
+            "ingress": {"tls": ["no_tls"], "no_tls": {}},
+        }
+    }
+    assert read_json(environment_dir / "analytics_fullspec.json") == expected_fullspec
+    fullspec = read_json(environment_dir / "analytics_fullspec.json")
+    assert not (environment_dir / "product.json").exists()
+    assert not (environment_dir / "product_fullspec.json").exists()
+    assert read_json(environment_dir / "spec.json")["spec"]["stelar"]["active_product"] == fullspec
+    assert "build_lake(environment_spec)" in (
+        environment_dir / "main.jsonnet"
+    ).read_text(encoding="utf-8")
+
+
+def test_lake_create_cli_prints_fullspec_when_requested(
+    tmp_path,
+    monkeypatch,
+):
+    workspace = make_workspace(tmp_path / "workspace")
+    add_lake_environment("dev", workspace)
+    product_path = tmp_path / "analytics.yaml"
+    product_path.write_text(
+        "author: operator@example.com\nspec:\n  namespace: test\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(lake_product_ops, "ProductValidator", FakeProductValidator)
+
+    result = runner.invoke(
+        app,
+        [
+            "lake",
+            "create",
+            str(product_path),
+            "dev",
+            "--workspace",
+            str(workspace),
+            "--print-fullspec",
+        ],
+    )
+
+    assert result.exit_code == 0
     assert json.loads(result.stdout) == {
         "klms": {
             "generated": True,
@@ -3694,27 +3749,7 @@ def test_lake_create_cli_writes_files_and_prints_fullspec(
             "ingress": {"tls": ["no_tls"], "no_tls": {}},
         }
     }
-    environment_dir = workspace / "dev"
-    assert (environment_dir / "analytics.json").is_file()
-    assert read_json(environment_dir / "analytics_fullspec.json") == {
-        "klms": {
-            "generated": True,
-            "SCHEME": "http",
-            "minio": {
-                "INSECURE_MC_CLIENT": "true",
-                "MINIO_ROOT_USER": "root",
-                "MINIO_ROOT_PASSWORD": "minio-root-password",
-            },
-            "ingress": {"tls": ["no_tls"], "no_tls": {}},
-        }
-    }
-    fullspec = read_json(environment_dir / "analytics_fullspec.json")
-    assert not (environment_dir / "product.json").exists()
-    assert not (environment_dir / "product_fullspec.json").exists()
-    assert read_json(environment_dir / "spec.json")["spec"]["stelar"]["active_product"] == fullspec
-    assert "build_lake(environment_spec)" in (
-        environment_dir / "main.jsonnet"
-    ).read_text(encoding="utf-8")
+    assert "Wrote product fullspec:" in result.stderr
 
 
 def test_lake_create_cli_rejects_target_flags_with_actionable_message(tmp_path):

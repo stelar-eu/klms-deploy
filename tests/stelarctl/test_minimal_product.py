@@ -327,7 +327,10 @@ def test_lake_create_minimal_cli_generates_product_with_default_secret_values(tm
     )
 
     assert result.exit_code == 0, result.output
+    assert "Updated environment context in spec.json" in result.output
+    assert "Updated environment namespace in spec.json" in result.output
     assert "Wrote minimal product" in result.output
+    assert '"klms"' not in result.output
     assert (workspace / "dev" / "minimal_fullspec.json").is_file()
     assert not (workspace / "dev" / "product.json").exists()
     assert not (workspace / "dev" / "product_fullspec.json").exists()
@@ -470,6 +473,8 @@ def test_lake_create_minimal_cli_can_infer_storage_from_cluster(tmp_path, monkey
     spec = yaml.safe_load((workspace / "dev" / "spec.json").read_text(encoding="utf-8"))
 
     assert "Inferred storage classes from 'dev'" in result.output
+    assert "Updated environment context in spec.json" in result.output
+    assert "Updated environment namespace in spec.json" not in result.output
     assert spec["spec"]["contextNames"] == ["dev"]
     assert "namespace" not in product["spec"]
     assert product["spec"]["dynamicStorageClass"] == "fast-storage"

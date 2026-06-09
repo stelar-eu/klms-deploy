@@ -125,7 +125,8 @@ LAKE_CREATE_EPILOG = dedent(
     it directly into ENV. PRODUCT_NAME may be given as name or name.json.
 
     Outputs: ENV/<productName>.json keeps the validated product input.
-    ENV/<productName>_fullspec.json contains all feature-model defaults.
+    ENV/<productName>_fullspec.json contains all feature-model defaults. Use
+    --print-fullspec to also print the generated fullspec JSON to stdout.
     lake create activates the generated product only when the environment has no
     active product yet. Later creations do not change ENV/spec.json; use
     lake activate PRODUCT_NAME ENV to switch the deployable product.
