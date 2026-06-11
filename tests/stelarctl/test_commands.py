@@ -30,7 +30,7 @@ from stelar.deploy.operations.bootstrap_state import product_sha256, target_sha2
 
 
 MAIN_JSONNET_TEMPLATE = (
-    'local build_lake = import \"github.com/stelar-eu/klms-deploy/lib/util/build_lake.libsonnet\";\n'
+    'local build_lake = import \"lib/util/build_lake.libsonnet\";\n'
     'local environment_spec = import \"./spec.json\";\n'
     '\n'
     'build_lake(environment_spec)\n'
@@ -99,15 +99,7 @@ def make_workspace(path: Path) -> Path:
 
 
 def environment_template_dir(workspace: Path) -> Path:
-    return (
-        workspace
-        / "vendor"
-        / "github.com"
-        / "stelar-eu"
-        / "klms-deploy"
-        / "lib"
-        / "environment_templates"
-    )
+    return workspace / "vendor" / "lib" / "environment_templates"
 
 
 def write_generated_lake_files(

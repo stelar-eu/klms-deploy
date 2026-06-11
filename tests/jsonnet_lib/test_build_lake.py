@@ -11,9 +11,8 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 @pytest.fixture
 def stelar_vendor_root(tmp_path: Path) -> Path:
     vendor_root = tmp_path / "vendor-root"
-    stelar_org = vendor_root / "github.com" / "stelar-eu"
-    stelar_org.mkdir(parents=True)
-    (stelar_org / "klms-deploy").symlink_to(REPO_ROOT, target_is_directory=True)
+    vendor_root.mkdir(parents=True)
+    (vendor_root / "lib").symlink_to(REPO_ROOT / "lib", target_is_directory=True)
     return vendor_root
 
 
@@ -23,7 +22,7 @@ def J(stelar_vendor_root: Path) -> JsonnetRunner:
         "tests/jsonnet_lib/test_build_lake.jsonnet",
         [str(stelar_vendor_root), str(REPO_ROOT / "vendor")],
         """
-        local build_lake = import "github.com/stelar-eu/klms-deploy/lib/util/build_lake.libsonnet";
+        local build_lake = import "lib/util/build_lake.libsonnet";
         """,
     )
 
@@ -142,7 +141,7 @@ def test_component_registry_includes_feature_model_component_entrypoints(
 ):
     out = J(
         """
-        local component_registry = import "github.com/stelar-eu/klms-deploy/lib/util/components.libsonnet";
+        local component_registry = import "lib/util/components.libsonnet";
         local feature_model_components = [
           "airflow",
           "previewer",

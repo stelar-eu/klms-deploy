@@ -1,6 +1,6 @@
 function(environment_spec)
-  local product_transformation = import "github.com/stelar-eu/klms-deploy/lib/util/product_transformation.libsonnet";
-  local component_registry = import "github.com/stelar-eu/klms-deploy/lib/util/components.libsonnet";
+  local product_transformation = import "lib/util/product_transformation.libsonnet";
+  local component_registry = import "lib/util/components.libsonnet";
 
   local tk_spec =
     assert std.objectHas(environment_spec, "spec") : "environment spec must define spec";

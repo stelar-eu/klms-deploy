@@ -184,7 +184,7 @@ from the vendored STELAR library as `main.jsonnet`, and creates a minimal `spec.
 This command expects `jb install` to have populated:
 
 ```text
-vendor/github.com/stelar-eu/klms-deploy/lib/environment_templates/main_template.jsonnet
+vendor/lib/environment_templates/main_template.jsonnet
 ```
 
 Existing marked environments are preserved for idempotent pre-bootstrap reruns. If `main.jsonnet` already exists but `spec.json` is missing or unmarked, the command stops to avoid silently taking over an arbitrary Tanka entrypoint.

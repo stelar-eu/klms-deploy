@@ -20,14 +20,7 @@ from .common import (
 from .environment_spec import validate_environment_target_fields
 from .progress import LakeEnvironmentProgress
 
-ENVIRONMENT_TEMPLATE_DIR = (
-    Path("vendor")
-    / "github.com"
-    / "stelar-eu"
-    / "klms-deploy"
-    / "lib"
-    / "environment_templates"
-)
+ENVIRONMENT_TEMPLATE_DIR = Path("vendor") / "lib" / "environment_templates"
 INITIALIZED_LAKE_ENVIRONMENT_FILES = ("main.jsonnet", "spec.json")
 MAIN_JSONNET_TEMPLATE = "main_template.jsonnet"
 LAKE_ENVIRONMENT_ANNOTATION = "stelar.eu/lake-environment"

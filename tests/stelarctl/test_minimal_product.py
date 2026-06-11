@@ -31,18 +31,10 @@ runner = CliRunner()
 def make_workspace(path):
     path.mkdir()
     (path / "jsonnetfile.json").write_text("{}\n", encoding="utf-8")
-    template_dir = (
-        path
-        / "vendor"
-        / "github.com"
-        / "stelar-eu"
-        / "klms-deploy"
-        / "lib"
-        / "environment_templates"
-    )
+    template_dir = path / "vendor" / "lib" / "environment_templates"
     template_dir.mkdir(parents=True)
     (template_dir / "main_template.jsonnet").write_text(
-        'local build_lake = import "github.com/stelar-eu/klms-deploy/lib/util/build_lake.libsonnet";\n'
+        'local build_lake = import "lib/util/build_lake.libsonnet";\n'
         'local environment_spec = import "./spec.json";\n'
         '\n'
         'build_lake(environment_spec)\n',
@@ -88,6 +80,48 @@ def test_build_minimal_product_validates_against_feature_model():
     assert "manual_tls" not in klms["ingress"]
     assert klms["minio"]["API_DOMAIN"] == "https://minio.example.test"
     assert klms["minio"]["CONSOLE_DOMAIN"] == "https://klms.example.test/s3"
+
+
+def test_build_minimal_product_omits_defaulted_secret_names_from_product():
+    product = build_minimal_product(minimal_config())
+    spec = product["spec"]
+
+    defaulted_secret_names = {
+        "postgres": {
+            "POSTGRES_DB_PASSWORD_SECRET_NAME",
+            "CKAN_DB_PASSWORD_SECRET_NAME",
+            "DATASTORE_DB_PASSWORD_SECRET_NAME",
+            "KEYCLOAK_DB_PASSWORD_SECRET_NAME",
+            "QUAY_DB_PASSWORD_SECRET_NAME",
+        },
+        "api": {
+            "SMTP_PASSWORD_SECRET_NAME",
+            "SESSION_SECRET_KEY_SECRET_NAME",
+        },
+        "ckan": {
+            "CKAN_ADMIN_PASSWORD_SECRET_NAME",
+            "CKAN_AUTH_SECRET_NAME",
+        },
+        "keycloak": {"KEYCLOAK_ROOT_PASSWORD_SECRET_NAME"},
+        "minio": {"MINIO_ROOT_PASSWORD_SECRET_NAME"},
+    }
+
+    for section, fields in defaulted_secret_names.items():
+        assert fields.isdisjoint(spec[section])
+
+    fullspec = ProductValidator(feature_model).validate(Product.model_validate(product))
+    klms = fullspec["klms"]
+    assert klms["postgres"]["POSTGRES_DB_PASSWORD_SECRET_NAME"] == "postgresdb-secret"
+    assert klms["postgres"]["CKAN_DB_PASSWORD_SECRET_NAME"] == "ckandb-secret"
+    assert klms["postgres"]["DATASTORE_DB_PASSWORD_SECRET_NAME"] == "datastoredb-secret"
+    assert klms["postgres"]["KEYCLOAK_DB_PASSWORD_SECRET_NAME"] == "keycloakdb-secret"
+    assert klms["postgres"]["QUAY_DB_PASSWORD_SECRET_NAME"] == "quaydb-secret"
+    assert klms["api"]["SMTP_PASSWORD_SECRET_NAME"] == "smtpapi-secret"
+    assert klms["api"]["SESSION_SECRET_KEY_SECRET_NAME"] == "session-secret-key"
+    assert klms["ckan"]["CKAN_ADMIN_PASSWORD_SECRET_NAME"] == "ckanadmin-secret"
+    assert klms["ckan"]["CKAN_AUTH_SECRET_NAME"] == "ckan-auth-secret"
+    assert klms["keycloak"]["KEYCLOAK_ROOT_PASSWORD_SECRET_NAME"] == "keycloakroot-secret"
+    assert klms["minio"]["MINIO_ROOT_PASSWORD_SECRET_NAME"] == "minioroot-secret"
 
 
 def test_build_minimal_product_uses_no_tls_for_http():

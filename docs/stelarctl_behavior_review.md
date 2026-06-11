@@ -20,7 +20,7 @@ Bootstrap state is stored in `ENV/spec.json` at `spec.stelar.bootstrapped_produc
 
 `jsonnetfile.json` is the workspace Jsonnet Bundler dependency file. `stelarctl workspace init` creates or merges it. `jb install` consumes it and creates `vendor/`.
 
-`lib/` is created by `workspace init` as a local workspace directory. The STELAR Jsonnet library used by generated environments is expected under `vendor/github.com/stelar-eu/klms-deploy/lib` after `jb install`.
+`lib/` is created by `workspace init` as a local workspace directory. The STELAR Jsonnet library used by generated environments is expected under `vendor/lib` after `jb install`.
 
 `ENV/main.jsonnet` is copied by `lake add` from the vendored STELAR template. It imports `./spec.json` and passes `spec.stelar.active_product` to `build_lake`.
 

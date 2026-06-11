@@ -18,18 +18,10 @@ runner = CliRunner()
 def make_workspace(path: Path) -> Path:
     path.mkdir()
     (path / "jsonnetfile.json").write_text("{}\n", encoding="utf-8")
-    template_dir = (
-        path
-        / "vendor"
-        / "github.com"
-        / "stelar-eu"
-        / "klms-deploy"
-        / "lib"
-        / "environment_templates"
-    )
+    template_dir = path / "vendor" / "lib" / "environment_templates"
     template_dir.mkdir(parents=True)
     (template_dir / "main_template.jsonnet").write_text(
-        'local build_lake = import "github.com/stelar-eu/klms-deploy/lib/util/build_lake.libsonnet";\n'
+        'local build_lake = import "lib/util/build_lake.libsonnet";\n'
         'local environment_spec = import "./spec.json";\n'
         '\n'
         'build_lake(environment_spec)\n',
