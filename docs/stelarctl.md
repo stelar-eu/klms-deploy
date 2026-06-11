@@ -116,7 +116,7 @@ stelarctl lake create PRODUCT ENV
     options: --workspace WORKSPACE
 stelarctl lake create --minimal PRODUCT_NAME ENV
     options: --workspace WORKSPACE, --context CONTEXT, --namespace NAMESPACE,
-             --manual-secrets, --infer-storage-from-cluster
+             --custom-secret-names, --infer-storage-from-cluster
 stelarctl lake activate PRODUCT_NAME ENV
     options: --workspace WORKSPACE
 stelarctl lake manual-tls-template [OUTPUT]
@@ -129,7 +129,7 @@ stelarctl lake status ENV
 stelarctl lake purge-secrets ENV
     options: --workspace WORKSPACE, --context CONTEXT, --namespace NAMESPACE, --yes
 stelarctl lake bootstrap ENV
-    options: --workspace WORKSPACE, --skip-preflight
+    options: --workspace WORKSPACE, --skip-preflight, --manual-secrets
 ```
 
 ## Commands
@@ -219,7 +219,7 @@ Deletes a marked lake environment directory. The command refuses unmarked direct
 
 ```bash
 stelarctl lake create PRODUCT ENV [--workspace WORKSPACE]
-stelarctl lake create --minimal PRODUCT_NAME ENV [--workspace WORKSPACE] [--context CONTEXT] [--namespace NAMESPACE] [--manual-secrets] [--infer-storage-from-cluster]
+stelarctl lake create --minimal PRODUCT_NAME ENV [--workspace WORKSPACE] [--context CONTEXT] [--namespace NAMESPACE] [--custom-secret-names] [--infer-storage-from-cluster]
 ```
 
 Creates product files inside an initialized lake environment.
@@ -247,7 +247,7 @@ The minimal mode does not create manual TLS products. For manual TLS, write or e
 
 When `http` is selected, `minio.INSECURE_MC_CLIENT` is forced to `true`. This is required because MinIO clients inside the deployment must use plain HTTP.
 
-By default, `--minimal` creates cryptographically random secret values. The generated product/fullspec contain the values needed for `lake bootstrap` to create Kubernetes Secrets. Use `--manual-secrets` only when you want to type the secret values yourself instead of letting `stelarctl` generate them.
+`--minimal` does not write password values to product or fullspec files. Secret names use feature-model defaults unless `--custom-secret-names` is provided. `lake bootstrap` later creates the Kubernetes Secret values with cryptographic randomness by default; use `lake bootstrap --manual-secrets` only when the operator must type those values manually.
 
 `lake create` activates the generated product only when the environment has no active product yet. Later creations do not change the active product; use `lake activate PRODUCT_NAME ENV` to switch the deployable product. If you regenerate the same product name that is already active, the command warns when `spec.stelar.active_product` still points to the previous fullspec. In minimal mode, `--namespace` and `--context` write deployment target fields to `ENV/spec.json`; `--context` is also used with `--infer-storage-from-cluster` to inspect StorageClasses from a specific kube context. Product/fullspec files do not contain the Kubernetes namespace.
 

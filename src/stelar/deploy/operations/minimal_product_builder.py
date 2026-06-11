@@ -2,46 +2,50 @@
 
 from __future__ import annotations
 
-import secrets
+from dataclasses import asdict
 
 from .common import CommandError, JsonObject
 from .minimal_product_types import (
-    MINIMAL_PASSWORD_FIELDS,
+    DEFAULT_MINIMAL_SECRET_NAMES,
     MinimalProductConfig,
-    MinimalSecretValues,
+    MinimalSecretNames,
 )
-from .secret_resources import validate_password
 
-
-def generate_minimal_secret_values() -> MinimalSecretValues:
-    """Generate product secret values with OS-backed cryptographic randomness."""
-    return MinimalSecretValues(
-        postgres_db_password=_secret_token(),
-        ckan_db_password=_secret_token(),
-        datastore_db_password=_secret_token(),
-        keycloak_db_password=_secret_token(),
-        quay_db_password=_secret_token(),
-        smtp_password=_secret_token(),
-        api_session_secret_key=_secret_token(48),
-        ckan_admin_password=_secret_token(),
-        ckan_session_key=_secret_token(48),
-        ckan_jwt_key=f"string:{_secret_token()}",
-        keycloak_root_password=_secret_token(),
-        minio_root_password=_secret_token(),
-    )
+_SECRET_NAME_FIELDS = {
+    "postgres": {
+        "postgres_db_password_secret_name": "POSTGRES_DB_PASSWORD_SECRET_NAME",
+        "ckan_db_password_secret_name": "CKAN_DB_PASSWORD_SECRET_NAME",
+        "datastore_db_password_secret_name": "DATASTORE_DB_PASSWORD_SECRET_NAME",
+        "keycloak_db_password_secret_name": "KEYCLOAK_DB_PASSWORD_SECRET_NAME",
+        "quay_db_password_secret_name": "QUAY_DB_PASSWORD_SECRET_NAME",
+    },
+    "api": {
+        "smtp_password_secret_name": "SMTP_PASSWORD_SECRET_NAME",
+        "api_session_secret_key_secret_name": "SESSION_SECRET_KEY_SECRET_NAME",
+    },
+    "ckan": {
+        "ckan_admin_password_secret_name": "CKAN_ADMIN_PASSWORD_SECRET_NAME",
+        "ckan_auth_secret_name": "CKAN_AUTH_SECRET_NAME",
+    },
+    "keycloak": {
+        "keycloak_root_password_secret_name": "KEYCLOAK_ROOT_PASSWORD_SECRET_NAME",
+    },
+    "minio": {
+        "minio_root_password_secret_name": "MINIO_ROOT_PASSWORD_SECRET_NAME",
+    },
+}
 
 
 def build_minimal_product(config: MinimalProductConfig) -> JsonObject:
     """Build the minimal product spec accepted by the feature model."""
     scheme = _normalized_scheme(config.scheme)
-    _validate_minimal_passwords(config.secrets)
     insecure_minio_client = _normalized_minio_insecure_value(
         scheme,
         config.insecure_minio_client,
     )
     # The minimal generator deliberately supports only the two low-friction
     # paths: plain HTTP/no_tls or HTTPS/cert_manager. Manual TLS needs explicit
-    # secret names and certificate files, so it remains a custom product flow.
+    # certificate files, so it remains a custom product flow.
     ingress: JsonObject = {"ingress_controller": ["nginx"], "tls": ["no_tls"]}
     if scheme == "https":
         if not config.cluster_issuer:
@@ -64,29 +68,15 @@ def build_minimal_product(config: MinimalProductConfig) -> JsonObject:
         "PRIMARY_SUBDOMAIN": config.primary_subdomain,
         "optional_components": [],
         "cluster": [],
-        "postgres": {
-            "volume": ["pvc"],
-            "POSTGRES_DB_PASSWORD": config.secrets.postgres_db_password,
-            "CKAN_DB_PASSWORD": config.secrets.ckan_db_password,
-            "DATASTORE_DB_PASSWORD": config.secrets.datastore_db_password,
-            "KEYCLOAK_DB_PASSWORD": config.secrets.keycloak_db_password,
-            "QUAY_DB_PASSWORD": config.secrets.quay_db_password,
-        },
+        "postgres": {"volume": ["pvc"]},
         "api": {
             "SMTP_SERVER": config.smtp_server,
             "SMTP_PORT": config.smtp_port,
             "SMTP_USERNAME": config.smtp_username,
-            "SMTP_PASSWORD": config.secrets.smtp_password,
-            "SESSION_SECRET_KEY": config.secrets.api_session_secret_key,
         },
-        "ckan": {
-            "CKAN_ADMIN_PASSWORD": config.secrets.ckan_admin_password,
-            "CKAN_SESSION_KEY": config.secrets.ckan_session_key,
-            "CKAN_JWT_KEY": config.secrets.ckan_jwt_key,
-        },
+        "ckan": {},
         "keycloak": {
             "SUBDOMAIN": config.keycloak_subdomain,
-            "KEYCLOAK_ROOT_PASSWORD": config.secrets.keycloak_root_password,
         },
         "minio": {
             "volume": ["pvc"],
@@ -95,7 +85,6 @@ def build_minimal_product(config: MinimalProductConfig) -> JsonObject:
             "CONSOLE_DOMAIN": f"{primary_domain}/s3",
             "S3_CONSOLE_URL": f"{primary_domain}/s3/login",
             "INSECURE_MC_CLIENT": insecure_minio_client,
-            "MINIO_ROOT_PASSWORD": config.secrets.minio_root_password,
         },
         "solr": {
             "volume": ["pvc"],
@@ -105,16 +94,26 @@ def build_minimal_product(config: MinimalProductConfig) -> JsonObject:
         },
         "ingress": ingress,
     }
+    _apply_secret_name_overrides(spec, config.secret_names)
     return {"spec": spec}
 
 
-def _validate_minimal_passwords(secrets: MinimalSecretValues) -> None:
-    for attribute, source in MINIMAL_PASSWORD_FIELDS.items():
-        validate_password(getattr(secrets, attribute), source=source)
+def _apply_secret_name_overrides(
+    spec: JsonObject,
+    secret_names: MinimalSecretNames | None,
+) -> None:
+    if secret_names is None:
+        return
 
-
-def _secret_token(byte_length: int = 32) -> str:
-    return secrets.token_urlsafe(byte_length)
+    values = asdict(secret_names)
+    for section, fields in _SECRET_NAME_FIELDS.items():
+        section_config = spec.setdefault(section, {})
+        for attribute, product_key in fields.items():
+            value = values[attribute].strip()
+            if not value:
+                raise CommandError(f"{product_key} cannot be empty")
+            if value != DEFAULT_MINIMAL_SECRET_NAMES[attribute]:
+                section_config[product_key] = value
 
 
 def _normalized_scheme(scheme: str) -> str:

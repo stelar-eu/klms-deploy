@@ -57,7 +57,7 @@ ROOT_EPILOG = dedent(
           options: --workspace WORKSPACE
       stelarctl lake create --minimal PRODUCT_NAME ENV
           options: --workspace WORKSPACE, --context CONTEXT, --namespace NAMESPACE,
-                   --manual-secrets, --infer-storage-from-cluster
+                   --custom-secret-names, --infer-storage-from-cluster
       stelarctl lake activate PRODUCT_NAME ENV
           options: --workspace WORKSPACE
       stelarctl lake manual-tls-template [OUTPUT]
@@ -70,7 +70,7 @@ ROOT_EPILOG = dedent(
       stelarctl lake purge-secrets ENV
           options: --workspace WORKSPACE, --context CONTEXT, --namespace NAMESPACE, --yes
       stelarctl lake bootstrap ENV
-          options: --workspace WORKSPACE, --skip-preflight
+          options: --workspace WORKSPACE, --skip-preflight, --manual-secrets
 
     Typical workflow: run `workspace init`, then `jb install`, then
     `lake add`, then `lake create --minimal PRODUCT_NAME ENV` or `lake create PRODUCT ENV`.
@@ -131,8 +131,9 @@ LAKE_CREATE_EPILOG = dedent(
     active product yet. Later creations do not change ENV/spec.json; use
     lake activate PRODUCT_NAME ENV to switch the deployable product.
 
-    Minimal mode generates random secret values by default; use --manual-secrets
-    only when you want to type those values yourself. In minimal mode,
+    Minimal mode does not write password values into product files. Secret names
+    use feature-model defaults unless --custom-secret-names is provided. Actual
+    Secret values are generated later by lake bootstrap. In minimal mode,
     --namespace and --context write deployment target fields to ENV/spec.json;
     --context is also used by --infer-storage-from-cluster.
 
@@ -392,9 +393,12 @@ LAKE_BOOTSTRAP_EPILOG = dedent(
     context/namespace target, and the bootstrap Secret names. Later cluster-aware
     commands stop if the current target no longer matches that hash.
 
-    Secret behavior: before creating anything, lake bootstrap checks the
-    required bootstrap Secrets for the active fullspec or the recorded bootstrap
-    Secret names. If all required Secrets
+    Secret behavior: by default, lake bootstrap generates password and session
+    Secret values with OS-backed randomness. Use --manual-secrets only when you
+    want to type those values yourself; password prompts enforce at least 8
+    characters. Before creating anything, lake bootstrap checks the required
+    bootstrap Secrets for the active fullspec or the recorded bootstrap Secret
+    names. If all required Secrets
     already exist, the command stops because bootstrap appears to have already
     run. If only some required Secrets exist, the command stops because the
     namespace is partially bootstrapped. If Secret reads are blocked by RBAC, it

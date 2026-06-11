@@ -6,15 +6,12 @@ from kubernetes import client as kube_client
 from kubernetes import config as kube_config
 
 from .common import CommandError
-from .minimal_product_builder import (
-    build_minimal_product,
-    generate_minimal_secret_values,
-)
+from .minimal_product_builder import build_minimal_product
 from .minimal_product_types import (
-    MINIMAL_PASSWORD_FIELDS,
+    DEFAULT_MINIMAL_SECRET_NAMES,
     InferredStorageClasses,
     MinimalProductConfig,
-    MinimalSecretValues,
+    MinimalSecretNames,
 )
 from .storage_inference import (
     PREFERRED_STORAGE_CLASS_NAMES,
@@ -23,13 +20,12 @@ from .storage_inference import (
 
 __all__ = [
     "CommandError",
+    "DEFAULT_MINIMAL_SECRET_NAMES",
     "InferredStorageClasses",
-    "MINIMAL_PASSWORD_FIELDS",
     "MinimalProductConfig",
-    "MinimalSecretValues",
+    "MinimalSecretNames",
     "PREFERRED_STORAGE_CLASS_NAMES",
     "build_minimal_product",
-    "generate_minimal_secret_values",
     "infer_storage_classes_from_cluster",
     "kube_client",
     "kube_config",

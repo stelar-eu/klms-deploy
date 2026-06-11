@@ -36,6 +36,7 @@ from ..cli_help import (
     show_help_on_no_args,
 )
 from ..operations.lake_workspace import WorkspaceEnvironmentInfo
+from .bootstrap_secrets import prompt_bootstrap_secret_values
 from .formatting import item_list, presence
 from .lake_product import lake_activate_command, lake_create_command
 from .progress import (
@@ -603,6 +604,13 @@ def lake_bootstrap_command(
             help="Skip read-only prerequisite checks before applying secrets",
         ),
     ] = False,
+    manual_secrets: Annotated[
+        bool,
+        typer.Option(
+            "--manual-secrets",
+            help="Prompt for bootstrap Secret values instead of generating them",
+        ),
+    ] = False,
 ) -> None:
     try:
         bootstrap_lake(
@@ -610,6 +618,9 @@ def lake_bootstrap_command(
             workspace,
             preflight="skip" if skip_preflight else "strict",
             progress=TyperClusterProgress(),
+            secret_values_factory=(
+                prompt_bootstrap_secret_values if manual_secrets else None
+            ),
         )
     except PreflightAccessError as exc:
         typer.echo(f"Warning: {exc}", err=True)

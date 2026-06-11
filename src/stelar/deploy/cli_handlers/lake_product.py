@@ -85,11 +85,11 @@ def lake_create_command(
             help="Interactively create a minimal product directly in ENV",
         ),
     ] = False,
-    manual_secrets: Annotated[
+    custom_secret_names: Annotated[
         bool,
         typer.Option(
-            "--manual-secrets",
-            help="Prompt for minimal-product secret values instead of generating them",
+            "--custom-secret-names",
+            help="Prompt for minimal-product Kubernetes Secret name overrides",
         ),
     ] = False,
     infer_storage_from_cluster: Annotated[
@@ -114,14 +114,14 @@ def lake_create_command(
             workspace,
             context=context,
             namespace=namespace,
-            manual_secrets=manual_secrets,
+            custom_secret_names=custom_secret_names,
             infer_storage_from_cluster=infer_storage_from_cluster,
             print_fullspec=print_fullspec,
         )
         return
 
     if _minimal_options_used(
-        manual_secrets=manual_secrets,
+        custom_secret_names=custom_secret_names,
         infer_storage_from_cluster=infer_storage_from_cluster,
     ):
         raise typer.BadParameter("Minimal-product options require --minimal")
@@ -176,7 +176,7 @@ def _create_minimal_lake(
     *,
     context: str | None,
     namespace: str | None,
-    manual_secrets: bool,
+    custom_secret_names: bool,
     infer_storage_from_cluster: bool,
     print_fullspec: bool,
 ) -> None:
@@ -212,7 +212,7 @@ def _create_minimal_lake(
             echo_inferred_storage(inferred_storage)
 
         product = prompt_minimal_product(
-            manual_secrets=manual_secrets,
+            custom_secret_names=custom_secret_names,
             inferred_storage=inferred_storage,
         )
         fullspec = product_data_to_fullspec(
@@ -316,10 +316,10 @@ def _warn_if_regenerated_active_product_is_stale(
 
 def _minimal_options_used(
     *,
-    manual_secrets: bool,
+    custom_secret_names: bool,
     infer_storage_from_cluster: bool,
 ) -> bool:
-    return manual_secrets or infer_storage_from_cluster
+    return custom_secret_names or infer_storage_from_cluster
 
 
 def _product_path(product: str) -> Path:

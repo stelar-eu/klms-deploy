@@ -27,6 +27,7 @@ from stelar.deploy.operations import (
 )
 from stelar.deploy.models.product import ProductValidationFailure
 from stelar.deploy.operations.bootstrap_state import product_sha256, target_sha256
+from stelar.deploy.operations.secret_resources import BootstrapSecretValues
 
 
 MAIN_JSONNET_TEMPLATE = (
@@ -124,33 +125,24 @@ def write_generated_lake_files(
         "spec": {
             "namespace": namespace,
             "postgres": {
-                "POSTGRES_DB_PASSWORD": "postgres-password",
                 "POSTGRES_DB_PASSWORD_SECRET_NAME": "product-postgres-secret",
-                "CKAN_DB_PASSWORD": "ckan-password",
                 "CKAN_DB_PASSWORD_SECRET_NAME": "product-ckan-db-secret",
-                "KEYCLOAK_DB_PASSWORD": "keycloak-db-password",
                 "KEYCLOAK_DB_PASSWORD_SECRET_NAME": "product-keycloak-db-secret",
-                "DATASTORE_DB_PASSWORD": "datastore-password",
                 "DATASTORE_DB_PASSWORD_SECRET_NAME": "product-datastore-secret",
-                "QUAY_DB_PASSWORD": "quay-password",
                 "QUAY_DB_PASSWORD_SECRET_NAME": "product-quay-db-secret",
             },
             "keycloak": {
-                "KEYCLOAK_ROOT_PASSWORD": "keycloak-root-password",
                 "KEYCLOAK_ROOT_PASSWORD_SECRET_NAME": "product-keycloak-root-secret",
             },
             "api": {
-                "SMTP_PASSWORD": "smtp-password",
                 "SMTP_PASSWORD_SECRET_NAME": "product-smtp-secret",
-                "SESSION_SECRET_KEY": "session-secret-value",
                 "SESSION_SECRET_KEY_SECRET_NAME": "product-session-secret",
             },
             "ckan": {
-                "CKAN_ADMIN_PASSWORD": "ckan-admin-password",
                 "CKAN_ADMIN_PASSWORD_SECRET_NAME": "product-ckan-admin-secret",
+                "CKAN_AUTH_SECRET_NAME": "product-ckan-auth-secret",
             },
             "minio": {
-                "MINIO_ROOT_PASSWORD": "minio-root-password",
                 "MINIO_ROOT_PASSWORD_SECRET_NAME": "product-minio-root-secret",
             },
         }
@@ -177,7 +169,6 @@ def write_generated_lake_files(
                 **product_json["spec"]["minio"],
                 "INSECURE_MC_CLIENT": "true" if scheme == "http" else "false",
                 "MINIO_ROOT_USER": "root",
-                "MINIO_ROOT_PASSWORD": "minio-root-password",
             },
             "ingress": ingress,
         }
@@ -431,7 +422,7 @@ def product_spec_secret_order(product_spec: dict) -> list[str]:
         product_spec["api"]["SESSION_SECRET_KEY_SECRET_NAME"],
         product_spec["ckan"]["CKAN_ADMIN_PASSWORD_SECRET_NAME"],
         product_spec["minio"]["MINIO_ROOT_PASSWORD_SECRET_NAME"],
-        "ckan-auth-secret",
+        product_spec["ckan"]["CKAN_AUTH_SECRET_NAME"],
     ]
 
 
@@ -440,6 +431,23 @@ def decoded_secret_data(secret: dict) -> dict[str, str]:
         key: base64.b64decode(value).decode("utf-8")
         for key, value in secret["data"].items()
     }
+
+
+def manual_bootstrap_values() -> BootstrapSecretValues:
+    return BootstrapSecretValues(
+        postgres_db_password="manual-postgres-password",
+        ckan_db_password="manual-ckan-password",
+        datastore_db_password="manual-datastore-password",
+        keycloak_db_password="manual-keycloak-db-password",
+        quay_db_password="manual-quay-password",
+        keycloak_root_password="manual-keycloak-root-password",
+        smtp_password="manual-smtp-password",
+        api_session_secret_key="manual-api-session-secret",
+        ckan_admin_password="manual-ckan-admin-password",
+        ckan_session_key="manual-ckan-session-secret",
+        ckan_jwt_key="string:manual-ckan-jwt-secret",
+        minio_root_password="manual-minio-root-password",
+    )
 
 
 TLS_CERT_PEM = """-----BEGIN CERTIFICATE-----
@@ -1529,11 +1537,6 @@ def test_bootstrap_lake_checks_bootstrap_target_before_invalid_fullspec(
     ("field_name", "value", "message"),
     [
         (
-            "MINIO_ROOT_PASSWORD",
-            "1234",
-            "minio.MINIO_ROOT_PASSWORD.*at least 8 characters",
-        ),
-        (
             "MINIO_ROOT_USER",
             "ab",
             "minio.MINIO_ROOT_USER.*at least 3 characters",
@@ -1558,21 +1561,6 @@ def test_bootstrap_lake_rejects_invalid_minio_credentials_in_fullspec(
     with pytest.raises(CommandError, match=message):
         bootstrap_lake("dev", workspace)
 
-
-def test_bootstrap_lake_rejects_short_password_in_fullspec(tmp_path, monkeypatch):
-    workspace = make_workspace(tmp_path / "workspace")
-    add_lake_environment("dev", workspace)
-    environment_dir = write_generated_lake_files(workspace)
-    fullspec = read_json(environment_dir / "product_fullspec.json")
-    fullspec["klms"]["ckan"] = {"CKAN_ADMIN_PASSWORD": "1234"}
-    write_json(environment_dir / "product_fullspec.json", fullspec)
-    set_cluster_preflight(monkeypatch)
-
-    with pytest.raises(
-        CommandError,
-        match="ckan.CKAN_ADMIN_PASSWORD.*at least 8 characters",
-    ):
-        bootstrap_lake("dev", workspace)
 
 
 def test_bootstrap_lake_rejects_http_with_tls_mode(tmp_path, monkeypatch):
@@ -1823,6 +1811,40 @@ def test_bootstrap_lake_runs_cluster_preflight(tmp_path, monkeypatch):
     }
 
 
+def test_bootstrap_lake_applies_manual_secret_values(tmp_path, monkeypatch):
+    workspace = make_workspace(tmp_path / "workspace")
+    add_lake_environment("dev", workspace)
+    environment_dir = write_generated_lake_files(workspace)
+    product_spec = read_active_config(environment_dir)
+    calls = set_cluster_preflight(monkeypatch)
+
+    bootstrap_lake(
+        "dev",
+        workspace,
+        secret_values=manual_bootstrap_values(),
+    )
+
+    created_secrets = {
+        secret_name: body
+        for _, secret_name, body in calls["created_secrets"]
+    }
+    postgres_secret_name = product_spec["postgres"][
+        "POSTGRES_DB_PASSWORD_SECRET_NAME"
+    ]
+    assert decoded_secret_data(created_secrets[postgres_secret_name]) == {
+        "password": "manual-postgres-password"
+    }
+    assert decoded_secret_data(
+        created_secrets[product_spec["api"]["SESSION_SECRET_KEY_SECRET_NAME"]]
+    ) == {"key": "manual-api-session-secret"}
+    assert decoded_secret_data(
+        created_secrets[product_spec["ckan"]["CKAN_AUTH_SECRET_NAME"]]
+    ) == {
+        "session-key": "manual-ckan-session-secret",
+        "jwt-key": "string:manual-ckan-jwt-secret",
+    }
+
+
 def test_bootstrap_lake_applies_fullspec_config_secrets(tmp_path, monkeypatch):
     workspace = make_workspace(tmp_path / "workspace")
     add_lake_environment("dev", workspace)
@@ -1842,16 +1864,16 @@ def test_bootstrap_lake_applies_fullspec_config_secrets(tmp_path, monkeypatch):
     postgres_secret_name = product_spec["postgres"][
         "POSTGRES_DB_PASSWORD_SECRET_NAME"
     ]
-    assert decoded_secret_data(created_secrets[postgres_secret_name]) == {
-        "password": product_spec["postgres"]["POSTGRES_DB_PASSWORD"]
-    }
+    postgres_data = decoded_secret_data(created_secrets[postgres_secret_name])
+    assert set(postgres_data) == {"password"}
+    assert len(postgres_data["password"]) >= 8
 
     session_secret_name = product_spec["api"]["SESSION_SECRET_KEY_SECRET_NAME"]
-    assert decoded_secret_data(created_secrets[session_secret_name]) == {
-        "key": product_spec["api"]["SESSION_SECRET_KEY"]
-    }
+    session_data = decoded_secret_data(created_secrets[session_secret_name])
+    assert set(session_data) == {"key"}
+    assert session_data["key"]
 
-    ckan_auth_data = decoded_secret_data(created_secrets["ckan-auth-secret"])
+    ckan_auth_data = decoded_secret_data(created_secrets[product_spec["ckan"]["CKAN_AUTH_SECRET_NAME"]])
     assert set(ckan_auth_data) == {"session-key", "jwt-key"}
     assert ckan_auth_data["jwt-key"].startswith("string:")
 
@@ -2056,6 +2078,29 @@ def test_check_lake_cluster_checks_target_hash_before_resolving_context(
         check_lake_cluster("dev", workspace)
 
 
+def test_bootstrap_lake_does_not_request_manual_values_when_already_bootstrapped(
+    tmp_path,
+    monkeypatch,
+):
+    workspace = make_workspace(tmp_path / "workspace")
+    add_lake_environment("dev", workspace)
+    environment_dir = write_generated_lake_files(workspace)
+    product_spec = read_active_config(environment_dir)
+    set_cluster_preflight(
+        monkeypatch,
+        existing_secrets=secret_names_from_config(product_spec),
+    )
+
+    with pytest.raises(CommandError, match="already run.*required bootstrap Secrets"):
+        bootstrap_lake(
+            "dev",
+            workspace,
+            secret_values_factory=lambda: pytest.fail(
+                "manual values should not be requested"
+            ),
+        )
+
+
 def test_bootstrap_lake_rejects_already_bootstrapped_environment(
     tmp_path,
     monkeypatch,
@@ -2238,24 +2283,16 @@ def test_bootstrap_lake_rejects_secret_create_error(tmp_path, monkeypatch):
             "Fullspec config must contain a postgres object",
         ),
         (
-            lambda config: config["postgres"].pop("CKAN_DB_PASSWORD"),
-            "postgres.CKAN_DB_PASSWORD",
+            lambda config: config["postgres"].pop("CKAN_DB_PASSWORD_SECRET_NAME"),
+            "postgres.CKAN_DB_PASSWORD_SECRET_NAME",
         ),
         (
-            lambda config: config["api"].update({"SMTP_PASSWORD": ""}),
-            "api.SMTP_PASSWORD",
+            lambda config: config["api"].update({"SMTP_PASSWORD_SECRET_NAME": ""}),
+            "api.SMTP_PASSWORD_SECRET_NAME",
         ),
         (
-            lambda config: config["ckan"].update(
-                {"CKAN_ADMIN_PASSWORD": "1234"}
-            ),
-            "ckan.CKAN_ADMIN_PASSWORD.*at least 8 characters",
-        ),
-        (
-            lambda config: config["minio"].update(
-                {"MINIO_ROOT_PASSWORD": "1234"}
-            ),
-            "minio.MINIO_ROOT_PASSWORD.*at least 8 characters",
+            lambda config: config["ckan"].update({"CKAN_AUTH_SECRET_NAME": ""}),
+            "ckan.CKAN_AUTH_SECRET_NAME",
         ),
     ],
 )
@@ -3457,6 +3494,7 @@ def test_root_cli_help_lists_all_subcommands_with_arguments():
     assert "--namespace NAMESPACE" in output
     assert "--skip-preflight" in output
     assert "--manual-secrets" in output
+    assert "--custom-secret-names" in output
     assert "--infer-storage-from-cluster" in output
     assert "stelarctl lake manual-tls-template [OUTPUT]" in output
     assert "stelarctl lake create PRODUCT ENV" in output
@@ -3509,7 +3547,8 @@ def test_lake_create_help_documents_minimal_tls_modes():
 
     assert result.exit_code == 0
     assert "--minimal" in result.stdout
-    assert "--manual-secrets" in result.stdout
+    assert "--custom-secret-names" in result.stdout
+    assert "--manual-secrets" not in result.stdout
     assert "INSECURE_MC_CLIENT" in result.stdout
     assert "cert_manager" in result.stdout
     assert "manual_tls" in result.stdout
@@ -3572,8 +3611,7 @@ class FakeProductValidator:
                 "minio": {
                     "INSECURE_MC_CLIENT": "true",
                     "MINIO_ROOT_USER": "root",
-                    "MINIO_ROOT_PASSWORD": "minio-root-password",
-                },
+                    },
                 "ingress": {"tls": ["no_tls"], "no_tls": {}},
             }
         )
@@ -3602,8 +3640,7 @@ class HttpWithTlsProductValidator:
                 "minio": {
                     "INSECURE_MC_CLIENT": "true",
                     "MINIO_ROOT_USER": "root",
-                    "MINIO_ROOT_PASSWORD": "minio-root-password",
-                },
+                    },
                 "ingress": {
                     "tls": ["cert_manager"],
                     "cert_manager": {"ClusterIssuer": "letsencrypt-production"},
@@ -3623,8 +3660,7 @@ class HttpWithSecureMinioProductValidator:
                 "minio": {
                     "INSECURE_MC_CLIENT": "false",
                     "MINIO_ROOT_USER": "root",
-                    "MINIO_ROOT_PASSWORD": "minio-root-password",
-                },
+                    },
                 "ingress": {"tls": ["no_tls"], "no_tls": {}},
             }
         }
@@ -3641,8 +3677,7 @@ class HttpsNoTlsProductValidator:
                 "minio": {
                     "INSECURE_MC_CLIENT": "false",
                     "MINIO_ROOT_USER": "root",
-                    "MINIO_ROOT_PASSWORD": "minio-root-password",
-                },
+                    },
                 "ingress": {"tls": ["no_tls"], "no_tls": {}},
             }
         }
@@ -3687,7 +3722,6 @@ def test_lake_create_cli_writes_files_without_printing_fullspec_by_default(
             "minio": {
                 "INSECURE_MC_CLIENT": "true",
                 "MINIO_ROOT_USER": "root",
-                "MINIO_ROOT_PASSWORD": "minio-root-password",
             },
             "ingress": {"tls": ["no_tls"], "no_tls": {}},
         }
@@ -3736,7 +3770,6 @@ def test_lake_create_cli_prints_fullspec_when_requested(
             "minio": {
                 "INSECURE_MC_CLIENT": "true",
                 "MINIO_ROOT_USER": "root",
-                "MINIO_ROOT_PASSWORD": "minio-root-password",
             },
             "ingress": {"tls": ["no_tls"], "no_tls": {}},
         }
@@ -3815,19 +3848,6 @@ def test_lake_create_cli_reports_product_validation_failure(
     assert result.exit_code == 1
     assert "invalid product choices" in result.output
 
-
-class ShortMinioPasswordProductValidator(FakeProductValidator):
-    def validate(self, product):
-        fullspec = super().validate(product)
-        fullspec["klms"]["minio"]["MINIO_ROOT_PASSWORD"] = "1234"
-        return fullspec
-
-
-class ShortCkanAdminPasswordProductValidator(FakeProductValidator):
-    def validate(self, product):
-        fullspec = super().validate(product)
-        fullspec["klms"]["ckan"] = {"CKAN_ADMIN_PASSWORD": "1234"}
-        return fullspec
 
 
 class ShortMinioUserProductValidator(FakeProductValidator):
@@ -3917,7 +3937,6 @@ def test_product_to_fullspec_writes_product_and_fullspec(tmp_path, monkeypatch):
             "minio": {
                 "INSECURE_MC_CLIENT": "true",
                 "MINIO_ROOT_USER": "root",
-                "MINIO_ROOT_PASSWORD": "minio-root-password",
             },
             "ingress": {"tls": ["no_tls"], "no_tls": {}},
         }
@@ -4426,14 +4445,6 @@ def test_lake_activate_cli_warns_and_proceeds_when_bootstrap_secrets_exist(
         (HttpWithTlsProductValidator, "SCHEME http.*ingress.tls no_tls"),
         (HttpsNoTlsProductValidator, "SCHEME https.*manual_tls"),
         (HttpWithSecureMinioProductValidator, "SCHEME http.*INSECURE_MC_CLIENT"),
-        (
-            ShortMinioPasswordProductValidator,
-            "minio.MINIO_ROOT_PASSWORD.*at least 8 characters",
-        ),
-        (
-            ShortCkanAdminPasswordProductValidator,
-            "ckan.CKAN_ADMIN_PASSWORD.*at least 8 characters",
-        ),
         (
             ShortMinioUserProductValidator,
             "minio.MINIO_ROOT_USER.*at least 3 characters",

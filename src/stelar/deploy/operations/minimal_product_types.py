@@ -5,35 +5,36 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 
-MINIMAL_PASSWORD_FIELDS = {
-    "postgres_db_password": "postgres.POSTGRES_DB_PASSWORD",
-    "ckan_db_password": "postgres.CKAN_DB_PASSWORD",
-    "datastore_db_password": "postgres.DATASTORE_DB_PASSWORD",
-    "keycloak_db_password": "postgres.KEYCLOAK_DB_PASSWORD",
-    "quay_db_password": "postgres.QUAY_DB_PASSWORD",
-    "smtp_password": "api.SMTP_PASSWORD",
-    "ckan_admin_password": "ckan.CKAN_ADMIN_PASSWORD",
-    "keycloak_root_password": "keycloak.KEYCLOAK_ROOT_PASSWORD",
-    "minio_root_password": "minio.MINIO_ROOT_PASSWORD",
+DEFAULT_MINIMAL_SECRET_NAMES = {
+    "postgres_db_password_secret_name": "postgresdb-secret",
+    "ckan_db_password_secret_name": "ckandb-secret",
+    "datastore_db_password_secret_name": "datastoredb-secret",
+    "keycloak_db_password_secret_name": "keycloakdb-secret",
+    "quay_db_password_secret_name": "quaydb-secret",
+    "smtp_password_secret_name": "smtpapi-secret",
+    "api_session_secret_key_secret_name": "session-secret-key",
+    "ckan_admin_password_secret_name": "ckanadmin-secret",
+    "ckan_auth_secret_name": "ckan-auth-secret",
+    "keycloak_root_password_secret_name": "keycloakroot-secret",
+    "minio_root_password_secret_name": "minioroot-secret",
 }
 
 
 @dataclass(frozen=True)
-class MinimalSecretValues:
-    """Secret values required by the minimal STELAR product."""
+class MinimalSecretNames:
+    """Optional Kubernetes Secret name overrides for a minimal product."""
 
-    postgres_db_password: str
-    ckan_db_password: str
-    datastore_db_password: str
-    keycloak_db_password: str
-    quay_db_password: str
-    smtp_password: str
-    api_session_secret_key: str
-    ckan_admin_password: str
-    ckan_session_key: str
-    ckan_jwt_key: str
-    keycloak_root_password: str
-    minio_root_password: str
+    postgres_db_password_secret_name: str
+    ckan_db_password_secret_name: str
+    datastore_db_password_secret_name: str
+    keycloak_db_password_secret_name: str
+    quay_db_password_secret_name: str
+    smtp_password_secret_name: str
+    api_session_secret_key_secret_name: str
+    ckan_admin_password_secret_name: str
+    ckan_auth_secret_name: str
+    keycloak_root_password_secret_name: str
+    minio_root_password_secret_name: str
 
 
 @dataclass(frozen=True)
@@ -53,7 +54,7 @@ class MinimalProductConfig:
     smtp_server: str
     smtp_port: str
     smtp_username: str
-    secrets: MinimalSecretValues
+    secret_names: MinimalSecretNames | None = None
 
 
 @dataclass(frozen=True)

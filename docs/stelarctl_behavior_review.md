@@ -90,11 +90,11 @@ In normal mode, `productName` comes from the product file stem. For example, `an
 
 Normal `lake create` does not accept `--context` or `--namespace`. Those flags are target concerns, not product transformation concerns.
 
-`lake create --minimal PRODUCT_NAME ENV [--workspace WORKSPACE] [--context CONTEXT] [--namespace NAMESPACE] [--manual-secrets] [--infer-storage-from-cluster]` interactively creates a minimal product.
+`lake create --minimal PRODUCT_NAME ENV [--workspace WORKSPACE] [--context CONTEXT] [--namespace NAMESPACE] [--custom-secret-names] [--infer-storage-from-cluster]` interactively creates a minimal product.
 
 Minimal creation supports only the minimal product shape. It does not create manual TLS products and does not select optional components.
 
-Minimal creation defaults to generated secret values. `--manual-secrets` changes the prompts so the user supplies the secret values manually.
+Minimal creation does not prompt for or store password values. Secret names use defaults unless `--custom-secret-names` is provided. Secret values are generated during `lake bootstrap` by default, or supplied there with `--manual-secrets`.
 
 `--namespace` and `--context` in minimal mode write deployment target fields to `spec.json` when provided. `--context` is also used with `--infer-storage-from-cluster`, so storage class prompts can be inferred from that kube context. Product/fullspec files do not contain the Kubernetes namespace.
 
@@ -150,7 +150,7 @@ Product-derived Secrets are built from the active fullspec. The current product 
 
 Manual TLS Secrets are included when the active fullspec selects `manual_tls`. Secret names come from `spec.stelar.active_product.ingress.manual_tls`. Certificate and key file directories come from `ENV/manual_tls.yaml`.
 
-CKAN auth Secret behavior is currently inconsistent with the fullspec inventory. The feature model exposes `ckan.CKAN_AUTH_SECRET_NAME`, `ckan.CKAN_SESSION_KEY`, and `ckan.CKAN_JWT_KEY`, and manifests reference `config.ckan.CKAN_AUTH_SECRET_NAME`, but bootstrap still creates a hardcoded `ckan-auth-secret` with generated values. This is a known issue to fix before claiming CKAN auth is fully fullspec-driven.
+CKAN auth Secret names come from `config.ckan.CKAN_AUTH_SECRET_NAME`; the actual session/JWT values are generated during `lake bootstrap` unless `lake bootstrap --manual-secrets` is used.
 
 ## TLS Behavior
 
@@ -207,9 +207,6 @@ The global config object passed to components is the unwrapped `klms` object fro
 Component rendering is static-registry based. Jsonnet computed imports are not used. Adding a component requires adding a component entrypoint and registering it in `lib/util/components.libsonnet`.
 
 ## Current Known Issues
-
-CKAN auth Secret creation is not fully fullspec-driven. Fix by deriving the Secret name and values from `config.ckan.CKAN_AUTH_SECRET_NAME`, `config.ckan.CKAN_SESSION_KEY`, and `config.ckan.CKAN_JWT_KEY`.
-
 
 `traefik` ingress controller selection is model-valid but rendering/preflight are nginx-only. Either implement controller-specific behavior or remove/reject `traefik`.
 

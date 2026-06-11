@@ -31,7 +31,6 @@ from .lake_product import (
 from .manual_tls import MANUAL_TLS_FILE_NAME, write_manual_tls_sample
 from .minimal_product import (
     build_minimal_product,
-    generate_minimal_secret_values,
     infer_storage_classes_from_cluster,
 )
 
@@ -42,7 +41,6 @@ __all__ = [
     "bootstrap_lake",
     "check_lake_cluster",
     "build_minimal_product",
-    "generate_minimal_secret_values",
     "infer_storage_classes_from_cluster",
     "add_lake_environment",
     "init_workspace",

@@ -60,34 +60,25 @@ def base_fullspec(*, core_components=None, optional_components=None, cluster=Non
             "ingress": {"tls": ["no_tls"], "no_tls": {}},
             "postgres": {
                 "POSTGRES_DB_PASSWORD_SECRET_NAME": "product-postgres-secret",
-                "POSTGRES_DB_PASSWORD": "postgres-password",
                 "CKAN_DB_PASSWORD_SECRET_NAME": "product-ckan-db-secret",
-                "CKAN_DB_PASSWORD": "ckan-password",
                 "KEYCLOAK_DB_PASSWORD_SECRET_NAME": "product-keycloak-db-secret",
-                "KEYCLOAK_DB_PASSWORD": "keycloak-db-password",
                 "DATASTORE_DB_PASSWORD_SECRET_NAME": "product-datastore-secret",
-                "DATASTORE_DB_PASSWORD": "datastore-password",
                 "QUAY_DB_PASSWORD_SECRET_NAME": "product-quay-db-secret",
-                "QUAY_DB_PASSWORD": "quay-password",
             },
             "keycloak": {
                 "KEYCLOAK_ROOT_PASSWORD_SECRET_NAME": "product-keycloak-root-secret",
-                "KEYCLOAK_ROOT_PASSWORD": "keycloak-root-password",
             },
             "api": {
                 "SMTP_PASSWORD_SECRET_NAME": "product-smtp-secret",
-                "SMTP_PASSWORD": "smtp-password",
                 "SESSION_SECRET_KEY_SECRET_NAME": "product-session-secret",
-                "SESSION_SECRET_KEY": "session-secret-value",
             },
             "ckan": {
                 "CKAN_ADMIN_PASSWORD_SECRET_NAME": "product-ckan-admin-secret",
-                "CKAN_ADMIN_PASSWORD": "ckan-admin-password",
+                "CKAN_AUTH_SECRET_NAME": "product-ckan-auth-secret",
             },
             "minio": {
                 "MINIO_ROOT_USER": "minioadmin",
                 "MINIO_ROOT_PASSWORD_SECRET_NAME": "product-minio-root-secret",
-                "MINIO_ROOT_PASSWORD": "minio-root-password",
                 "INSECURE_MC_CLIENT": "true",
             },
         }
@@ -126,7 +117,7 @@ def expected_secret_names(fullspec: dict) -> set[str]:
         klms["api"]["SESSION_SECRET_KEY_SECRET_NAME"],
         klms["ckan"]["CKAN_ADMIN_PASSWORD_SECRET_NAME"],
         klms["minio"]["MINIO_ROOT_PASSWORD_SECRET_NAME"],
-        "ckan-auth-secret",
+        klms["ckan"]["CKAN_AUTH_SECRET_NAME"],
     }
 
 

@@ -21,7 +21,6 @@ local env(config) = {
   CKAN_SMTP_SERVER: config.ckan.CKAN_SMTP_SERVER,
   CKAN_SMTP_STARTTLS: config.ckan.CKAN_SMTP_STARTTLS,
   CKAN_SMTP_USER: config.ckan.CKAN_SMTP_USER,
-  CKAN_SMTP_PASSWORD: config.ckan.CKAN_SMTP_PASSWORD,
   CKAN_SMTP_MAIL_FROM: config.ckan.CKAN_SMTP_MAIL_FROM,
   CKAN__PLUGINS: config.ckan.CKAN__PLUGINS,
   CKANEXT__SPATIAL__COMMON_MAP__TYPE: config.ckan.CKANEXT__SPATIAL__COMMON_MAP__TYPE,
@@ -62,6 +61,7 @@ local keycloak_config(config) = {
         + container.withEnvMap(env(config) + keycloak_config(config) + {
           CKAN_SITE_URL: config.SCHEME + "://" + config.PRIMARY_SUBDOMAIN + "." + config.ROOT_DOMAIN,
           CKAN_SYSADMIN_PASSWORD: envSource.secretKeyRef.withName(config.ckan.CKAN_ADMIN_PASSWORD_SECRET_NAME) + envSource.secretKeyRef.withKey("password"),
+          CKAN_SMTP_PASSWORD: envSource.secretKeyRef.withName(config.api.SMTP_PASSWORD_SECRET_NAME) + envSource.secretKeyRef.withKey("password"),
           CKANEXT__KEYCLOAK__CLIENT_SECRET_KEY: envSource.secretKeyRef.withName(config.keycloak.KC_CKAN_CLIENT_NAME + "-client-secret") + envSource.secretKeyRef.withKey("secret"),
           CKAN___BEAKER__SESSION__SECRET: envSource.secretKeyRef.withName(config.ckan.CKAN_AUTH_SECRET_NAME) + envSource.secretKeyRef.withKey("session-key"),
           CKAN___API_TOKEN__JWT__ENCODE__SECRET: envSource.secretKeyRef.withName(config.ckan.CKAN_AUTH_SECRET_NAME) + envSource.secretKeyRef.withKey("jwt-key"),

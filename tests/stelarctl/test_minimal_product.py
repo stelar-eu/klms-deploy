@@ -1,5 +1,4 @@
 import json
-from dataclasses import replace
 from types import SimpleNamespace
 
 import pytest
@@ -17,10 +16,11 @@ from stelar.deploy.models.product import (
 from stelar.deploy.operations import add_lake_environment, minimal_product
 from stelar.deploy.operations.minimal_product import (
     CommandError,
+    DEFAULT_MINIMAL_SECRET_NAMES,
     InferredStorageClasses,
     MinimalProductConfig,
+    MinimalSecretNames,
     build_minimal_product,
-    generate_minimal_secret_values,
     infer_storage_classes_from_cluster,
 )
 
@@ -58,7 +58,7 @@ def minimal_config(**overrides) -> MinimalProductConfig:
         "smtp_server": "smtp.example.test",
         "smtp_port": "587",
         "smtp_username": "operator",
-        "secrets": generate_minimal_secret_values(),
+        "secret_names": None,
     }
     values.update(overrides)
     return MinimalProductConfig(**values)
@@ -124,6 +124,27 @@ def test_build_minimal_product_omits_defaulted_secret_names_from_product():
     assert klms["minio"]["MINIO_ROOT_PASSWORD_SECRET_NAME"] == "minioroot-secret"
 
 
+def test_build_minimal_product_emits_custom_secret_name_overrides():
+    secret_names = dict(DEFAULT_MINIMAL_SECRET_NAMES)
+    secret_names.update({
+        "smtp_password_secret_name": "custom-smtp-secret",
+        "minio_root_password_secret_name": "custom-minio-root-secret",
+    })
+
+    product = build_minimal_product(
+        minimal_config(secret_names=MinimalSecretNames(**secret_names))
+    )
+
+    assert product["spec"]["api"] == {
+        "SMTP_SERVER": "smtp.example.test",
+        "SMTP_PORT": "587",
+        "SMTP_USERNAME": "operator",
+        "SMTP_PASSWORD_SECRET_NAME": "custom-smtp-secret",
+    }
+    assert product["spec"]["minio"]["MINIO_ROOT_PASSWORD_SECRET_NAME"] == "custom-minio-root-secret"
+    assert "POSTGRES_DB_PASSWORD_SECRET_NAME" not in product["spec"]["postgres"]
+
+
 def test_build_minimal_product_uses_no_tls_for_http():
     product = build_minimal_product(
         minimal_config(scheme="http", cluster_issuer="ignored")
@@ -149,55 +170,11 @@ def test_build_minimal_product_forces_insecure_minio_for_http():
     assert product["spec"]["minio"]["INSECURE_MC_CLIENT"] == "true"
 
 
-@pytest.mark.parametrize(
-    ("secret_field", "message"),
-    [
-        ("postgres_db_password", "postgres.POSTGRES_DB_PASSWORD"),
-        ("ckan_db_password", "postgres.CKAN_DB_PASSWORD"),
-        ("datastore_db_password", "postgres.DATASTORE_DB_PASSWORD"),
-        ("keycloak_db_password", "postgres.KEYCLOAK_DB_PASSWORD"),
-        ("quay_db_password", "postgres.QUAY_DB_PASSWORD"),
-        ("smtp_password", "api.SMTP_PASSWORD"),
-        ("ckan_admin_password", "ckan.CKAN_ADMIN_PASSWORD"),
-        ("keycloak_root_password", "keycloak.KEYCLOAK_ROOT_PASSWORD"),
-        ("minio_root_password", "minio.MINIO_ROOT_PASSWORD"),
-    ],
-)
-def test_build_minimal_product_rejects_short_passwords(secret_field, message):
-    secrets = replace(generate_minimal_secret_values(), **{secret_field: "1234"})
-
-    with pytest.raises(
-        CommandError,
-        match=rf"{message}.*at least 8 characters",
-    ):
-        build_minimal_product(minimal_config(secrets=secrets))
-
 
 def test_build_minimal_product_rejects_invalid_https_insecure_minio_value():
     with pytest.raises(CommandError, match="Insecure MinIO client"):
         build_minimal_product(minimal_config(insecure_minio_client="maybe"))
 
-
-@pytest.mark.parametrize(
-    ("section", "field"),
-    [
-        ("api", "SMTP_PASSWORD"),
-        ("postgres", "POSTGRES_DB_PASSWORD"),
-        ("postgres", "CKAN_DB_PASSWORD"),
-        ("postgres", "DATASTORE_DB_PASSWORD"),
-        ("postgres", "KEYCLOAK_DB_PASSWORD"),
-        ("postgres", "QUAY_DB_PASSWORD"),
-        ("ckan", "CKAN_ADMIN_PASSWORD"),
-        ("keycloak", "KEYCLOAK_ROOT_PASSWORD"),
-        ("minio", "MINIO_ROOT_PASSWORD"),
-    ],
-)
-def test_feature_model_rejects_short_password_constraints(section, field):
-    product = build_minimal_product(minimal_config())
-    product["spec"][section][field] = "1234"
-
-    with pytest.raises(ProductValidationFailure, match=field):
-        ProductValidator(feature_model).validate(Product.model_validate(product))
 
 
 def test_feature_model_rejects_short_minio_root_user():
@@ -255,14 +232,6 @@ def test_feature_model_requires_manual_tls_secret_names():
     with pytest.raises(ProductValidationFailure, match="KEYCLOAK_TLS_SECRET_NAME"):
         ProductValidator(feature_model).validate(Product.model_validate(product))
 
-
-def test_generate_minimal_secret_values_uses_non_empty_distinct_values():
-    values = generate_minimal_secret_values()
-    raw_values = list(values.__dict__.values())
-
-    assert all(isinstance(value, str) and value for value in raw_values)
-    assert values.ckan_jwt_key.startswith("string:")
-    assert len(set(raw_values)) == len(raw_values)
 
 
 def test_infer_storage_classes_from_cluster_uses_default_storage_class(monkeypatch):
@@ -323,7 +292,7 @@ def test_infer_storage_classes_from_cluster_prefers_known_storage_name(monkeypat
     assert inferred.provisioning_storage_class == "longhorn"
 
 
-def test_lake_create_minimal_cli_generates_product_with_default_secret_values(tmp_path):
+def test_lake_create_minimal_cli_generates_product_without_secret_values(tmp_path):
     workspace = make_workspace(tmp_path / "workspace")
     add_lake_environment("dev", workspace)
     product_path = workspace / "dev" / "minimal.json"
@@ -386,7 +355,9 @@ def test_lake_create_minimal_cli_generates_product_with_default_secret_values(tm
     assert product["spec"]["optional_components"] == []
     assert product["spec"]["ingress"]["tls"] == ["cert_manager"]
     assert "manual_tls" not in product["spec"]["ingress"]
-    assert product["spec"]["minio"]["MINIO_ROOT_PASSWORD"]
+    assert "MINIO_ROOT_PASSWORD" not in product["spec"]["minio"]
+    assert "SMTP_PASSWORD" not in product["spec"]["api"]
+    assert "POSTGRES_DB_PASSWORD" not in product["spec"]["postgres"]
     assert not (workspace / "dev" / "product.secrets.yaml").exists()
 
 
@@ -547,7 +518,7 @@ def test_lake_manual_tls_template_cli_rejects_existing_file(tmp_path):
     assert output.read_text(encoding="utf-8") == "existing"
 
 
-def test_lake_create_minimal_cli_manual_secrets_prompts_for_values(tmp_path):
+def test_lake_create_minimal_cli_custom_secret_names_prompts_for_names(tmp_path):
     workspace = make_workspace(tmp_path / "workspace")
     add_lake_environment("dev", workspace)
     product_path = workspace / "dev" / "minimal.json"
@@ -562,37 +533,13 @@ def test_lake_create_minimal_cli_manual_secrets_prompts_for_values(tmp_path):
             "dev",
             "--workspace",
             str(workspace),
-            "--manual-secrets",
+            "--custom-secret-names",
         ],
         input=(
             "https\n"
             "letsencrypt-prod\n"
             "longhorn\n"
             "csi-hostpath-sc\n"
-            "pgpass123\n"
-            "pgpass123\n"
-            "ckandbpass123\n"
-            "ckandbpass123\n"
-            "datastorepass123\n"
-            "datastorepass123\n"
-            "keycloakdbpass123\n"
-            "keycloakdbpass123\n"
-            "quaydbpass123\n"
-            "quaydbpass123\n"
-            "smtppass123\n"
-            "smtppass123\n"
-            "apisessionsecret123\n"
-            "apisessionsecret123\n"
-            "ckanadminpass123\n"
-            "ckanadminpass123\n"
-            "ckansessionsecret123\n"
-            "ckansessionsecret123\n"
-            "string:ckanjwtsecret123\n"
-            "string:ckanjwtsecret123\n"
-            "keycloakrootpass123\n"
-            "keycloakrootpass123\n"
-            "miniorootpass123\n"
-            "miniorootpass123\n"
             "example.test\n"
             "klms\n"
             "kc\n"
@@ -602,16 +549,31 @@ def test_lake_create_minimal_cli_manual_secrets_prompts_for_values(tmp_path):
             "smtp.example.test\n"
             "587\n"
             "operator\n"
+            "custom-postgres-secret\n"
+            "custom-ckan-db-secret\n"
+            "custom-datastore-secret\n"
+            "custom-keycloak-db-secret\n"
+            "custom-quay-db-secret\n"
+            "custom-smtp-secret\n"
+            "custom-session-secret\n"
+            "custom-ckan-admin-secret\n"
+            "custom-ckan-auth-secret\n"
+            "custom-keycloak-root-secret\n"
+            "custom-minio-root-secret\n"
         ),
     )
 
     assert result.exit_code == 0, result.output
+    assert "Secret name overrides" in result.output
     product = yaml.safe_load(product_path.read_text(encoding="utf-8"))
 
-    assert product["spec"]["postgres"]["POSTGRES_DB_PASSWORD"] == "pgpass123"
-    assert product["spec"]["api"]["SMTP_PASSWORD"] == "smtppass123"
-    assert product["spec"]["ckan"]["CKAN_JWT_KEY"] == "string:ckanjwtsecret123"
-    assert product["spec"]["minio"]["MINIO_ROOT_PASSWORD"] == "miniorootpass123"
+    assert product["spec"]["postgres"]["POSTGRES_DB_PASSWORD_SECRET_NAME"] == "custom-postgres-secret"
+    assert product["spec"]["api"]["SMTP_PASSWORD_SECRET_NAME"] == "custom-smtp-secret"
+    assert product["spec"]["ckan"]["CKAN_AUTH_SECRET_NAME"] == "custom-ckan-auth-secret"
+    assert product["spec"]["minio"]["MINIO_ROOT_PASSWORD_SECRET_NAME"] == "custom-minio-root-secret"
+    assert "POSTGRES_DB_PASSWORD" not in product["spec"]["postgres"]
+    assert "SMTP_PASSWORD" not in product["spec"]["api"]
+    assert "MINIO_ROOT_PASSWORD" not in product["spec"]["minio"]
     assert not (workspace / "dev" / "product.secrets.yaml").exists()
 
 

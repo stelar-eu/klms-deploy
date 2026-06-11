@@ -62,13 +62,13 @@ command surface. It is intended as an operator and implementation review aid.
 
 ## `lake create`
 
-- Fails if minimal-only flags are used without `--minimal`: currently `--manual-secrets` and `--infer-storage-from-cluster`.
+- Fails if minimal-only flags are used without `--minimal`: currently `--custom-secret-names` and `--infer-storage-from-cluster`.
 - Fails if normal mode is missing `ENV`.
 - Fails if normal mode product path does not exist.
 - Fails if normal mode uses `--context` or `--namespace`; normal product transformation does not write target fields. Use `lake add --context/--namespace` or `lake create --minimal --context/--namespace` before bootstrap.
 - Fails if product name is empty, contains path separators, or contains invalid characters.
 - Fails if product file is unreadable, empty, not an object, or invalid against the product schema or feature model.
-- Fails if fullspec validation fails, including scheme/TLS mismatch, missing manual TLS secret names, invalid MinIO/security constraints, or short passwords.
+- Fails if fullspec validation fails, including scheme/TLS mismatch, missing manual TLS secret names, invalid MinIO/security constraints, or invalid MinIO/security constraints.
 - In `--minimal` mode, fails if `ENV` is missing or not initialized.
 - In `--minimal --infer-storage-from-cluster`, fails if kube context or StorageClass inference cannot run.
 - In interactive minimal mode, invalid prompt values are rejected; user abort exits.

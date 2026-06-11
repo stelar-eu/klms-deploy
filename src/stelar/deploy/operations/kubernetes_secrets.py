@@ -11,8 +11,10 @@ from kubernetes.client.rest import ApiException
 from .common import CommandError, JsonObject
 from .progress import ClusterProgress
 from .secret_resources import (
-    CKAN_AUTH_SECRET_NAME,
+    BootstrapSecretValues,
     ckan_auth_secret_data,
+    ckan_auth_secret_name,
+    generate_bootstrap_secret_values,
     kubernetes_secret,
     kubernetes_tls_secret,
     product_secrets,
@@ -41,11 +43,13 @@ def apply_product_secrets(
     progress: ClusterProgress,
     *,
     check_existing: bool = True,
+    secret_values: BootstrapSecretValues | None = None,
 ) -> None:
     """Create required fullspec-derived Kubernetes Secrets when missing."""
     core_api = kube_client.CoreV1Api()
+    values = secret_values or generate_bootstrap_secret_values()
 
-    for secret_name, secret_data in product_secrets(config):
+    for secret_name, secret_data in product_secrets(config, values):
         if check_existing:
             apply_secret_if_missing(
                 core_api,
@@ -68,15 +72,16 @@ def apply_product_secrets(
         apply_ckan_auth_secret_if_missing(
             core_api,
             namespace,
-            CKAN_AUTH_SECRET_NAME,
+            ckan_auth_secret_name(config),
             progress,
+            values,
         )
     else:
         create_secret(
             core_api,
             namespace,
-            CKAN_AUTH_SECRET_NAME,
-            ckan_auth_secret_data(),
+            ckan_auth_secret_name(config),
+            ckan_auth_secret_data(values),
             progress,
             allow_conflict=False,
         )
@@ -132,13 +137,20 @@ def apply_ckan_auth_secret_if_missing(
     namespace: str,
     secret_name: str,
     progress: ClusterProgress,
+    secret_values: BootstrapSecretValues,
 ) -> None:
     """Create the generated CKAN auth Secret when it is missing."""
     if secret_exists(core_api, namespace, secret_name):
         progress.secret_exists(secret_name)
         return
 
-    create_secret(core_api, namespace, secret_name, ckan_auth_secret_data(), progress)
+    create_secret(
+        core_api,
+        namespace,
+        secret_name,
+        ckan_auth_secret_data(secret_values),
+        progress,
+    )
 
 
 def check_secret_existence(

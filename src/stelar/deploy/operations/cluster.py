@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from collections.abc import Callable
 from typing import Literal
 
 from kubernetes import client as kube_client
@@ -48,7 +49,7 @@ from .manual_tls import (
     read_manual_tls_secrets,
 )
 from .progress import ClusterProgress
-from .secret_resources import expected_bootstrap_secret_names
+from .secret_resources import BootstrapSecretValues, expected_bootstrap_secret_names
 
 # Expose kube_config for tests and integrations that monkeypatch this module.
 kube_config = kube_context_helpers.kube_config
@@ -62,6 +63,8 @@ def bootstrap_lake(
     workspace_path: Path = Path("."),
     preflight: PreflightMode = "strict",
     progress: ClusterProgress | None = None,
+    secret_values: BootstrapSecretValues | None = None,
+    secret_values_factory: Callable[[], BootstrapSecretValues] | None = None,
 ) -> None:
     """Prepare cluster resources for an initialized lake environment."""
     preflight = _validate_preflight_mode(preflight)
@@ -134,11 +137,14 @@ def bootstrap_lake(
         progress,
     )
     tls_secrets = _manual_tls_secrets_to_apply(environment_dir, config)
+    if secret_values is None and secret_values_factory is not None:
+        secret_values = secret_values_factory()
     apply_product_secrets(
         namespace,
         config,
         progress,
         check_existing=check_existing_secrets,
+        secret_values=secret_values,
     )
     _apply_manual_tls_secrets(
         namespace,
