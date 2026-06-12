@@ -12,7 +12,7 @@ from .common import (
     validate_workspace,
 )
 from .lake_environment import add_lake_environment, remove_lake_environment
-from .lake_secret_purge import plan_lake_secret_purge, purge_lake_secrets
+from .lake_unbootstrap import plan_lake_unbootstrap, unbootstrap_lake
 from .lake_status import inspect_lake_status
 from .lake_workspace import (
     init_workspace,
@@ -21,7 +21,7 @@ from .lake_workspace import (
     workspace_info,
 )
 from .lake_product import (
-    activate_lake_product,
+    switch_lake_product,
     product_data_to_fullspec,
     product_fullspec_json_filename,
     product_json_filename,
@@ -37,7 +37,7 @@ from .minimal_product import (
 __all__ = [
     "CommandError",
     "PreflightAccessError",
-    "activate_lake_product",
+    "switch_lake_product",
     "bootstrap_lake",
     "check_lake_cluster",
     "build_minimal_product",
@@ -45,8 +45,8 @@ __all__ = [
     "add_lake_environment",
     "init_workspace",
     "inspect_lake_status",
-    "plan_lake_secret_purge",
-    "purge_lake_secrets",
+    "plan_lake_unbootstrap",
+    "unbootstrap_lake",
     "lake_environment_info",
     "list_lake_environments",
     "remove_lake_environment",

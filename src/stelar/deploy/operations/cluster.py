@@ -1,25 +1,17 @@
-"""Business logic for `lake bootstrap`."""
+"""Business logic for `lake bootstrap` and `lake verify`."""
 
 from __future__ import annotations
 
-from pathlib import Path
 from collections.abc import Callable
+from pathlib import Path
 from typing import Literal
 
 from kubernetes import client as kube_client
-
-from . import kube_context as kube_context_helpers
 from kubernetes.client.rest import ApiException
 
-from .bootstrap_state import (
-    bootstrap_secret_names,
-    bootstrapped_product_or_none,
-    record_bootstrapped_product,
-    validate_bootstrap_product_matches,
-    validate_bootstrap_target_matches,
-)
-from .cluster_preflight import PreflightAccessError, run_preflight_checks
-from .common import CommandError, read_environment_json, validate_workspace
+from . import kube_context as kube_context_helpers
+from .cluster_preflight import PreflightAccessError, run_preflight_checks  # noqa: F401
+from .common import CommandError, JsonObject, read_environment_json, validate_workspace
 from .deployment_config import (
     cluster_issuer_name,
     configured_storage_class_names,
@@ -28,7 +20,7 @@ from .deployment_config import (
 )
 from .environment_spec import (
     environment_active_product,
-    environment_active_product_name_or_none,
+    environment_current_product_or_none,
     environment_namespace,
     update_environment_spec_json,
 )
@@ -42,6 +34,11 @@ from .kubernetes_secrets import (
     check_secret_existence,
 )
 from .lake_environment import initialized_lake_environment_dir
+from .lake_state_configmap import (
+    LAKE_STATE_CONFIGMAP_NAME,
+    apply_lake_state_configmap,
+    read_lake_state_configmap,
+)
 from .manual_tls import (
     MANUAL_TLS_FILE_NAME,
     ManualTlsSecret,
@@ -74,31 +71,18 @@ def bootstrap_lake(
     spec_path = environment_dir / "spec.json"
     spec_json = read_environment_json(spec_path)
     product_fullspec = environment_active_product(spec_json)
-    product_name = _active_product_name_or_none(
+    config = deployment_config(product_fullspec)
+    validate_config_scheme_tls_consistency(
+        config,
+        source="spec.stelar.active_product",
+    )
+    product_name = _current_product_or_none(
         environment_dir,
         spec_json,
         product_fullspec,
     )
-
-    if bootstrapped_product_or_none(spec_json) is not None:
-        # Once bootstrap state exists, target restoration is the first invariant.
-        # Do not mask a broken target with unrelated product validation errors.
-        target = _resolve_bootstrap_target(environment, spec_json, progress)
-        validate_bootstrap_product_matches(spec_json, product_fullspec)
-        config = deployment_config(product_fullspec)
-        validate_config_scheme_tls_consistency(
-            config,
-            source="spec.stelar.active_product",
-        )
-    else:
-        # For unbootstrapped environments, a bad fullspec should not mutate
-        # spec.json as a side effect of a failed bootstrap.
-        config = deployment_config(product_fullspec)
-        validate_config_scheme_tls_consistency(
-            config,
-            source="spec.stelar.active_product",
-        )
-        target = _resolve_bootstrap_target(environment, spec_json, progress)
+    product = _product_source_or_none(environment_dir, product_name)
+    target = _resolve_bootstrap_target(environment, spec_json, progress)
 
     context_name = target.context
     namespace = target.namespace
@@ -115,11 +99,12 @@ def bootstrap_lake(
     )
     spec_json = read_environment_json(spec_path)
     namespace = environment_namespace(spec_json)
-    validate_bootstrap_target_matches(spec_json, context_name, namespace)
 
     load_kube_context(context_name)
-    # --skip-preflight bypasses read-only cluster inspection only. Secret
-    # creation still runs because the deployment cannot proceed without it.
+    _reject_existing_lake_state(namespace, progress)
+
+    # --skip-preflight bypasses read-only cluster inspection only. State checks
+    # and Secret creation still run because they are required for safe bootstrap.
     if preflight == "strict":
         run_preflight_checks(
             namespace,
@@ -132,8 +117,6 @@ def bootstrap_lake(
     check_existing_secrets = _guard_against_duplicate_bootstrap(
         namespace,
         config,
-        spec_json,
-        context_name,
         progress,
     )
     tls_secrets = _manual_tls_secrets_to_apply(environment_dir, config)
@@ -152,14 +135,12 @@ def bootstrap_lake(
         progress,
         check_existing=check_existing_secrets,
     )
-    record_bootstrapped_product(
-        spec_path,
-        spec_json,
-        context_name,
+    apply_lake_state_configmap(
         namespace,
-        expected_bootstrap_secret_names(config),
         product_name=product_name,
-        product_fullspec=product_fullspec,
+        product=product,
+        fullspec=product_fullspec,
+        progress=progress,
     )
 
 
@@ -188,7 +169,6 @@ def check_lake_cluster(
         config,
         source="spec.stelar.active_product",
     )
-    validate_bootstrap_product_matches(spec_json, product_fullspec)
     storage_class_names = configured_storage_class_names(config)
     scheme = deployment_scheme(config)
     cluster_issuer = cluster_issuer_name(config, scheme)
@@ -207,7 +187,7 @@ def check_lake_cluster(
 
 def _resolve_bootstrap_target(
     environment: str,
-    spec_json: dict[str, object],
+    spec_json: JsonObject,
     progress: ClusterProgress,
 ) -> EnvironmentTarget:
     return resolve_environment_target(
@@ -228,12 +208,12 @@ def _resolve_bootstrap_target(
     )
 
 
-def _active_product_name_or_none(
+def _current_product_or_none(
     environment_dir: Path,
-    spec_json: dict[str, object],
-    product_fullspec: dict[str, object],
+    spec_json: JsonObject,
+    product_fullspec: JsonObject,
 ) -> str | None:
-    configured_name = environment_active_product_name_or_none(spec_json)
+    configured_name = environment_current_product_or_none(spec_json)
     if configured_name is not None:
         return configured_name
 
@@ -251,9 +231,38 @@ def _active_product_name_or_none(
     return None
 
 
+def _product_source_or_none(
+    environment_dir: Path,
+    product_name: str | None,
+) -> JsonObject | None:
+    if product_name is None:
+        return None
+    product_path = environment_dir / f"{product_name}.json"
+    if not product_path.is_file():
+        return None
+    return read_environment_json(product_path)
+
+
+def _reject_existing_lake_state(
+    namespace: str,
+    progress: ClusterProgress,
+) -> None:
+    lake_state = read_lake_state_configmap(namespace)
+    if lake_state is None:
+        return
+    _notify(progress, "lake_state_exists", namespace, LAKE_STATE_CONFIGMAP_NAME)
+    product = f" for product {lake_state.product_name!r}" if lake_state.product_name else ""
+    raise CommandError(
+        "Lake bootstrap appears to have already run in namespace "
+        f"{namespace!r}{product}: ConfigMap {LAKE_STATE_CONFIGMAP_NAME!r} exists. "
+        "Use `stelarctl lake status ENV` to inspect it or `stelarctl lake "
+        "unbootstrap ENV` before bootstrapping another product."
+    )
+
+
 def _validate_manual_tls_inputs_if_selected(
     environment_dir: Path,
-    config: dict[str, object],
+    config: JsonObject,
 ) -> None:
     if not manual_tls_selected(config):
         return
@@ -272,6 +281,7 @@ def _validate_manual_tls_inputs_if_selected(
 def _notify(progress: ClusterProgress, hook: str, *args: object) -> None:
     getattr(progress, hook, lambda *_args: None)(*args)
 
+
 def _validate_preflight_mode(preflight: str) -> PreflightMode:
     if preflight not in PREFLIGHT_MODES:
         raise CommandError("Preflight mode must be one of: strict, skip")
@@ -280,17 +290,10 @@ def _validate_preflight_mode(preflight: str) -> PreflightMode:
 
 def _guard_against_duplicate_bootstrap(
     namespace: str,
-    config: dict[str, object],
-    spec_json: dict[str, object],
-    context_name: str,
+    config: JsonObject,
     progress: ClusterProgress,
 ) -> bool:
-    secret_names = bootstrap_secret_names(
-        spec_json,
-        context_name,
-        namespace,
-        expected_bootstrap_secret_names(config),
-    )
+    secret_names = expected_bootstrap_secret_names(config)
     try:
         state = check_secret_existence(namespace, secret_names)
     except SecretReadForbidden as exc:
@@ -300,8 +303,10 @@ def _guard_against_duplicate_bootstrap(
     if state.all_exist:
         _notify(progress, "bootstrap_already_applied", namespace, secret_names)
         raise CommandError(
-            "Lake bootstrap appears to have already run in namespace "
-            f"{namespace!r}: all required bootstrap Secrets already exist."
+            "Lake bootstrap found all required bootstrap Secrets in namespace "
+            f"{namespace!r}, but ConfigMap {LAKE_STATE_CONFIGMAP_NAME!r} is "
+            "missing. Refusing to infer bootstrap state from Secrets alone. "
+            "Inspect the namespace or unbootstrap the namespace before retrying."
         )
 
     if state.existing:
@@ -317,7 +322,7 @@ def _guard_against_duplicate_bootstrap(
 
 def _manual_tls_secrets_to_apply(
     environment_dir: Path,
-    config: dict[str, object],
+    config: JsonObject,
 ) -> list[ManualTlsSecret]:
     if not manual_tls_selected(config):
         return []

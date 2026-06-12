@@ -8,11 +8,10 @@ from typing import Annotated
 
 import typer
 
-from ..cli_help import LAKE_CREATE_EPILOG, LAKE_CREATE_HELP
 from ..models.product import ProductValidationFailure
 from ..operations import (
     CommandError,
-    activate_lake_product,
+    switch_lake_product,
     lake_environment_info,
     product_data_to_fullspec,
     product_fullspec_json_filename,
@@ -20,20 +19,16 @@ from ..operations import (
     product_name_from_path,
     product_to_fullspec,
 )
-from ..operations.bootstrap_state import (
-    bootstrapped_product_or_none,
-    reject_bootstrap_target_overrides,
-)
 from ..operations.common import read_environment_json
 from ..operations.environment_spec import (
     environment_active_product,
-    environment_active_product_name_or_none,
+    environment_current_product_or_none,
     update_environment_target_fields,
     validate_environment_target_fields,
 )
 from ..operations.minimal_product import infer_storage_classes_from_cluster
 from .minimal_product import echo_inferred_storage, prompt_minimal_product
-from .progress import TyperLakeActivationProgress
+from .progress import TyperLakeSwitchProgress
 
 
 def lake_create_command(
@@ -136,8 +131,8 @@ def lake_create_command(
         product_name = product_name_from_path(product_path)
         if context is not None or namespace is not None:
             raise CommandError(
-                "lake create only transforms products; activate a generated "
-                "product with lake activate. Persist target fields with "
+                "lake create only transforms products; switch to a generated "
+                "product with lake switch. Persist target fields with "
                 "lake add --context/--namespace, or pass them only to "
                 "lake verify for read-only checks."
             )
@@ -192,12 +187,6 @@ def _create_minimal_lake(
         )
         environment_info = lake_environment_info(environment, workspace)
         spec_path = environment_info.path / "spec.json"
-        spec_json = read_environment_json(spec_path)
-        reject_bootstrap_target_overrides(
-            spec_json,
-            context=context,
-            namespace=namespace,
-        )
         product_path = environment_info.path / product_json_filename(product_name)
         product_fullspec_path = environment_info.path / product_fullspec_json_filename(
             product_name
@@ -283,7 +272,7 @@ def _warn_if_regenerated_active_product_is_stale(
     try:
         environment_info = lake_environment_info(environment, workspace)
         spec_json = read_environment_json(environment_info.path / "spec.json")
-        active_name = environment_active_product_name_or_none(spec_json)
+        active_name = environment_current_product_or_none(spec_json)
         if active_name != normalized_product_name:
             return
         active_fullspec = environment_active_product(spec_json)
@@ -292,24 +281,14 @@ def _warn_if_regenerated_active_product_is_stale(
 
     if active_fullspec == fullspec:
         return
-    if bootstrapped_product_or_none(spec_json) is not None:
-        typer.echo(
-            "Warning: regenerated active product "
-            f"{normalized_product_name!r}, but this environment has recorded "
-            "bootstrap state for the previous fullspec. Purge old bootstrap "
-            f"Secrets with `stelarctl lake purge-secrets {environment}`, then "
-            f"run `stelarctl lake activate {normalized_product_name} "
-            f"{environment}`, then run `stelarctl lake bootstrap {environment}` "
-            "for the regenerated fullspec.",
-            err=True,
-        )
-        return
     typer.echo(
         "Warning: regenerated active product "
         f"{normalized_product_name!r}, but spec.stelar.active_product still "
-        "contains the previous fullspec. Run `stelarctl lake activate "
+        "contains the previous fullspec. Run `stelarctl lake switch "
         f"{normalized_product_name} {environment}` to render the regenerated "
-        "fullspec.",
+        "fullspec. If this environment is already bootstrapped, run "
+        "`stelarctl lake unbootstrap ENV` and rerun lake bootstrap before "
+        "applying it to the same namespace.",
         err=True,
     )
 
@@ -329,7 +308,7 @@ def _product_path(product: str) -> Path:
     return product_path
 
 
-def lake_activate_command(
+def lake_switch_command(
     product_name: Annotated[
         str,
         typer.Argument(help="Generated product name, with or without .json"),
@@ -351,14 +330,14 @@ def lake_activate_command(
     ] = Path("."),
 ) -> None:
     try:
-        fullspec = activate_lake_product(
+        fullspec = switch_lake_product(
             product_name,
             env,
             workspace,
-            progress=TyperLakeActivationProgress(),
+            progress=TyperLakeSwitchProgress(),
         )
     except CommandError as exc:
         raise typer.BadParameter(str(exc)) from exc
 
-    typer.echo(f"Activated product: {product_name}")
+    typer.echo(f"Switched active product: {product_name}")
     typer.echo(json.dumps(fullspec, indent=2))

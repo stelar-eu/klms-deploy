@@ -11,18 +11,17 @@ from kubernetes import client as kube_client
 from kubernetes.client.rest import ApiException
 
 from . import kube_context as kube_context_helpers
-from .bootstrap_state import (
-    bootstrap_secret_names,
-    bootstrapped_product_or_none,
-    validate_bootstrap_product_matches,
-)
 from .common import CommandError, JsonObject, read_environment_json, validate_workspace
 from .deployment_config import deployment_config
-from .environment_spec import environment_active_product
 from .environment_target import resolve_environment_target
 from .fullspec_validation import validate_config_scheme_tls_consistency
 from .kube_context import load_kube_context
 from .lake_environment import initialized_lake_environment_dir
+from .lake_state_configmap import (
+    LAKE_STATE_CONFIGMAP_NAME,
+    LakeState,
+    read_lake_state_configmap,
+)
 from .secret_resources import expected_bootstrap_secret_names
 
 # Expose kube_config for tests and integrations that monkeypatch this module.
@@ -143,50 +142,32 @@ def inspect_lake_status(
     job_timeout_seconds: float = 120.0,
     poll_interval_seconds: float = 5.0,
 ) -> LakeStatus:
-    """Inspect bootstrap and deployment status for one lake environment."""
+    """Inspect cluster-recorded bootstrap and deployment status."""
     _validate_polling(job_timeout_seconds, poll_interval_seconds)
     workspace = validate_workspace(workspace_path)
     environment_dir = initialized_lake_environment_dir(workspace, environment)
     spec_json = read_environment_json(environment_dir / "spec.json")
-    product_fullspec = environment_active_product(spec_json)
-
-    if bootstrapped_product_or_none(spec_json) is None:
-        config = deployment_config(product_fullspec)
-        validate_config_scheme_tls_consistency(
-            config,
-            source="spec.stelar.active_product",
-        )
-        target = resolve_environment_target(
-            environment,
-            spec_json,
-            context=context,
-            namespace=namespace,
-        )
-    else:
-        target = resolve_environment_target(
-            environment,
-            spec_json,
-            context=context,
-            namespace=namespace,
-        )
-        config = deployment_config(product_fullspec)
-        validate_config_scheme_tls_consistency(
-            config,
-            source="spec.stelar.active_product",
-        )
+    target = resolve_environment_target(
+        environment,
+        spec_json,
+        context=context,
+        namespace=namespace,
+    )
     context_name = target.context
     status_namespace = target.namespace
 
-    selected_components = extract_selected_components(config)
-    expected_secrets = bootstrap_secret_names(
-        spec_json,
-        context_name,
-        status_namespace,
-        expected_bootstrap_secret_names(config),
-    )
-    diagnostics = _product_lock_diagnostics(spec_json, product_fullspec)
-
     load_kube_context(context_name)
+    lake_state = read_lake_state_configmap(status_namespace)
+    if lake_state is None:
+        return _not_bootstrapped_status(environment, context_name, status_namespace)
+
+    config = deployment_config(lake_state.fullspec)
+    validate_config_scheme_tls_consistency(
+        config,
+        source=f"ConfigMap {LAKE_STATE_CONFIGMAP_NAME} fullspec.json",
+    )
+    selected_components = extract_selected_components(config)
+    expected_secrets = expected_bootstrap_secret_names(config)
     bootstrap = inspect_bootstrap_status(status_namespace, expected_secrets)
     expectations, unchecked = expected_workloads(config, selected_components)
     deployment = inspect_deployment_status(
@@ -204,23 +185,36 @@ def inspect_lake_status(
         selected_components=selected_components,
         bootstrap=bootstrap,
         deployment=deployment,
-        diagnostics=diagnostics,
+        diagnostics=_lake_state_diagnostics(lake_state),
     )
 
 
-def _product_lock_diagnostics(
-    spec_json: JsonObject,
-    product_fullspec: JsonObject,
-) -> tuple[str, ...]:
-    try:
-        validate_bootstrap_product_matches(spec_json, product_fullspec)
-    except CommandError as exc:
-        return (
-            f"Bad environment state: {exc} Status is reporting recorded "
-            "bootstrap Secrets and workloads for the current active product.",
-        )
-    return ()
+def _not_bootstrapped_status(
+    environment: str,
+    context_name: str,
+    namespace: str,
+) -> LakeStatus:
+    return LakeStatus(
+        environment=environment,
+        context=context_name,
+        namespace=namespace,
+        selected_components=(),
+        bootstrap=BootstrapStatus(
+            "not_bootstrapped",
+            (),
+            detail=(
+                f"ConfigMap {LAKE_STATE_CONFIGMAP_NAME!r} was not found in "
+                f"namespace {namespace!r}."
+            ),
+        ),
+        deployment=DeploymentStatus("not_deployed", ()),
+    )
 
+
+def _lake_state_diagnostics(lake_state: LakeState) -> tuple[str, ...]:
+    if lake_state.product_name is None:
+        return ()
+    return (f"cluster product: {lake_state.product_name}",)
 
 def extract_selected_components(config: JsonObject) -> tuple[str, ...]:
     """Mirror lib/util/product_transformation.extract_components in Python."""

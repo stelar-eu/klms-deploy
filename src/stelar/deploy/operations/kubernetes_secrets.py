@@ -216,7 +216,7 @@ def create_secret(
                     "state before creating Secrets. Refusing to record bootstrap "
                     "state because existing Secret values may belong to another "
                     "bootstrap. Rerun with a Kubernetes user allowed to get "
-                    "secrets or purge the existing bootstrap Secrets intentionally."
+                    "secrets or unbootstrap the namespace intentionally."
                 ) from exc
             progress.secret_exists(secret_name)
             return
@@ -260,7 +260,7 @@ def create_tls_secret(
                     "bootstrap state before creating Secrets. Refusing to record "
                     "bootstrap state because existing Secret values may belong "
                     "to another bootstrap. Rerun with a Kubernetes user allowed "
-                    "to get secrets or purge the existing bootstrap Secrets "
+                    "to get secrets or unbootstrap the namespace "
                     "intentionally."
                 ) from exc
             progress.secret_exists(secret_name)

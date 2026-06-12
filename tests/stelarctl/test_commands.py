@@ -23,10 +23,9 @@ from stelar.deploy.operations import (
     remove_lake_environment,
     workspace_info,
     product_to_fullspec,
-    activate_lake_product,
+    switch_lake_product,
 )
 from stelar.deploy.models.product import ProductValidationFailure
-from stelar.deploy.operations.bootstrap_state import product_sha256, target_sha256
 from stelar.deploy.operations.secret_resources import BootstrapSecretValues
 
 
@@ -209,10 +208,20 @@ def set_cluster_preflight(
     ingress_controller_has_component_label: bool = True,
     context_names: tuple[str, ...] = ("current-context",),
     active_context: str | None = "current-context",
+    lake_state_fullspec: dict | None = None,
 ) -> dict:
     existing_secrets = set(existing_secrets or ())
     missing_storage_classes = set(missing_storage_classes or ())
-    calls = {"created_secrets": [], "read_secrets": []}
+    configmaps = {}
+    if lake_state_fullspec is not None:
+        configmaps[("test", "stelar-lake-state")] = {
+            "data": {
+                "product_name": "generated",
+                "product_filename": "generated.json",
+                "fullspec.json": json.dumps(lake_state_fullspec),
+            }
+        }
+    calls = {"created_secrets": [], "read_secrets": [], "configmaps": []}
     active = {"name": active_context} if active_context is not None else None
 
     def not_found():
@@ -277,6 +286,25 @@ def set_cluster_preflight(
                 raise cluster_commands.ApiException(status=500, reason="Server Error")
             calls["created_secrets"].append((namespace, name, body))
             existing_secrets.add(name)
+            return body
+
+        def read_namespaced_config_map(self, name, namespace):
+            calls["configmaps"].append(("read", namespace, name))
+            if missing == "lake_state_read_forbidden":
+                forbidden()
+            key = (namespace, name)
+            if key not in configmaps:
+                not_found()
+            return SimpleNamespace(data=configmaps[key].get("data", {}))
+
+        def create_namespaced_config_map(self, *, namespace, body):
+            name = body["metadata"]["name"]
+            calls["configmaps"].append(("create", namespace, name, body))
+            if missing == "lake_state_create_forbidden":
+                forbidden()
+            if missing == "lake_state_create_conflict":
+                raise cluster_commands.ApiException(status=409, reason="Conflict")
+            configmaps[(namespace, name)] = body
             return body
 
         def list_pod_for_all_namespaces(self, *, label_selector=None):
@@ -570,43 +598,47 @@ class RecordingClusterProgress:
     def bootstrap_state_check_forbidden(self, namespace: str, reason: str) -> None:
         self.events.append(("state_check_forbidden", namespace, reason))
 
+    def lake_state_exists(self, namespace: str, configmap_name: str) -> None:
+        self.events.append(("lake_state_exists", namespace, configmap_name))
 
-class RecordingLakeActivationProgress:
+    def applying_configmap(self, configmap_name: str) -> None:
+        self.events.append(("applying_configmap", configmap_name))
+
+    def configmap_applied(self, configmap_name: str) -> None:
+        self.events.append(("configmap_applied", configmap_name))
+
+
+class RecordingLakeSwitchProgress:
     def __init__(self):
         self.events = []
 
-    def bootstrapped_product_reactivated(
+    def switch_matches_bootstrapped_product(
         self,
         product_name: str,
         namespace: str,
-        secret_names: tuple[str, ...],
     ) -> None:
-        self.events.append(("info_bootstrapped", product_name, namespace, secret_names))
+        self.events.append(("switch_matches_bootstrap", product_name, namespace))
 
-    def activating_despite_existing_bootstrap(
+    def switching_despite_bootstrapped_product(
         self,
         product_name: str,
         namespace: str,
-        existing_secret_names: tuple[str, ...],
-        expected_secret_names: tuple[str, ...],
+        bootstrapped_product_name: str | None,
     ) -> None:
-        self.events.append(
-            (
-                "warn_existing_bootstrap",
-                product_name,
-                namespace,
-                existing_secret_names,
-                expected_secret_names,
-            )
-        )
+        self.events.append((
+            "switch_existing_bootstrap",
+            product_name,
+            namespace,
+            bootstrapped_product_name,
+        ))
 
-    def activating_despite_bootstrap_check_failure(
+    def switching_despite_state_check_failure(
         self,
         product_name: str,
         namespace: str,
         reason: str,
     ) -> None:
-        self.events.append(("warn_check_failure", product_name, namespace, reason))
+        self.events.append(("switch_check_failure", product_name, namespace, reason))
 
 
 class RecordingLakeEnvironmentProgress:
@@ -959,100 +991,6 @@ def test_add_lake_environment_writes_only_provided_target_fields(tmp_path):
     }
 
 
-
-
-def test_add_lake_environment_rejects_rerun_after_bootstrap_state(
-    tmp_path,
-):
-    workspace = make_workspace(tmp_path / "workspace")
-    add_lake_environment("dev", workspace)
-    environment_dir = write_generated_lake_files(workspace)
-    spec = read_json(environment_dir / "spec.json")
-    spec["spec"]["contextNames"] = ["current-context"]
-    spec["spec"]["namespace"] = "test"
-    spec["spec"]["stelar"]["bootstrapped_product"] = {
-        "target_sha256": target_sha256("current-context", "test"),
-        "secret_names": ["stored-secret"],
-        "bootstrapped_at": "2026-06-07T00:00:00Z",
-        "product_name": "generated",
-    }
-    write_json(environment_dir / "spec.json", spec)
-
-    with pytest.raises(CommandError, match="refusing to run lake add"):
-        add_lake_environment(
-            "dev",
-            workspace,
-        )
-
-    assert read_json(environment_dir / "spec.json")["spec"]["contextNames"] == [
-        "current-context"
-    ]
-    assert read_json(environment_dir / "spec.json")["spec"]["namespace"] == "test"
-
-
-
-
-def test_add_lake_environment_rejects_bootstrapped_spec_without_copying_main(
-    tmp_path,
-):
-    workspace = make_workspace(tmp_path / "workspace")
-    environment_dir = workspace / "dev"
-    environment_dir.mkdir(parents=True)
-    spec = {
-        "apiVersion": "tanka.dev/v1alpha1",
-        "metadata": {
-            "annotations": {"stelar.eu/lake-environment": "true"},
-        },
-        "spec": {
-            "contextNames": ["current-context"],
-            "namespace": "test",
-            "stelar": {
-                "bootstrapped_product": {
-                    "target_sha256": target_sha256("current-context", "test"),
-                    "secret_names": ["stored-secret"],
-                    "bootstrapped_at": "2026-06-07T00:00:00Z",
-                    "product_name": "generated",
-                },
-            },
-        },
-    }
-    write_json(environment_dir / "spec.json", spec)
-
-    with pytest.raises(CommandError, match="refusing to run lake add"):
-        add_lake_environment("dev", workspace)
-
-    assert not (environment_dir / "main.jsonnet").exists()
-    assert read_json(environment_dir / "spec.json") == spec
-
-
-def test_add_lake_environment_rejects_bootstrapped_unmarked_spec_without_adopting(
-    tmp_path,
-):
-    workspace = make_workspace(tmp_path / "workspace")
-    environment_dir = workspace / "dev"
-    environment_dir.mkdir(parents=True)
-    (environment_dir / "main.jsonnet").write_text("existing main\n", encoding="utf-8")
-    spec = {
-        "apiVersion": "tanka.dev/v1alpha1",
-        "spec": {
-            "contextNames": ["current-context"],
-            "namespace": "test",
-            "stelar": {
-                "bootstrapped_product": {
-                    "target_sha256": target_sha256("current-context", "test"),
-                    "secret_names": ["stored-secret"],
-                    "bootstrapped_at": "2026-06-07T00:00:00Z",
-                    "product_name": "generated",
-                },
-            },
-        },
-    }
-    write_json(environment_dir / "spec.json", spec)
-
-    with pytest.raises(CommandError, match="refusing to run lake add"):
-        add_lake_environment("dev", workspace, adopt_existing_main=True)
-
-    assert read_json(environment_dir / "spec.json") == spec
 
 
 def test_add_lake_environment_preserves_environments_prefixed_name(tmp_path):
@@ -1512,27 +1450,6 @@ def test_bootstrap_lake_does_not_write_target_when_fullspec_is_invalid(
     assert read_json(environment_dir / "spec.json") == spec_before
 
 
-def test_bootstrap_lake_checks_bootstrap_target_before_invalid_fullspec(
-    tmp_path,
-):
-    workspace = make_workspace(tmp_path / "workspace")
-    add_lake_environment("dev", workspace)
-    environment_dir = write_generated_lake_files(workspace, scheme="ftp")
-    spec = read_json(environment_dir / "spec.json")
-    stelar_spec = spec["spec"]["stelar"]
-    stelar_spec["bootstrapped_product"] = {
-        "target_sha256": target_sha256("current-context", "test"),
-        "secret_names": ["stored-secret"],
-        "bootstrapped_at": "2026-06-07T00:00:00Z",
-        "product_name": "generated",
-    }
-    spec["spec"] = {"namespace": "test", "stelar": stelar_spec}
-    write_json(environment_dir / "spec.json", spec)
-
-    with pytest.raises(CommandError, match="recorded bootstrap state"):
-        bootstrap_lake("dev", workspace)
-
-
 @pytest.mark.parametrize(
     ("field_name", "value", "message"),
     [
@@ -1877,19 +1794,18 @@ def test_bootstrap_lake_applies_fullspec_config_secrets(tmp_path, monkeypatch):
     assert set(ckan_auth_data) == {"session-key", "jwt-key"}
     assert ckan_auth_data["jwt-key"].startswith("string:")
 
-    bootstrap_state = read_json(environment_dir / "spec.json")["spec"]["stelar"][
-        "bootstrapped_product"
+    stelar_spec = read_json(environment_dir / "spec.json")["spec"]["stelar"]
+    assert "bootstrapped_product" not in stelar_spec
+    created_configmaps = [
+        item for item in calls["configmaps"] if item[0] == "create"
     ]
-    assert bootstrap_state["target_sha256"] == target_sha256(
-        "current-context",
-        "test",
+    assert len(created_configmaps) == 1
+    _, namespace, name, configmap = created_configmaps[0]
+    assert (namespace, name) == ("test", "stelar-lake-state")
+    assert configmap["data"]["product_name"] == "generated"
+    assert json.loads(configmap["data"]["fullspec.json"]) == read_json(
+        environment_dir / "product_fullspec.json"
     )
-    assert bootstrap_state["product_sha256"] == product_sha256(
-        read_json(environment_dir / "product_fullspec.json")
-    )
-    assert bootstrap_state["secret_names"] == product_spec_secret_order(product_spec)
-    assert bootstrap_state["product_name"] == "generated"
-    assert bootstrap_state["bootstrapped_at"].endswith("Z")
 
     assert progress.events[:4] == [
         ("generating", "product-postgres-secret"),
@@ -1901,183 +1817,6 @@ def test_bootstrap_lake_applies_fullspec_config_secrets(tmp_path, monkeypatch):
 
 
 
-@pytest.mark.parametrize("missing_field", ["context", "namespace"])
-def test_bootstrap_lake_rejects_recorded_bootstrap_state_with_missing_target_field(
-    tmp_path,
-    missing_field,
-):
-    workspace = make_workspace(tmp_path / "workspace")
-    add_lake_environment("dev", workspace)
-    environment_dir = write_generated_lake_files(workspace)
-    spec = read_json(environment_dir / "spec.json")
-    stelar_spec = spec["spec"]["stelar"]
-    stelar_spec["bootstrapped_product"] = {
-        "target_sha256": target_sha256("current-context", "test"),
-        "secret_names": ["stored-secret"],
-        "bootstrapped_at": "2026-06-07T00:00:00Z",
-        "product_name": "generated",
-    }
-    if missing_field == "context":
-        spec["spec"] = {"namespace": "test", "stelar": stelar_spec}
-    else:
-        spec["spec"] = {"contextNames": ["current-context"], "stelar": stelar_spec}
-    write_json(environment_dir / "spec.json", spec)
-
-    with pytest.raises(CommandError, match="recorded bootstrap state"):
-        bootstrap_lake("dev", workspace)
-
-    after = read_json(environment_dir / "spec.json")["spec"]
-    if missing_field == "context":
-        assert "contextNames" not in after
-    else:
-        assert "namespace" not in after
-
-
-def test_bootstrap_lake_rejects_bootstrap_target_hash_mismatch(
-    tmp_path,
-    monkeypatch,
-):
-    workspace = make_workspace(tmp_path / "workspace")
-    add_lake_environment("dev", workspace)
-    environment_dir = write_generated_lake_files(workspace)
-    spec = read_json(environment_dir / "spec.json")
-    spec["spec"]["contextNames"] = ["current-context"]
-    spec["spec"]["namespace"] = "test"
-    spec["spec"]["stelar"]["bootstrapped_product"] = {
-        "target_sha256": target_sha256("current-context", "old-namespace"),
-        "secret_names": ["old-secret"],
-        "bootstrapped_at": "2026-06-07T00:00:00Z",
-    }
-    write_json(environment_dir / "spec.json", spec)
-    calls = set_cluster_preflight(monkeypatch)
-
-    with pytest.raises(CommandError, match="Hash mismatch detected"):
-        bootstrap_lake("dev", workspace)
-
-    assert calls["created_secrets"] == []
-    assert "context" not in calls
-
-
-def test_bootstrap_lake_checks_target_hash_before_resolving_context(
-    tmp_path,
-    monkeypatch,
-):
-    workspace = make_workspace(tmp_path / "workspace")
-    add_lake_environment("dev", workspace)
-    environment_dir = write_generated_lake_files(workspace)
-    spec = read_json(environment_dir / "spec.json")
-    spec["spec"]["contextNames"] = ["missing-context"]
-    spec["spec"]["namespace"] = "test"
-    spec["spec"]["stelar"]["bootstrapped_product"] = {
-        "target_sha256": target_sha256("current-context", "test"),
-        "secret_names": ["old-secret"],
-        "bootstrapped_at": "2026-06-07T00:00:00Z",
-    }
-    write_json(environment_dir / "spec.json", spec)
-    calls = set_cluster_preflight(monkeypatch)
-
-    with pytest.raises(CommandError, match="Hash mismatch detected"):
-        bootstrap_lake("dev", workspace)
-
-    assert "context" not in calls
-
-
-def test_check_lake_cluster_rejects_recorded_bootstrap_state_with_missing_target_fields_even_with_flags(
-    tmp_path,
-):
-    workspace = make_workspace(tmp_path / "workspace")
-    add_lake_environment("dev", workspace)
-    environment_dir = write_generated_lake_files(workspace)
-    spec = read_json(environment_dir / "spec.json")
-    stelar_spec = spec["spec"]["stelar"]
-    stelar_spec["bootstrapped_product"] = {
-        "target_sha256": target_sha256("current-context", "test"),
-        "secret_names": ["stored-secret"],
-        "bootstrapped_at": "2026-06-07T00:00:00Z",
-        "product_name": "generated",
-    }
-    spec["spec"] = {"stelar": stelar_spec}
-    write_json(environment_dir / "spec.json", spec)
-
-    with pytest.raises(CommandError, match="recorded bootstrap state"):
-        check_lake_cluster(
-            "dev",
-            workspace,
-            context="current-context",
-            namespace="test",
-        )
-
-
-def test_check_lake_cluster_rejects_bootstrap_target_overrides_after_bootstrap(
-    tmp_path,
-):
-    workspace = make_workspace(tmp_path / "workspace")
-    add_lake_environment("dev", workspace)
-    environment_dir = write_generated_lake_files(workspace)
-    spec = read_json(environment_dir / "spec.json")
-    spec["spec"]["contextNames"] = ["current-context"]
-    spec["spec"]["namespace"] = "test"
-    spec["spec"]["stelar"]["bootstrapped_product"] = {
-        "target_sha256": target_sha256("current-context", "test"),
-        "secret_names": ["stored-secret"],
-        "bootstrapped_at": "2026-06-07T00:00:00Z",
-        "product_name": "generated",
-    }
-    write_json(environment_dir / "spec.json", spec)
-
-    with pytest.raises(CommandError, match="overrides are not allowed"):
-        check_lake_cluster(
-            "dev",
-            workspace,
-            context="current-context",
-            namespace="test",
-        )
-
-
-def test_check_lake_cluster_rejects_bootstrap_target_hash_mismatch(
-    tmp_path,
-    monkeypatch,
-):
-    workspace = make_workspace(tmp_path / "workspace")
-    add_lake_environment("dev", workspace)
-    environment_dir = write_generated_lake_files(workspace)
-    spec = read_json(environment_dir / "spec.json")
-    spec["spec"]["contextNames"] = ["current-context"]
-    spec["spec"]["namespace"] = "test"
-    spec["spec"]["stelar"]["bootstrapped_product"] = {
-        "target_sha256": target_sha256("current-context", "old-namespace"),
-        "secret_names": ["old-secret"],
-        "bootstrapped_at": "2026-06-07T00:00:00Z",
-    }
-    write_json(environment_dir / "spec.json", spec)
-    set_cluster_preflight(monkeypatch)
-
-    with pytest.raises(CommandError, match="Hash mismatch detected"):
-        check_lake_cluster("dev", workspace)
-
-
-def test_check_lake_cluster_checks_target_hash_before_resolving_context(
-    tmp_path,
-    monkeypatch,
-):
-    workspace = make_workspace(tmp_path / "workspace")
-    add_lake_environment("dev", workspace)
-    environment_dir = write_generated_lake_files(workspace)
-    spec = read_json(environment_dir / "spec.json")
-    spec["spec"]["contextNames"] = ["missing-context"]
-    spec["spec"]["namespace"] = "test"
-    spec["spec"]["stelar"]["bootstrapped_product"] = {
-        "target_sha256": target_sha256("current-context", "test"),
-        "secret_names": ["old-secret"],
-        "bootstrapped_at": "2026-06-07T00:00:00Z",
-    }
-    write_json(environment_dir / "spec.json", spec)
-    set_cluster_preflight(monkeypatch)
-
-    with pytest.raises(CommandError, match="Hash mismatch detected"):
-        check_lake_cluster("dev", workspace)
-
-
 def test_bootstrap_lake_does_not_request_manual_values_when_already_bootstrapped(
     tmp_path,
     monkeypatch,
@@ -2085,13 +1824,13 @@ def test_bootstrap_lake_does_not_request_manual_values_when_already_bootstrapped
     workspace = make_workspace(tmp_path / "workspace")
     add_lake_environment("dev", workspace)
     environment_dir = write_generated_lake_files(workspace)
-    product_spec = read_active_config(environment_dir)
+    fullspec = read_json(environment_dir / "product_fullspec.json")
     set_cluster_preflight(
         monkeypatch,
-        existing_secrets=secret_names_from_config(product_spec),
+        lake_state_fullspec=fullspec,
     )
 
-    with pytest.raises(CommandError, match="already run.*required bootstrap Secrets"):
+    with pytest.raises(CommandError, match="ConfigMap 'stelar-lake-state' exists"):
         bootstrap_lake(
             "dev",
             workspace,
@@ -2108,22 +1847,37 @@ def test_bootstrap_lake_rejects_already_bootstrapped_environment(
     workspace = make_workspace(tmp_path / "workspace")
     add_lake_environment("dev", workspace)
     environment_dir = write_generated_lake_files(workspace)
-    product_spec = read_active_config(environment_dir)
-    existing_secrets = secret_names_from_config(product_spec)
+    fullspec = read_json(environment_dir / "product_fullspec.json")
     calls = set_cluster_preflight(
         monkeypatch,
-        existing_secrets=existing_secrets,
+        lake_state_fullspec=fullspec,
     )
     progress = RecordingClusterProgress()
 
-    with pytest.raises(CommandError, match="already run.*required bootstrap Secrets"):
+    with pytest.raises(CommandError, match="ConfigMap 'stelar-lake-state' exists"):
         bootstrap_lake("dev", workspace, progress=progress)
 
     assert calls["created_secrets"] == []
-    assert {name for _, name in calls["read_secrets"]} == existing_secrets
+    assert calls["read_secrets"] == []
     assert progress.events == [
-        ("already_bootstrapped", "test", tuple(product_spec_secret_order(product_spec)))
+        ("lake_state_exists", "test", "stelar-lake-state")
     ]
+
+
+def test_bootstrap_lake_does_not_overwrite_raced_lake_state(
+    tmp_path,
+    monkeypatch,
+):
+    workspace = make_workspace(tmp_path / "workspace")
+    add_lake_environment("dev", workspace)
+    write_generated_lake_files(workspace)
+    calls = set_cluster_preflight(monkeypatch, missing="lake_state_create_conflict")
+
+    with pytest.raises(CommandError, match="Refusing to overwrite cluster lake state"):
+        bootstrap_lake("dev", workspace)
+
+    configmap_calls = [call[0] for call in calls["configmaps"]]
+    assert configmap_calls == ["read", "create"]
 
 
 def test_bootstrap_lake_rejects_partial_bootstrap_state(
@@ -2730,39 +2484,6 @@ def test_lake_add_cli_rejects_empty_target_before_creating_environment(tmp_path)
     assert not (workspace / "dev").exists()
 
 
-def test_lake_add_cli_rejects_rerun_after_bootstrap_state(tmp_path):
-    workspace = make_workspace(tmp_path / "workspace")
-    add_lake_environment("dev", workspace)
-    environment_dir = write_generated_lake_files(workspace)
-    spec = read_json(environment_dir / "spec.json")
-    spec["spec"]["contextNames"] = ["current-context"]
-    spec["spec"]["namespace"] = "test"
-    spec["spec"]["stelar"]["bootstrapped_product"] = {
-        "target_sha256": target_sha256("current-context", "test"),
-        "secret_names": ["stored-secret"],
-        "bootstrapped_at": "2026-06-07T00:00:00Z",
-        "product_name": "generated",
-    }
-    write_json(environment_dir / "spec.json", spec)
-
-    result = runner.invoke(
-        app,
-        [
-            "lake",
-            "add",
-            "dev",
-            "--workspace",
-            str(workspace),
-        ],
-    )
-
-    assert result.exit_code != 0
-    assert "refusing to run lake add" in result.output
-    assert read_json(environment_dir / "spec.json")["spec"]["contextNames"] == [
-        "current-context"
-    ]
-
-
 def test_workspace_info_operation_reports_environment_files(tmp_path):
     workspace = make_workspace(tmp_path / "workspace")
     add_lake_environment("dev", workspace)
@@ -2922,31 +2643,6 @@ def test_remove_lake_environment_rejects_active_environment_without_force(tmp_pa
     environment_dir = write_generated_lake_files(workspace)
 
     with pytest.raises(CommandError, match="active product"):
-        remove_lake_environment("dev", workspace)
-
-    assert environment_dir.is_dir()
-
-
-
-def test_remove_lake_environment_rejects_bootstrapped_environment_without_force(tmp_path):
-    workspace = make_workspace(tmp_path / "workspace")
-    add_lake_environment("dev", workspace)
-    environment_dir = workspace / "dev"
-    spec = read_json(environment_dir / "spec.json")
-    spec["spec"] = {
-        "contextNames": ["current-context"],
-        "namespace": "test",
-        "stelar": {
-            "bootstrapped_product": {
-                "target_sha256": target_sha256("current-context", "test"),
-                "secret_names": ["stored-secret"],
-                "bootstrapped_at": "2026-06-07T00:00:00Z",
-            }
-        },
-    }
-    write_json(environment_dir / "spec.json", spec)
-
-    with pytest.raises(CommandError, match="recorded bootstrap state"):
         remove_lake_environment("dev", workspace)
 
     assert environment_dir.is_dir()
@@ -3401,10 +3097,10 @@ def test_bootstrap_lake_cli_reports_already_bootstrapped(
     workspace = make_workspace(tmp_path / "workspace")
     add_lake_environment("dev", workspace)
     environment_dir = write_generated_lake_files(workspace)
-    product_spec = read_active_config(environment_dir)
+    fullspec = read_json(environment_dir / "product_fullspec.json")
     set_cluster_preflight(
         monkeypatch,
-        existing_secrets=secret_names_from_config(product_spec),
+        lake_state_fullspec=fullspec,
     )
 
     result = runner.invoke(
@@ -3419,8 +3115,8 @@ def test_bootstrap_lake_cli_reports_already_bootstrapped(
     )
 
     assert result.exit_code != 0
-    assert "Bootstrap appears to have already run" in result.output
-    assert "all required bootstrap Secrets already exist" in result.output
+    assert "bootstrap appears to have already run" in result.output.lower()
+    assert "ConfigMap 'stelar-lake-state' exists" in result.output
 
 
 def test_bootstrap_lake_cli_warns_when_secret_state_check_forbidden(
@@ -3444,7 +3140,7 @@ def test_bootstrap_lake_cli_warns_when_secret_state_check_forbidden(
     )
 
     assert result.exit_code == 0
-    assert "Cannot check whether bootstrap already ran" in result.output
+    assert "Cannot check whether bootstrap Secrets already exist" in result.output
     assert "Proceeding at your own risk" in result.output
     assert "🔐 Generating secret 'product-postgres-secret'..." in result.stdout
 
@@ -3456,10 +3152,10 @@ def test_root_cli_help_documents_current_workflow():
     output = plain_help(result.stdout)
     assert "Command reference" in output
     assert "lake create" in output
-    assert "lake activate" in output
+    assert "lake switch" in output
     assert "lake bootstrap" in output
     assert "lake status" in output
-    assert "lake purge-secrets" in output
+    assert "lake unbootstrap" in output
     assert "verify" in output
     assert "lake list" in output
     assert "lake info" in output
@@ -3484,11 +3180,11 @@ def test_root_cli_help_lists_all_subcommands_with_arguments():
     assert "stelarctl lake remove ENV" in output
     assert "--yes" in output
     assert "stelarctl lake create --minimal PRODUCT_NAME ENV" in output
-    assert "stelarctl lake activate PRODUCT_NAME ENV" in output
+    assert "stelarctl lake switch PRODUCT_NAME ENV" in output
     assert "stelarctl lake verify ENV" in output
     assert "stelarctl lake status ENV" in output
     assert "--wait" in output
-    assert "stelarctl lake purge-secrets ENV" in output
+    assert "stelarctl lake unbootstrap ENV" in output
     assert "stelarctl lake bootstrap ENV" in output
     assert "--context CONTEXT" in output
     assert "--namespace NAMESPACE" in output
@@ -3895,7 +3591,6 @@ def expected_tanka_spec(
             "labels": {
                 "app.kubernetes.io/managed-by": "tanka",
                 "app.kubernetes.io/part-of": "stelar",
-                "stelar.deployment": "main",
             },
         },
     }
@@ -3960,38 +3655,10 @@ def test_product_to_fullspec_writes_product_and_fullspec(tmp_path, monkeypatch):
         "spec": {
             "stelar": {
                 "active_product": fullspec,
-                "active_product_name": "analytics",
+                "current_product": "analytics",
             }
         },
     }
-
-
-def test_product_to_fullspec_rejects_bootstrap_target_hash_mismatch(
-    tmp_path,
-    monkeypatch,
-):
-    workspace = make_workspace(tmp_path / "workspace")
-    add_lake_environment("dev", workspace)
-    environment_dir = write_generated_lake_files(workspace)
-    spec = read_json(environment_dir / "spec.json")
-    spec["spec"]["contextNames"] = ["current-context"]
-    spec["spec"]["namespace"] = "test"
-    spec["spec"]["stelar"]["bootstrapped_product"] = {
-        "target_sha256": target_sha256("current-context", "old-namespace"),
-        "secret_names": ["old-secret"],
-        "bootstrapped_at": "2026-06-07T00:00:00Z",
-        "product_name": "generated",
-    }
-    write_json(environment_dir / "spec.json", spec)
-    product_path = tmp_path / "other.yaml"
-    product_path.write_text("spec:\n  namespace: other\n", encoding="utf-8")
-    monkeypatch.setattr(lake_product_ops, "ProductValidator", FakeProductValidator)
-
-    with pytest.raises(CommandError, match="Refusing to act"):
-        product_to_fullspec(product_path, "dev", workspace)
-
-    assert not (environment_dir / "other.json").exists()
-    assert not (environment_dir / "other_fullspec.json").exists()
 
 
 def test_product_to_fullspec_preserves_environment_entrypoint(
@@ -4015,7 +3682,7 @@ def test_product_to_fullspec_preserves_environment_entrypoint(
     assert main_jsonnet_path.read_text(encoding="utf-8") == original_main_jsonnet
 
 
-def test_activate_lake_product_sets_active_product(
+def test_switch_lake_product_sets_active_product(
     tmp_path,
     monkeypatch,
 ):
@@ -4026,109 +3693,15 @@ def test_activate_lake_product_sets_active_product(
     monkeypatch.setattr(lake_product_ops, "ProductValidator", FakeProductValidator)
     fullspec = product_to_fullspec(product_path, "dev", workspace)
 
-    activated = activate_lake_product("analytics", "dev", workspace)
+    switched = switch_lake_product("analytics", "dev", workspace)
 
-    assert activated == fullspec
+    assert switched == fullspec
     stelar_spec = read_json(workspace / "dev" / "spec.json")["spec"]["stelar"]
     assert stelar_spec["active_product"] == fullspec
-    assert stelar_spec["active_product_name"] == "analytics"
+    assert stelar_spec["current_product"] == "analytics"
 
 
-def test_activate_lake_product_rejects_bootstrap_target_hash_mismatch(
-    tmp_path,
-    monkeypatch,
-):
-    workspace = make_workspace(tmp_path / "workspace")
-    add_lake_environment("dev", workspace)
-    environment_dir = write_generated_lake_files(workspace, environment="dev")
-    second_product = read_json(environment_dir / "generated.json")
-    second_fullspec = read_json(environment_dir / "generated_fullspec.json")
-    write_json(environment_dir / "second.json", second_product)
-    write_json(environment_dir / "second_fullspec.json", second_fullspec)
-    spec = read_json(environment_dir / "spec.json")
-    spec["spec"]["contextNames"] = ["current-context"]
-    spec["spec"]["namespace"] = "test"
-    spec["spec"]["stelar"]["active_product_name"] = "generated"
-    spec["spec"]["stelar"]["bootstrapped_product"] = {
-        "target_sha256": target_sha256("current-context", "old-namespace"),
-        "secret_names": ["old-secret"],
-        "bootstrapped_at": "2026-06-07T00:00:00Z",
-        "product_name": "generated",
-    }
-    write_json(environment_dir / "spec.json", spec)
-
-    with pytest.raises(CommandError, match="Refusing to act"):
-        activate_lake_product("second", "dev", workspace)
-
-    stelar_spec = read_json(environment_dir / "spec.json")["spec"]["stelar"]
-    assert stelar_spec["active_product_name"] == "generated"
-
-
-def test_activate_lake_product_checks_bootstrap_target_before_invalid_fullspec(
-    tmp_path,
-):
-    workspace = make_workspace(tmp_path / "workspace")
-    add_lake_environment("dev", workspace)
-    environment_dir = write_generated_lake_files(workspace, environment="dev")
-    second_product = read_json(environment_dir / "generated.json")
-    second_fullspec = read_json(environment_dir / "generated_fullspec.json")
-    second_fullspec["klms"]["SCHEME"] = "ftp"
-    write_json(environment_dir / "second.json", second_product)
-    write_json(environment_dir / "second_fullspec.json", second_fullspec)
-    spec = read_json(environment_dir / "spec.json")
-    stelar_spec = spec["spec"]["stelar"]
-    stelar_spec["active_product_name"] = "generated"
-    stelar_spec["bootstrapped_product"] = {
-        "target_sha256": target_sha256("current-context", "test"),
-        "secret_names": ["old-secret"],
-        "bootstrapped_at": "2026-06-07T00:00:00Z",
-        "product_name": "generated",
-    }
-    spec["spec"] = {"namespace": "test", "stelar": stelar_spec}
-    write_json(environment_dir / "spec.json", spec)
-
-    with pytest.raises(CommandError, match="recorded bootstrap state"):
-        activate_lake_product("second", "dev", workspace)
-
-
-def test_activate_lake_product_rejects_bootstrap_product_hash_mismatch(
-    tmp_path,
-    monkeypatch,
-):
-    workspace = make_workspace(tmp_path / "workspace")
-    add_lake_environment("dev", workspace)
-    environment_dir = write_generated_lake_files(workspace, environment="dev")
-    current_fullspec = read_json(environment_dir / "generated_fullspec.json")
-
-    second_product = read_json(environment_dir / "generated.json")
-    second_product["spec"]["ROOT_DOMAIN"] = "second.example"
-    second_fullspec = read_json(environment_dir / "generated_fullspec.json")
-    second_fullspec["klms"]["ROOT_DOMAIN"] = "second.example"
-    write_json(environment_dir / "second.json", second_product)
-    write_json(environment_dir / "second_fullspec.json", second_fullspec)
-
-    spec = read_json(environment_dir / "spec.json")
-    spec["spec"]["contextNames"] = ["current-context"]
-    spec["spec"]["namespace"] = "test"
-    spec["spec"]["stelar"]["active_product_name"] = "generated"
-    spec["spec"]["stelar"]["bootstrapped_product"] = {
-        "target_sha256": target_sha256("current-context", "test"),
-        "product_sha256": product_sha256(current_fullspec),
-        "secret_names": ["old-secret"],
-        "bootstrapped_at": "2026-06-07T00:00:00Z",
-        "product_name": "generated",
-    }
-    write_json(environment_dir / "spec.json", spec)
-
-    with pytest.raises(CommandError, match="purge-secrets"):
-        activate_lake_product("second", "dev", workspace)
-
-    stelar_spec = read_json(environment_dir / "spec.json")["spec"]["stelar"]
-    assert stelar_spec["active_product_name"] == "generated"
-    assert stelar_spec["active_product"] == current_fullspec
-
-
-def test_lake_create_cli_warns_when_regenerating_active_product_name(
+def test_lake_create_cli_warns_when_regenerating_current_product(
     tmp_path,
     monkeypatch,
 ):
@@ -4155,59 +3728,13 @@ def test_lake_create_cli_warns_when_regenerating_active_product_name(
     assert result.exit_code == 0, result.output
     combined_output = result.output + getattr(result, "stderr", "")
     assert "regenerated active product 'analytics'" in combined_output
-    assert "stelarctl lake activate analytics dev" in combined_output
+    assert "stelarctl lake switch analytics dev" in combined_output
     environment_dir = workspace / "dev"
     assert read_json(environment_dir / "analytics_fullspec.json")["klms"]["variant"] == "second"
     assert read_json(environment_dir / "spec.json")["spec"]["stelar"]["active_product"] == first_fullspec
 
 
-def test_lake_create_cli_warns_to_purge_when_regenerating_bootstrapped_active_product(
-    tmp_path,
-    monkeypatch,
-):
-    workspace = make_workspace(tmp_path / "workspace")
-    add_lake_environment("dev", workspace)
-    product_path = tmp_path / "analytics.yaml"
-    product_path.write_text("spec:\n  variant: first\n", encoding="utf-8")
-    monkeypatch.setattr(lake_product_ops, "ProductValidator", FakeProductValidator)
-    first_fullspec = product_to_fullspec(product_path, "dev", workspace)
-    environment_dir = workspace / "dev"
-    spec = read_json(environment_dir / "spec.json")
-    spec["spec"]["contextNames"] = ["current-context"]
-    spec["spec"]["namespace"] = "test"
-    spec["spec"]["stelar"]["bootstrapped_product"] = {
-        "target_sha256": target_sha256("current-context", "test"),
-        "product_sha256": product_sha256(first_fullspec),
-        "secret_names": ["product-postgres-secret"],
-        "bootstrapped_at": "2026-06-07T00:00:00Z",
-        "product_name": "analytics",
-    }
-    write_json(environment_dir / "spec.json", spec)
-
-    product_path.write_text("spec:\n  variant: second\n", encoding="utf-8")
-    result = runner.invoke(
-        app,
-        [
-            "lake",
-            "create",
-            str(product_path),
-            "dev",
-            "--workspace",
-            str(workspace),
-        ],
-    )
-
-    assert result.exit_code == 0, result.output
-    combined_output = result.output + getattr(result, "stderr", "")
-    assert "regenerated active product 'analytics'" in combined_output
-    assert "stelarctl lake purge-secrets dev" in combined_output
-    assert "stelarctl lake activate analytics dev" in combined_output
-    assert "stelarctl lake bootstrap dev" in combined_output
-    assert read_json(environment_dir / "analytics_fullspec.json")["klms"]["variant"] == "second"
-    assert read_json(environment_dir / "spec.json")["spec"]["stelar"]["active_product"] == first_fullspec
-
-
-def test_product_to_fullspec_does_not_activate_subsequent_products(
+def test_product_to_fullspec_does_not_switch_subsequent_products(
     tmp_path,
     monkeypatch,
 ):
@@ -4225,10 +3752,10 @@ def test_product_to_fullspec_does_not_activate_subsequent_products(
     stelar_spec = read_json(workspace / "dev" / "spec.json")["spec"]["stelar"]
     assert stelar_spec["active_product"] == first_fullspec
     assert stelar_spec["active_product"] != second_fullspec
-    assert stelar_spec["active_product_name"] == "first"
+    assert stelar_spec["current_product"] == "first"
 
 
-def test_activate_lake_product_warns_and_proceeds_when_current_bootstrap_secrets_exist(
+def test_switch_lake_product_warns_and_proceeds_when_current_bootstrap_secrets_exist(
     tmp_path,
     monkeypatch,
 ):
@@ -4247,27 +3774,21 @@ def test_activate_lake_product_warns_and_proceeds_when_current_bootstrap_secrets
     spec["spec"]["contextNames"] = ["current-context"]
     spec["spec"]["namespace"] = "test"
     write_json(environment_dir / "spec.json", spec)
-    existing_secrets = tuple(product_spec_secret_order(read_active_config(environment_dir)))
-    set_cluster_preflight(monkeypatch, existing_secrets=set(existing_secrets))
+    current_fullspec = read_json(environment_dir / "generated_fullspec.json")
+    set_cluster_preflight(monkeypatch, lake_state_fullspec=current_fullspec)
     monkeypatch.setattr(lake_product_ops, "load_kube_context", lambda _context: None)
-    progress = RecordingLakeActivationProgress()
+    progress = RecordingLakeSwitchProgress()
 
-    activated = activate_lake_product("second", "dev", workspace, progress=progress)
+    switched = switch_lake_product("second", "dev", workspace, progress=progress)
 
-    assert activated == second_fullspec
+    assert switched == second_fullspec
     assert read_json(environment_dir / "spec.json")["spec"]["stelar"]["active_product"] == second_fullspec
     assert progress.events == [
-        (
-            "warn_existing_bootstrap",
-            "second",
-            "test",
-            existing_secrets,
-            existing_secrets,
-        )
+        ("switch_existing_bootstrap", "second", "test", "generated")
     ]
 
 
-def test_activate_lake_product_allows_switch_when_current_bootstrap_secrets_are_absent(
+def test_switch_lake_product_allows_switch_when_current_bootstrap_secrets_are_absent(
     tmp_path,
     monkeypatch,
 ):
@@ -4288,16 +3809,16 @@ def test_activate_lake_product_allows_switch_when_current_bootstrap_secrets_are_
     write_json(environment_dir / "spec.json", spec)
     set_cluster_preflight(monkeypatch)
     monkeypatch.setattr(lake_product_ops, "load_kube_context", lambda _context: None)
-    progress = RecordingLakeActivationProgress()
+    progress = RecordingLakeSwitchProgress()
 
-    activated = activate_lake_product("second", "dev", workspace, progress=progress)
+    switched = switch_lake_product("second", "dev", workspace, progress=progress)
 
-    assert activated == second_fullspec
+    assert switched == second_fullspec
     assert read_json(environment_dir / "spec.json")["spec"]["stelar"]["active_product"] == second_fullspec
     assert progress.events == []
 
 
-def test_activate_lake_product_warns_and_proceeds_when_bootstrap_secret_check_fails(
+def test_switch_lake_product_warns_and_proceeds_when_bootstrap_state_check_fails(
     tmp_path,
     monkeypatch,
 ):
@@ -4316,19 +3837,19 @@ def test_activate_lake_product_warns_and_proceeds_when_bootstrap_secret_check_fa
     spec["spec"]["contextNames"] = ["current-context"]
     spec["spec"]["namespace"] = "test"
     write_json(environment_dir / "spec.json", spec)
-    set_cluster_preflight(monkeypatch, missing="secret_read_forbidden")
+    set_cluster_preflight(monkeypatch, missing="lake_state_read_forbidden")
     monkeypatch.setattr(lake_product_ops, "load_kube_context", lambda _context: None)
-    progress = RecordingLakeActivationProgress()
+    progress = RecordingLakeSwitchProgress()
 
-    activated = activate_lake_product("second", "dev", workspace, progress=progress)
+    switched = switch_lake_product("second", "dev", workspace, progress=progress)
 
-    assert activated == second_fullspec
+    assert switched == second_fullspec
     assert read_json(environment_dir / "spec.json")["spec"]["stelar"]["active_product"] == second_fullspec
-    assert progress.events[0][:3] == ("warn_check_failure", "second", "test")
-    assert "not authorized to validate Secret" in progress.events[0][3]
+    assert progress.events[0][:3] == ("switch_check_failure", "second", "test")
+    assert "not authorized to read ConfigMap" in progress.events[0][3]
 
 
-def test_activate_lake_product_warns_and_proceeds_when_context_load_fails(
+def test_switch_lake_product_warns_and_proceeds_when_context_load_fails(
     tmp_path,
     monkeypatch,
 ):
@@ -4353,15 +3874,15 @@ def test_activate_lake_product_warns_and_proceeds_when_context_load_fails(
         raise CommandError("Could not load kubectl context 'stale-context'")
 
     monkeypatch.setattr(lake_product_ops, "load_kube_context", load_kube_context)
-    progress = RecordingLakeActivationProgress()
+    progress = RecordingLakeSwitchProgress()
 
-    activated = activate_lake_product("second", "dev", workspace, progress=progress)
+    switched = switch_lake_product("second", "dev", workspace, progress=progress)
 
-    assert activated == second_fullspec
+    assert switched == second_fullspec
     assert read_json(environment_dir / "spec.json")["spec"]["stelar"]["active_product"] == second_fullspec
     assert progress.events == [
         (
-            "warn_check_failure",
+            "switch_check_failure",
             "second",
             "test",
             "Could not load kubectl context 'stale-context'",
@@ -4369,7 +3890,7 @@ def test_activate_lake_product_warns_and_proceeds_when_context_load_fails(
     ]
 
 
-def test_activate_lake_product_informs_when_same_product_is_already_bootstrapped(
+def test_switch_lake_product_informs_when_same_product_is_already_bootstrapped(
     tmp_path,
     monkeypatch,
 ):
@@ -4381,20 +3902,20 @@ def test_activate_lake_product_informs_when_same_product_is_already_bootstrapped
     spec["spec"]["contextNames"] = ["current-context"]
     spec["spec"]["namespace"] = "test"
     write_json(environment_dir / "spec.json", spec)
-    existing_secrets = tuple(product_spec_secret_order(read_active_config(environment_dir)))
-    set_cluster_preflight(monkeypatch, existing_secrets=set(existing_secrets))
+    current_fullspec = read_json(environment_dir / "generated_fullspec.json")
+    set_cluster_preflight(monkeypatch, lake_state_fullspec=current_fullspec)
     monkeypatch.setattr(lake_product_ops, "load_kube_context", lambda _context: None)
-    progress = RecordingLakeActivationProgress()
+    progress = RecordingLakeSwitchProgress()
 
-    activated = activate_lake_product("generated", "dev", workspace, progress=progress)
+    switched = switch_lake_product("generated", "dev", workspace, progress=progress)
 
-    assert activated == read_json(environment_dir / "generated_fullspec.json")
+    assert switched == read_json(environment_dir / "generated_fullspec.json")
     assert progress.events == [
-        ("info_bootstrapped", "generated", "test", existing_secrets)
+        ("switch_matches_bootstrap", "generated", "test")
     ]
 
 
-def test_lake_activate_cli_warns_and_proceeds_when_bootstrap_secrets_exist(
+def test_lake_switch_cli_warns_and_proceeds_when_bootstrap_state_exists(
     tmp_path,
     monkeypatch,
 ):
@@ -4413,17 +3934,15 @@ def test_lake_activate_cli_warns_and_proceeds_when_bootstrap_secrets_exist(
     spec["spec"]["contextNames"] = ["current-context"]
     spec["spec"]["namespace"] = "test"
     write_json(environment_dir / "spec.json", spec)
-    set_cluster_preflight(
-        monkeypatch,
-        existing_secrets=secret_names_from_config(read_active_config(environment_dir)),
-    )
+    current_fullspec = read_json(environment_dir / "generated_fullspec.json")
+    set_cluster_preflight(monkeypatch, lake_state_fullspec=current_fullspec)
     monkeypatch.setattr(lake_product_ops, "load_kube_context", lambda _context: None)
 
     result = runner.invoke(
         app,
         [
             "lake",
-            "activate",
+            "switch",
             "second",
             "dev",
             "--workspace",
@@ -4432,8 +3951,8 @@ def test_lake_activate_cli_warns_and_proceeds_when_bootstrap_secrets_exist(
     )
 
     assert result.exit_code == 0
-    assert "Proceeding with activation of product 'second'" in result.stdout
-    assert "Activated product: second" in result.stdout
+    assert "Switching local render selection to 'second' anyway" in result.stdout
+    assert "Switched active product: second" in result.stdout
     assert read_json(environment_dir / "spec.json")["spec"]["stelar"]["active_product"] == second_fullspec
 
 
@@ -4482,11 +4001,7 @@ def test_bootstrap_lake_infers_missing_namespace_from_configured_context(
     bootstrap_lake("dev", workspace)
 
     spec_json = read_json(environment_dir / "spec.json")
-    bootstrapped_product = spec_json["spec"]["stelar"].pop("bootstrapped_product")
-    assert bootstrapped_product["target_sha256"] == target_sha256(
-        "current-context",
-        "test",
-    )
+    assert "bootstrapped_product" not in spec_json["spec"].get("stelar", {})
     assert spec_json == expected_tanka_spec(
         context_name="current-context",
         namespace="test",
@@ -4510,11 +4025,7 @@ def test_bootstrap_lake_infers_missing_context_without_overwriting_namespace(
 
     assert calls["namespace"] == "configured-namespace"
     spec_json = read_json(environment_dir / "spec.json")
-    bootstrapped_product = spec_json["spec"]["stelar"].pop("bootstrapped_product")
-    assert bootstrapped_product["target_sha256"] == target_sha256(
-        "current-context",
-        "configured-namespace",
-    )
+    assert "bootstrapped_product" not in spec_json["spec"].get("stelar", {})
     assert spec_json == expected_tanka_spec(
         context_name="current-context",
         namespace="configured-namespace",
@@ -4540,11 +4051,7 @@ def test_bootstrap_lake_uses_configured_context(
     bootstrap_lake("dev", workspace)
 
     spec_json = json.loads((workspace / "dev" / "spec.json").read_text())
-    bootstrapped_product = spec_json["spec"]["stelar"].pop("bootstrapped_product")
-    assert bootstrapped_product["target_sha256"] == target_sha256(
-        "other-context",
-        "test",
-    )
+    assert "bootstrapped_product" not in spec_json["spec"].get("stelar", {})
     assert spec_json == expected_tanka_spec(
         context_name="other-context",
         namespace="test",

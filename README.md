@@ -35,12 +35,12 @@ tk apply dev
 stelarctl lake status dev
 ```
 
-The first created product is activated automatically. Use
-`stelarctl lake activate PRODUCT_NAME ENV` only when switching to a different
-generated product or after regenerating an existing active product.
+The first created product is selected automatically. Use
+`stelarctl lake switch PRODUCT_NAME ENV` only when switching to a different
+generated product or after regenerating an existing selected product.
 
 Cleanup is split by ownership: use `tk delete dev` for Tanka-rendered
-resources, and `stelarctl lake purge-secrets dev` when you also want to delete
+resources, and `stelarctl lake unbootstrap dev` when you also want to delete
 the bootstrap Secrets created by `stelarctl`.
 
 See [docs/stelarctl.md](docs/stelarctl.md) for the full command reference,

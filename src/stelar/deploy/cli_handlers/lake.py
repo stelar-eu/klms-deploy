@@ -9,8 +9,8 @@ import typer
 
 from ..cli_help import (
     CONTEXT_SETTINGS,
-    LAKE_ACTIVATE_EPILOG,
-    LAKE_ACTIVATE_HELP,
+    LAKE_SWITCH_EPILOG,
+    LAKE_SWITCH_HELP,
     LAKE_BOOTSTRAP_EPILOG,
     LAKE_BOOTSTRAP_HELP,
     LAKE_VERIFY_EPILOG,
@@ -29,8 +29,8 @@ from ..cli_help import (
     LAKE_MANUAL_TLS_TEMPLATE_HELP,
     LAKE_REMOVE_EPILOG,
     LAKE_REMOVE_HELP,
-    LAKE_PURGE_SECRETS_EPILOG,
-    LAKE_PURGE_SECRETS_HELP,
+    LAKE_UNBOOTSTRAP_EPILOG,
+    LAKE_UNBOOTSTRAP_HELP,
     LAKE_STATUS_EPILOG,
     LAKE_STATUS_HELP,
     show_help_on_no_args,
@@ -38,7 +38,7 @@ from ..cli_help import (
 from ..operations.lake_workspace import WorkspaceEnvironmentInfo
 from .bootstrap_secrets import prompt_bootstrap_secret_values
 from .formatting import item_list, presence
-from .lake_product import lake_activate_command, lake_create_command
+from .lake_product import lake_create_command, lake_switch_command
 from .progress import (
     TyperClusterProgress,
     TyperLakeEnvironmentProgress,
@@ -52,8 +52,8 @@ from ..operations import (
     add_lake_environment,
     inspect_lake_status,
     lake_environment_info,
-    plan_lake_secret_purge,
-    purge_lake_secrets,
+    plan_lake_unbootstrap,
+    unbootstrap_lake,
     list_lake_environments,
     remove_lake_environment,
     write_manual_tls_sample,
@@ -82,11 +82,11 @@ def register_lake_commands(app: typer.Typer) -> None:
         short_help="Create product files",
     )(lake_create_command)
     lake_app.command(
-        "activate",
-        help=LAKE_ACTIVATE_HELP,
-        epilog=LAKE_ACTIVATE_EPILOG,
-        short_help="Set active product",
-    )(lake_activate_command)
+        "switch",
+        help=LAKE_SWITCH_HELP,
+        epilog=LAKE_SWITCH_EPILOG,
+        short_help="Switch active product",
+    )(lake_switch_command)
     lake_app.command(
         "list",
         help=LAKE_LIST_HELP,
@@ -124,11 +124,11 @@ def register_lake_commands(app: typer.Typer) -> None:
         short_help="Inspect deployment status",
     )(lake_status_command)
     lake_app.command(
-        "purge-secrets",
-        help=LAKE_PURGE_SECRETS_HELP,
-        epilog=LAKE_PURGE_SECRETS_EPILOG,
-        short_help="Delete bootstrap Secrets",
-    )(lake_purge_secrets_command)
+        "unbootstrap",
+        help=LAKE_UNBOOTSTRAP_HELP,
+        epilog=LAKE_UNBOOTSTRAP_EPILOG,
+        short_help="Undo lake bootstrap",
+    )(lake_unbootstrap_command)
     lake_app.command(
         "bootstrap",
         help=LAKE_BOOTSTRAP_HELP,
@@ -508,7 +508,7 @@ def _echo_lake_status(status) -> None:
         typer.echo(f"  - {note.component}: unchecked - {note.detail}")
 
 
-def lake_purge_secrets_command(
+def lake_unbootstrap_command(
     env: Annotated[
         str,
         typer.Argument(help="Workspace environment name"),
@@ -545,7 +545,7 @@ def lake_purge_secrets_command(
     ] = False,
 ) -> None:
     try:
-        plan = plan_lake_secret_purge(
+        plan = plan_lake_unbootstrap(
             env,
             workspace,
             context=context,
@@ -556,7 +556,7 @@ def lake_purge_secrets_command(
 
     if not yes:
         confirmed = typer.confirm(
-            "Delete "
+            "Unbootstrap by deleting "
             f"{len(plan.secret_names)} bootstrap Secrets from namespace "
             f"{plan.namespace!r} on context {plan.context!r}?",
             default=False,
@@ -565,20 +565,23 @@ def lake_purge_secrets_command(
             raise typer.Exit(code=1)
 
     try:
-        result = purge_lake_secrets(plan)
+        result = unbootstrap_lake(plan)
     except CommandError as exc:
         raise typer.BadParameter(str(exc)) from exc
 
-    _echo_lake_secret_purge_result(result)
+    _echo_lake_unbootstrap_result(result)
 
 
-def _echo_lake_secret_purge_result(result) -> None:
-    typer.echo(f"Lake secret purge: {result.plan.environment}")
+def _echo_lake_unbootstrap_result(result) -> None:
+    typer.echo(f"Lake unbootstrap: {result.plan.environment}")
     typer.echo(f"context: {result.plan.context}")
     typer.echo(f"namespace: {result.plan.namespace}")
     typer.echo(f"expected secrets: {len(result.plan.secret_names)}")
     typer.echo(f"deleted secrets: {item_list(result.deleted)}")
     typer.echo(f"already missing secrets: {item_list(result.missing)}")
+    if result.plan.delete_state_configmap:
+        state = "deleted" if result.state_configmap_deleted else "already missing"
+        typer.echo(f"lake state ConfigMap: {state}")
 
 
 def lake_bootstrap_command(

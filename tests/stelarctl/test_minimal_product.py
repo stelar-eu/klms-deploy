@@ -344,7 +344,7 @@ def test_lake_create_minimal_cli_generates_product_without_secret_values(tmp_pat
         (workspace / "dev" / "spec.json").read_text(encoding="utf-8")
     )
     assert "active_product" in spec["spec"]["stelar"]
-    assert spec["spec"]["stelar"]["active_product_name"] == "minimal"
+    assert spec["spec"]["stelar"]["current_product"] == "minimal"
     assert spec["spec"]["contextNames"] == ["dev-context"]
     assert spec["spec"]["namespace"] == "stelar-dev"
     product = yaml.safe_load(product_path.read_text(encoding="utf-8"))
@@ -359,48 +359,6 @@ def test_lake_create_minimal_cli_generates_product_without_secret_values(tmp_pat
     assert "SMTP_PASSWORD" not in product["spec"]["api"]
     assert "POSTGRES_DB_PASSWORD" not in product["spec"]["postgres"]
     assert not (workspace / "dev" / "product.secrets.yaml").exists()
-
-
-def test_lake_create_minimal_cli_rejects_target_flags_after_bootstrap(tmp_path):
-    workspace = make_workspace(tmp_path / "workspace")
-    add_lake_environment("dev", workspace)
-    spec_path = workspace / "dev" / "spec.json"
-    spec = json.loads(spec_path.read_text(encoding="utf-8"))
-    spec["spec"] = {
-        "contextNames": ["current-context"],
-        "namespace": "test",
-        "stelar": {
-            "bootstrapped_product": {
-                "target_sha256": "stored-target-hash",
-                "secret_names": ["stored-secret"],
-                "bootstrapped_at": "2026-06-07T00:00:00Z",
-                "product_name": "minimal",
-            },
-        },
-    }
-    spec_path.write_text(f"{json.dumps(spec)}\n", encoding="utf-8")
-
-    result = runner.invoke(
-        app,
-        [
-            "lake",
-            "create",
-            "--minimal",
-            "minimal.json",
-            "dev",
-            "--workspace",
-            str(workspace),
-            "--context",
-            "other-context",
-        ],
-        input="",
-    )
-
-    assert result.exit_code != 0
-    assert "recorded bootstrap state" in result.output
-    assert "overrides are not allowed" in result.output
-    assert not (workspace / "dev" / "minimal.json").exists()
-    assert json.loads(spec_path.read_text(encoding="utf-8")) == spec
 
 
 def test_lake_create_minimal_cli_rejects_empty_target_before_writing_product(tmp_path):
