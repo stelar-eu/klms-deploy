@@ -6,8 +6,8 @@ import typer
 
 from ..operations.progress import (
     ClusterProgress,
-    LakeActivationProgress,
     LakeEnvironmentProgress,
+    LakeSwitchProgress,
     LakeWorkspaceProgress,
 )
 
@@ -54,51 +54,66 @@ class TyperClusterProgress(ClusterProgress):
 
     def bootstrap_state_check_forbidden(self, namespace: str, reason: str) -> None:
         typer.echo(
-            "⚠️ Cannot check whether bootstrap already ran in namespace "
+            "⚠️ Cannot check whether bootstrap Secrets already exist in namespace "
             f"{namespace!r}: {reason}. Proceeding at your own risk."
         )
 
+    def lake_state_exists(self, namespace: str, configmap_name: str) -> None:
+        typer.echo(
+            "⚠️ Lake bootstrap appears to have already run in namespace "
+            f"{namespace!r}: ConfigMap {configmap_name!r} exists."
+        )
 
-class TyperLakeActivationProgress(LakeActivationProgress):
-    """Render lake product activation notices through Typer."""
+    def applying_configmap(self, configmap_name: str) -> None:
+        typer.echo(f"🚀 Applying ConfigMap {configmap_name!r} to the K8s cluster...")
 
-    def bootstrapped_product_reactivated(
+    def configmap_applied(self, configmap_name: str) -> None:
+        typer.echo(f"✅ ConfigMap {configmap_name!r} applied successfully.")
+
+
+class TyperLakeSwitchProgress(LakeSwitchProgress):
+    """Render lake product switch notices through Typer."""
+
+    def switch_matches_bootstrapped_product(
         self,
         product_name: str,
         namespace: str,
-        secret_names: tuple[str, ...],
     ) -> None:
         typer.echo(
             "ℹ️ Product "
-            f"{product_name!r} is already active and appears bootstrapped in "
-            f"namespace {namespace!r}: all {len(secret_names)} required "
-            "Secrets exist."
+            f"{product_name!r} already matches the cluster lake state in "
+            f"namespace {namespace!r}."
         )
 
-    def activating_despite_existing_bootstrap(
+    def switching_despite_bootstrapped_product(
         self,
         product_name: str,
         namespace: str,
-        existing_secret_names: tuple[str, ...],
-        expected_secret_names: tuple[str, ...],
+        bootstrapped_product_name: str | None,
     ) -> None:
+        cluster_product = (
+            f" product {bootstrapped_product_name!r}"
+            if bootstrapped_product_name
+            else " a different product"
+        )
         typer.echo(
-            "⚠️ Existing bootstrap Secrets were found in namespace "
-            f"{namespace!r}: {len(existing_secret_names)} of "
-            f"{len(expected_secret_names)} required Secrets exist. "
-            f"Proceeding with activation of product {product_name!r}."
+            "⚠️ Namespace "
+            f"{namespace!r} is already bootstrapped for{cluster_product}. "
+            f"Switching local render selection to {product_name!r} anyway; "
+            "unbootstrap the namespace and rerun lake bootstrap before applying "
+            "this product to the same namespace."
         )
 
-    def activating_despite_bootstrap_check_failure(
+    def switching_despite_state_check_failure(
         self,
         product_name: str,
         namespace: str,
         reason: str,
     ) -> None:
         typer.echo(
-            "⚠️ Cannot check bootstrap Secrets in namespace "
-            f"{namespace!r}: {reason}. Proceeding with activation of "
-            f"product {product_name!r}."
+            "⚠️ Cannot inspect cluster lake state in namespace "
+            f"{namespace!r}: {reason}. Switching local render selection to "
+            f"{product_name!r} anyway."
         )
 
 

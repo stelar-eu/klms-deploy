@@ -27,11 +27,6 @@ root:
               type: string
             SMTP_USERNAME:
               type: string
-            SMTP_PASSWORD:
-              type: string
-              minLength: 8
-            SESSION_SECRET_KEY:
-              type: string
             PORT:
               type: integer
               default: 80
@@ -58,21 +53,6 @@ root:
               default: "http://stelarapi/"
         - name: postgres
           attributes:
-            POSTGRES_DB_PASSWORD:
-              type: string
-              minLength: 8
-            CKAN_DB_PASSWORD:
-              type: string
-              minLength: 8
-            DATASTORE_DB_PASSWORD:
-              type: string
-              minLength: 8
-            KEYCLOAK_DB_PASSWORD:
-              type: string
-              minLength: 8
-            QUAY_DB_PASSWORD:
-              type: string
-              minLength: 8
             PORT:
               type: integer
               default: 5432
@@ -185,13 +165,6 @@ root:
               default: "redis"
         - name: ckan
           attributes:
-            CKAN_ADMIN_PASSWORD:
-              type: string
-              minLength: 8
-            CKAN_SESSION_KEY:
-              type: string
-            CKAN_JWT_KEY:
-              type: string
             PORT:
               type: integer
               default: 5000
@@ -234,10 +207,6 @@ root:
             CKAN_SMTP_USER:
               type: string
               default: "user"
-            CKAN_SMTP_PASSWORD:
-              type: string
-              minLength: 8
-              default: "password"
             CKAN_SMTP_MAIL_FROM:
               type: string
               default: "ckan@localhost"
@@ -309,9 +278,6 @@ root:
           attributes:
             SUBDOMAIN:
               type: string
-            KEYCLOAK_ROOT_PASSWORD:
-              type: string
-              minLength: 8
             PORT:
               type: integer
               default: 8080
@@ -366,9 +332,6 @@ root:
               type: string
             INSECURE_MC_CLIENT:
               type: string
-            MINIO_ROOT_PASSWORD:
-              type: string
-              minLength: 8
             CONSOLE_PORT:
               type: integer
               default: 9001

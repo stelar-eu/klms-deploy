@@ -9,7 +9,6 @@ import sys
 from pathlib import Path
 
 from ..workspace import Workspace
-from .bootstrap_state import bootstrapped_product_or_none
 from .common import (
     CommandError,
     ensure_object,
@@ -20,14 +19,7 @@ from .common import (
 from .environment_spec import validate_environment_target_fields
 from .progress import LakeEnvironmentProgress
 
-ENVIRONMENT_TEMPLATE_DIR = (
-    Path("vendor")
-    / "github.com"
-    / "stelar-eu"
-    / "klms-deploy"
-    / "lib"
-    / "environment_templates"
-)
+ENVIRONMENT_TEMPLATE_DIR = Path("vendor") / "lib" / "environment_templates"
 INITIALIZED_LAKE_ENVIRONMENT_FILES = ("main.jsonnet", "spec.json")
 MAIN_JSONNET_TEMPLATE = "main_template.jsonnet"
 LAKE_ENVIRONMENT_ANNOTATION = "stelar.eu/lake-environment"
@@ -76,7 +68,6 @@ def add_lake_environment(
     )
 
     spec_json_path = environment_dir / "spec.json"
-    _reject_existing_bootstrapped_environment(spec_json_path)
     _validate_existing_main_jsonnet_adoption(
         workspace,
         environment_dir,
@@ -127,10 +118,8 @@ def _reject_unsafe_environment_removal(
         stelar_spec = {}
 
     reasons = []
-    if "active_product" in stelar_spec or "active_product_name" in stelar_spec:
+    if "active_product" in stelar_spec or "current_product" in stelar_spec or "active_product_name" in stelar_spec:
         reasons.append("an active product")
-    if bootstrapped_product_or_none(spec_json) is not None:
-        reasons.append("recorded bootstrap state")
     if not reasons:
         return
 
@@ -138,9 +127,9 @@ def _reject_unsafe_environment_removal(
     raise CommandError(
         f"Refusing to remove lake environment {environment!r} because it still "
         f"contains {reason_text}. Remove Kubernetes resources with `tk delete "
-        "ENV`, purge bootstrap Secrets with `stelarctl lake purge-secrets ENV` "
-        "when bootstrap state is recorded, then rerun. Use --force only if "
-        "you intentionally want to discard local cleanup metadata."
+        "ENV`, unbootstrap the namespace with `stelarctl lake unbootstrap ENV`, "
+        "then rerun. Use --force only if you intentionally want to discard "
+        "local metadata."
     )
 
 
@@ -402,21 +391,6 @@ def _ensure_spec_json(environment_dir: Path, progress: LakeEnvironmentProgress) 
 
 
 
-
-
-def _reject_existing_bootstrapped_environment(spec_json_path: Path) -> None:
-    if not spec_json_path.exists():
-        return
-    if not spec_json_path.is_file():
-        return
-    spec_json = read_environment_json(spec_json_path)
-    if bootstrapped_product_or_none(spec_json) is None:
-        return
-    raise CommandError(
-        "Environment has recorded bootstrap state; refusing to run lake add. "
-        "Restore spec.contextNames or spec.namespace manually if the target "
-        "fields need repair."
-    )
 
 
 def _write_target_fields_if_requested(

@@ -4,11 +4,7 @@ from __future__ import annotations
 
 from .common import CommandError, JsonObject
 from .manual_tls import MANUAL_TLS_SECRET_FIELDS
-from .secret_resources import (
-    validate_minio_root_password,
-    validate_minio_root_user,
-    validate_password,
-)
+from .secret_resources import validate_minio_root_user
 
 TLS_MODES = {"no_tls", "cert_manager", "manual_tls"}
 
@@ -50,7 +46,6 @@ def validate_config_scheme_tls_consistency(
         modes = ", ".join(sorted(TLS_MODES))
         raise CommandError(f"{source} ingress.tls must be one of: {modes}")
 
-    _validate_passwords(config, source=source)
     _validate_minio_credentials(config, source=source)
 
     if scheme == "http" and tls_mode != "no_tls":
@@ -78,43 +73,10 @@ def _validate_http_minio_insecure(config: JsonObject, *, source: str) -> None:
         )
 
 
-def _validate_passwords(
-    value: object,
-    *,
-    source: str,
-    path: tuple[str, ...] = (),
-) -> None:
-    if isinstance(value, dict):
-        for key, item in value.items():
-            key_text = str(key)
-            item_path = (*path, key_text)
-            if key_text.endswith("PASSWORD"):
-                dotted_path = ".".join(item_path)
-                if not isinstance(item, str) or not item:
-                    raise CommandError(
-                        f"{source} must define {dotted_path} "
-                        "as a non-empty string"
-                    )
-                validate_password(item, source=f"{source} {dotted_path}")
-            _validate_passwords(item, source=source, path=item_path)
-    elif isinstance(value, list):
-        for index, item in enumerate(value):
-            _validate_passwords(item, source=source, path=(*path, str(index)))
-
-
 def _validate_minio_credentials(config: JsonObject, *, source: str) -> None:
     minio = _required_minio_config(config, source=source)
     root_user = _required_minio_string(minio, "MINIO_ROOT_USER", source=source)
-    root_password = _required_minio_string(
-        minio,
-        "MINIO_ROOT_PASSWORD",
-        source=source,
-    )
     validate_minio_root_user(root_user, source=f"{source} minio.MINIO_ROOT_USER")
-    validate_minio_root_password(
-        root_password,
-        source=f"{source} minio.MINIO_ROOT_PASSWORD",
-    )
 
 
 def _required_minio_config(config: JsonObject, *, source: str) -> JsonObject:

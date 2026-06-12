@@ -104,7 +104,7 @@ def test_extract_configuration_returns_unwrapped_root(J: JsonnetRunner):
             },
 
             ckan: {
-              CKAN_ADMIN_PASSWORD: "secret",
+              CKAN_ADMIN_PASSWORD_SECRET_NAME: "ckanadmin-secret",
               PORT: 5000,
               IMAGE: "petroud/stelar-tuc:ckan",
             },
@@ -136,7 +136,7 @@ def test_extract_configuration_returns_unwrapped_root(J: JsonnetRunner):
             "REDIS_HOST": "redis",
         },
         "ckan": {
-            "CKAN_ADMIN_PASSWORD": "secret",
+            "CKAN_ADMIN_PASSWORD_SECRET_NAME": "ckanadmin-secret",
             "PORT": 5000,
             "IMAGE": "petroud/stelar-tuc:ckan",
         },

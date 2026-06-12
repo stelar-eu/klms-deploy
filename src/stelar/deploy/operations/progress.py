@@ -20,8 +20,8 @@ class ClusterProgress(_NoOpProgress):
     """No-op progress reporter for cluster bootstrap."""
 
 
-class LakeActivationProgress(_NoOpProgress):
-    """No-op progress reporter for lake product activation."""
+class LakeSwitchProgress(_NoOpProgress):
+    """No-op progress reporter for lake product switching."""
 
 
 class LakeEnvironmentProgress(_NoOpProgress):

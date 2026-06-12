@@ -5,12 +5,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Callable
 
-from .bootstrap_state import (
-    BootstrappedProductState,
-    bootstrapped_target_fields_or_none,
-    reject_bootstrap_target_overrides,
-    validate_bootstrap_target_matches,
-)
 from .common import CommandError, JsonObject
 from .environment_spec import (
     environment_context_name_or_none,
@@ -21,11 +15,10 @@ from .kube_context import resolve_kube_context, resolve_kube_namespace
 
 @dataclass(frozen=True)
 class EnvironmentTarget:
-    """Resolved kubectl context/namespace plus optional bootstrap state."""
+    """Resolved kubectl context/namespace for a lake environment command."""
 
     context: str
     namespace: str
-    bootstrap_state: BootstrappedProductState | None = None
 
 
 def resolve_environment_target(
@@ -38,21 +31,7 @@ def resolve_environment_target(
     on_inferred_context: Callable[[str], None] | None = None,
     on_inferred_namespace: Callable[[str, str], None] | None = None,
 ) -> EnvironmentTarget:
-    """Resolve a command target while enforcing recorded bootstrap locks."""
-    bootstrapped_target = bootstrapped_target_fields_or_none(spec_json)
-    if bootstrapped_target is not None:
-        state = validate_bootstrap_target_matches(spec_json, *bootstrapped_target)
-        reject_bootstrap_target_overrides(
-            spec_json,
-            context=context,
-            namespace=namespace,
-        )
-        return EnvironmentTarget(
-            resolve_kube_context(bootstrapped_target[0]),
-            bootstrapped_target[1],
-            state,
-        )
-
+    """Resolve a command target from flags, spec.json, or optional inference."""
     context_name = _target_context(
         environment,
         spec_json,
@@ -68,8 +47,7 @@ def resolve_environment_target(
         infer_missing=infer_missing,
         on_inferred=on_inferred_namespace,
     )
-    state = validate_bootstrap_target_matches(spec_json, context_name, target_namespace)
-    return EnvironmentTarget(context_name, target_namespace, state)
+    return EnvironmentTarget(context_name, target_namespace)
 
 
 def _target_context(

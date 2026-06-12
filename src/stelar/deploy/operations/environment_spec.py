@@ -25,15 +25,18 @@ def environment_active_product(spec_json: JsonObject) -> JsonObject:
     return active_product
 
 
-def environment_active_product_name_or_none(spec_json: JsonObject) -> str | None:
-    """Return the active product name recorded by stelarctl, when present."""
+def environment_current_product_or_none(spec_json: JsonObject) -> str | None:
+    """Return the current product name recorded by stelarctl, when present."""
     stelar_spec = _optional_stelar_spec(spec_json)
-    product_name = stelar_spec.get("active_product_name")
+    product_name = stelar_spec.get("current_product")
+    if product_name is None:
+        # Backward compatibility for environments created before the field rename.
+        product_name = stelar_spec.get("active_product_name")
     if product_name is None:
         return None
     if not isinstance(product_name, str) or not product_name.strip():
         raise CommandError(
-            "Environment spec.json spec.stelar.active_product_name must be "
+            "Environment spec.json spec.stelar.current_product must be "
             "a non-empty string"
         )
     return product_name.strip()
@@ -182,7 +185,6 @@ def update_environment_spec(
     labels = ensure_object(resource_defaults, "labels")
     labels.setdefault("app.kubernetes.io/managed-by", "tanka")
     labels.setdefault("app.kubernetes.io/part-of", "stelar")
-    labels.setdefault("stelar.deployment", "main")
 
     annotations = ensure_object(resource_defaults, "annotations")
     if annotations.get("stelar.eu/author") == "<author>":
@@ -201,10 +203,11 @@ def set_active_product(
     stelar_spec = ensure_object(ensure_object(spec_json, "spec"), "stelar")
     stelar_spec["active_product"] = active_product
     if product_name is not None:
-        stelar_spec["active_product_name"] = _validate_optional_string(
+        stelar_spec["current_product"] = _validate_optional_string(
             product_name,
-            "active product name",
+            "current product",
         )
+        stelar_spec.pop("active_product_name", None)
 
 
 def _optional_spec(spec_json: JsonObject) -> JsonObject:

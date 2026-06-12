@@ -169,3 +169,6 @@ cython_debug/
 # STELAR Bootstrap scripts
 # 
 boot_scripts/*
+
+# Local notes
+docs/sizing_optimizer_notes.md

@@ -1,4 +1,4 @@
-"""Business logic for `lake create`."""
+"""Business logic for lake product files and active render selection."""
 
 from __future__ import annotations
 
@@ -7,11 +7,6 @@ from pathlib import Path
 
 from .. import feature_model
 from ..models.product import ProductValidator
-from .bootstrap_state import (
-    bootstrapped_product_or_none,
-    validate_bootstrap_product_matches,
-    validate_bootstrap_target_matches,
-)
 from .common import (
     CommandError,
     JsonObject,
@@ -21,19 +16,17 @@ from .common import (
     validate_workspace,
     write_environment_json,
 )
-from .deployment_config import deployment_config
 from .environment_spec import (
     environment_active_product,
     environment_context_name_or_none,
     environment_namespace_or_none,
     update_environment_active_product,
 )
-from .kube_context import load_kube_context
-from .kubernetes_secrets import check_secret_existence
 from .fullspec_validation import validate_fullspec_scheme_tls_consistency
+from .kube_context import load_kube_context
 from .lake_environment import initialized_lake_environment_dir
-from .progress import LakeActivationProgress
-from .secret_resources import expected_bootstrap_secret_names
+from .lake_state_configmap import read_lake_state_configmap
+from .progress import LakeSwitchProgress
 
 PRODUCT_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]*$")
 
@@ -67,7 +60,6 @@ def product_data_to_fullspec(
     """Transform an in-memory product into environment product files."""
     workspace = validate_workspace(workspace_path)
     environment_dir = initialized_lake_environment_dir(workspace, environment)
-    _validate_environment_unlocked(read_environment_json(environment_dir / "spec.json"))
     product_name = normalize_product_name(
         product_name or product_name_from_path(product_source)
     )
@@ -79,16 +71,15 @@ def product_data_to_fullspec(
         environment_dir / product_json_filename(product_name),
         product_data,
     )
-    product_fullspec_filename = product_fullspec_json_filename(product_name)
     write_environment_json(
-        environment_dir / product_fullspec_filename,
+        environment_dir / product_fullspec_json_filename(product_name),
         fullspec,
     )
-    _activate_if_first_product(environment_dir, fullspec, product_name)
+    _switch_if_first_product(environment_dir, fullspec, product_name)
     return fullspec
 
 
-def _activate_if_first_product(
+def _switch_if_first_product(
     environment_dir: Path,
     fullspec: JsonObject,
     product_name: str,
@@ -106,14 +97,14 @@ def _activate_if_first_product(
         )
 
 
-def activate_lake_product(
+def switch_lake_product(
     product_name: str,
     environment: str,
     workspace_path: Path = Path("."),
-    progress: LakeActivationProgress | None = None,
+    progress: LakeSwitchProgress | None = None,
 ) -> JsonObject:
-    """Set a generated named product as the environment active product."""
-    progress = progress or LakeActivationProgress()
+    """Set a generated named product as the environment active render product."""
+    progress = progress or LakeSwitchProgress()
     workspace = validate_workspace(workspace_path)
     environment_dir = initialized_lake_environment_dir(workspace, environment)
     product_name = normalize_product_name(product_name)
@@ -130,19 +121,10 @@ def activate_lake_product(
         )
 
     fullspec = read_environment_json(fullspec_path)
+    validate_fullspec_scheme_tls_consistency(fullspec, source=fullspec_path.name)
     spec_path = environment_dir / "spec.json"
     spec_json = read_environment_json(spec_path)
-    _validate_environment_unlocked(spec_json)
-    validate_fullspec_scheme_tls_consistency(fullspec, source=fullspec_path.name)
-    validate_bootstrap_product_matches(spec_json, fullspec)
-    current_fullspec = _current_active_product_or_none(spec_json)
-    _notify_activation_bootstrap_state(
-        product_name,
-        spec_json,
-        current_fullspec,
-        fullspec,
-        progress,
-    )
+    _notify_switch_cluster_state(product_name, spec_json, fullspec, progress)
     update_environment_active_product(
         spec_path,
         fullspec,
@@ -151,79 +133,38 @@ def activate_lake_product(
     return fullspec
 
 
-def _validate_environment_unlocked(spec_json: JsonObject) -> None:
-    if bootstrapped_product_or_none(spec_json) is None:
-        return
-
-    context_name = environment_context_name_or_none(spec_json)
-    namespace = environment_namespace_or_none(spec_json)
-    if context_name is None or namespace is None:
-        raise CommandError(
-            "Environment has recorded bootstrap state, but spec.contextNames "
-            "or spec.namespace is missing. Restore the original spec.contextNames "
-            "and spec.namespace before running this command."
-        )
-    validate_bootstrap_target_matches(spec_json, context_name, namespace)
-
-
-def _current_active_product_or_none(spec_json: JsonObject) -> JsonObject | None:
-    try:
-        return environment_active_product(spec_json)
-    except CommandError as exc:
-        if "spec.stelar.active_product" not in str(exc):
-            raise
-        return None
-
-
-def _notify_activation_bootstrap_state(
+def _notify_switch_cluster_state(
     product_name: str,
     spec_json: JsonObject,
-    current_fullspec: JsonObject | None,
     target_fullspec: JsonObject,
-    progress: LakeActivationProgress,
+    progress: LakeSwitchProgress,
 ) -> None:
-    if current_fullspec is None:
-        return
-
     context_name = environment_context_name_or_none(spec_json)
     namespace = environment_namespace_or_none(spec_json)
     if context_name is None or namespace is None:
-        return
-
-    checked_fullspec = (
-        target_fullspec if current_fullspec == target_fullspec else current_fullspec
-    )
-    config = deployment_config(checked_fullspec)
-    secret_names = expected_bootstrap_secret_names(config)
-    if not secret_names:
         return
 
     try:
         load_kube_context(context_name)
-        state = check_secret_existence(namespace, secret_names)
+        lake_state = read_lake_state_configmap(namespace)
     except CommandError as exc:
-        progress.activating_despite_bootstrap_check_failure(
+        progress.switching_despite_state_check_failure(
             product_name,
             namespace,
             str(exc),
         )
         return
 
-    if current_fullspec == target_fullspec and state.all_exist:
-        progress.bootstrapped_product_reactivated(
-            product_name,
-            namespace,
-            secret_names,
-        )
+    if lake_state is None:
         return
-
-    if state.existing:
-        progress.activating_despite_existing_bootstrap(
-            product_name,
-            namespace,
-            state.existing,
-            secret_names,
-        )
+    if lake_state.fullspec == target_fullspec:
+        progress.switch_matches_bootstrapped_product(product_name, namespace)
+        return
+    progress.switching_despite_bootstrapped_product(
+        product_name,
+        namespace,
+        lake_state.product_name,
+    )
 
 
 def product_name_from_path(product_path: Path) -> str:

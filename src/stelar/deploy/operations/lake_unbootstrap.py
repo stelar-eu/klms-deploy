@@ -1,4 +1,4 @@
-"""Delete bootstrap Secrets created by `stelarctl lake bootstrap`."""
+"""Undo lake bootstrap by deleting bootstrap Secrets and cluster state."""
 
 from __future__ import annotations
 
@@ -16,6 +16,11 @@ from .environment_spec import environment_active_product
 from .environment_target import resolve_environment_target
 from .kube_context import load_kube_context
 from .lake_environment import initialized_lake_environment_dir
+from .lake_state_configmap import (
+    LAKE_STATE_CONFIGMAP_NAME,
+    delete_lake_state_configmap,
+    read_lake_state_configmap,
+)
 from .secret_resources import expected_bootstrap_secret_names
 
 # Expose kube_config for tests and integrations that monkeypatch this module.
@@ -23,37 +28,39 @@ kube_config = kube_context_helpers.kube_config
 
 
 @dataclass(frozen=True)
-class LakeSecretPurgePlan:
-    """Resolved target and Secret names for a lake bootstrap Secret purge."""
+class LakeUnbootstrapPlan:
+    """Resolved target and Secret names for lake unbootstrap."""
 
     environment: str
     context: str
     namespace: str
     secret_names: tuple[str, ...]
     spec_path: Path | None = None
-    clear_bootstrap_state: bool = False
+    delete_state_configmap: bool = False
 
 
 @dataclass(frozen=True)
-class LakeSecretPurgeResult:
-    """Outcome of deleting bootstrap Secrets from one namespace."""
+class LakeUnbootstrapResult:
+    """Outcome of unbootstrapping one namespace."""
 
-    plan: LakeSecretPurgePlan
+    plan: LakeUnbootstrapPlan
     deleted: tuple[str, ...]
     missing: tuple[str, ...]
+    state_configmap_deleted: bool = False
 
 
-def plan_lake_secret_purge(
+def plan_lake_unbootstrap(
     environment: str,
     workspace_path: Path = Path("."),
     *,
     context: str | None = None,
     namespace: str | None = None,
-) -> LakeSecretPurgePlan:
+) -> LakeUnbootstrapPlan:
     """Resolve the target namespace/context and bootstrap Secret names."""
     workspace = validate_workspace(workspace_path)
     environment_dir = initialized_lake_environment_dir(workspace, environment)
-    spec_json = read_environment_json(environment_dir / "spec.json")
+    spec_path = environment_dir / "spec.json"
+    spec_json = read_environment_json(spec_path)
     target = resolve_environment_target(
         environment,
         spec_json,
@@ -62,26 +69,36 @@ def plan_lake_secret_purge(
     )
     context_name = target.context
     target_namespace = target.namespace
-    bootstrap_state = target.bootstrap_state
-    if bootstrap_state is None:
-        product_fullspec = environment_active_product(spec_json)
-        config = deployment_config(product_fullspec)
-        secret_names = expected_bootstrap_secret_names(config)
-    else:
-        secret_names = bootstrap_state.secret_names
 
-    return LakeSecretPurgePlan(
+    load_kube_context(context_name)
+    lake_state = read_lake_state_configmap(target_namespace)
+    delete_state_configmap = lake_state is not None
+    if lake_state is not None:
+        config = deployment_config(lake_state.fullspec)
+    else:
+        # Cleanup fallback for failed bootstraps that created Secrets before the
+        # final state ConfigMap was written. This is not considered bootstrapped.
+        try:
+            config = deployment_config(environment_active_product(spec_json))
+        except CommandError as exc:
+            raise CommandError(
+                f"ConfigMap {LAKE_STATE_CONFIGMAP_NAME!r} does not exist in "
+                f"namespace {target_namespace!r}, and ENV/spec.json has no "
+                "active product to derive bootstrap Secret names from."
+            ) from exc
+
+    return LakeUnbootstrapPlan(
         environment=environment,
         context=context_name,
         namespace=target_namespace,
-        secret_names=secret_names,
-        spec_path=environment_dir / "spec.json" if bootstrap_state is not None else None,
-        clear_bootstrap_state=bootstrap_state is not None,
+        secret_names=expected_bootstrap_secret_names(config),
+        spec_path=spec_path,
+        delete_state_configmap=delete_state_configmap,
     )
 
 
-def purge_lake_secrets(plan: LakeSecretPurgePlan) -> LakeSecretPurgeResult:
-    """Delete all planned bootstrap Secrets, treating missing Secrets as purged."""
+def unbootstrap_lake(plan: LakeUnbootstrapPlan) -> LakeUnbootstrapResult:
+    """Delete planned bootstrap Secrets and state, treating missing Secrets as absent."""
     load_kube_context(plan.context)
     core_api = kube_client.CoreV1Api()
     deleted: list[str] = []
@@ -107,11 +124,20 @@ def purge_lake_secrets(plan: LakeSecretPurgePlan) -> LakeSecretPurgeResult:
             ) from exc
         deleted.append(secret_name)
 
-    if plan.clear_bootstrap_state and plan.spec_path is not None:
+    state_deleted = False
+    if plan.delete_state_configmap:
+        state_deleted = delete_lake_state_configmap(plan.namespace)
+
+    if plan.spec_path is not None:
         spec_json = read_environment_json(plan.spec_path)
         clear_bootstrapped_product(plan.spec_path, spec_json)
 
-    return LakeSecretPurgeResult(plan, tuple(deleted), tuple(missing))
+    return LakeUnbootstrapResult(
+        plan,
+        tuple(deleted),
+        tuple(missing),
+        state_deleted,
+    )
 
 
 def _is_forbidden(exc: ApiException) -> bool:

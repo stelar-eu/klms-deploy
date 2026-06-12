@@ -8,28 +8,20 @@ from typer.testing import CliRunner
 
 from stelar.deploy.cli import app
 from stelar.deploy.operations import CommandError, add_lake_environment, inspect_lake_status
-from stelar.deploy.operations.bootstrap_state import product_sha256, target_sha256
 from stelar.deploy.operations import lake_status as status_commands
 
 
 runner = CliRunner()
+CURRENT_STATUS_FULLSPEC = None
 
 
 def make_workspace(path: Path) -> Path:
     path.mkdir()
     (path / "jsonnetfile.json").write_text("{}\n", encoding="utf-8")
-    template_dir = (
-        path
-        / "vendor"
-        / "github.com"
-        / "stelar-eu"
-        / "klms-deploy"
-        / "lib"
-        / "environment_templates"
-    )
+    template_dir = path / "vendor" / "lib" / "environment_templates"
     template_dir.mkdir(parents=True)
     (template_dir / "main_template.jsonnet").write_text(
-        'local build_lake = import "github.com/stelar-eu/klms-deploy/lib/util/build_lake.libsonnet";\n'
+        'local build_lake = import "lib/util/build_lake.libsonnet";\n'
         'local environment_spec = import "./spec.json";\n'
         '\n'
         'build_lake(environment_spec)\n',
@@ -39,6 +31,8 @@ def make_workspace(path: Path) -> Path:
 
 
 def write_status_environment(workspace: Path, fullspec: dict) -> Path:
+    global CURRENT_STATUS_FULLSPEC
+    CURRENT_STATUS_FULLSPEC = fullspec
     add_lake_environment("dev", workspace)
     environment_dir = workspace / "dev"
     spec = {
@@ -68,57 +62,29 @@ def base_fullspec(*, core_components=None, optional_components=None, cluster=Non
             "ingress": {"tls": ["no_tls"], "no_tls": {}},
             "postgres": {
                 "POSTGRES_DB_PASSWORD_SECRET_NAME": "product-postgres-secret",
-                "POSTGRES_DB_PASSWORD": "postgres-password",
                 "CKAN_DB_PASSWORD_SECRET_NAME": "product-ckan-db-secret",
-                "CKAN_DB_PASSWORD": "ckan-password",
                 "KEYCLOAK_DB_PASSWORD_SECRET_NAME": "product-keycloak-db-secret",
-                "KEYCLOAK_DB_PASSWORD": "keycloak-db-password",
                 "DATASTORE_DB_PASSWORD_SECRET_NAME": "product-datastore-secret",
-                "DATASTORE_DB_PASSWORD": "datastore-password",
                 "QUAY_DB_PASSWORD_SECRET_NAME": "product-quay-db-secret",
-                "QUAY_DB_PASSWORD": "quay-password",
             },
             "keycloak": {
                 "KEYCLOAK_ROOT_PASSWORD_SECRET_NAME": "product-keycloak-root-secret",
-                "KEYCLOAK_ROOT_PASSWORD": "keycloak-root-password",
             },
             "api": {
                 "SMTP_PASSWORD_SECRET_NAME": "product-smtp-secret",
-                "SMTP_PASSWORD": "smtp-password",
                 "SESSION_SECRET_KEY_SECRET_NAME": "product-session-secret",
-                "SESSION_SECRET_KEY": "session-secret-value",
             },
             "ckan": {
                 "CKAN_ADMIN_PASSWORD_SECRET_NAME": "product-ckan-admin-secret",
-                "CKAN_ADMIN_PASSWORD": "ckan-admin-password",
+                "CKAN_AUTH_SECRET_NAME": "product-ckan-auth-secret",
             },
             "minio": {
                 "MINIO_ROOT_USER": "minioadmin",
                 "MINIO_ROOT_PASSWORD_SECRET_NAME": "product-minio-root-secret",
-                "MINIO_ROOT_PASSWORD": "minio-root-password",
                 "INSECURE_MC_CLIENT": "true",
             },
         }
     }
-
-
-def set_bootstrapped_product(
-    environment_dir: Path,
-    *,
-    context: str = "current-context",
-    namespace: str = "test",
-    secret_names: tuple[str, ...] = ("stored-secret",),
-) -> None:
-    spec_path = environment_dir / "spec.json"
-    spec = json.loads(spec_path.read_text(encoding="utf-8"))
-    stelar_spec = spec["spec"].setdefault("stelar", {})
-    stelar_spec["bootstrapped_product"] = {
-        "target_sha256": target_sha256(context, namespace),
-        "product_sha256": product_sha256(stelar_spec["active_product"]),
-        "secret_names": list(secret_names),
-        "bootstrapped_at": "2026-06-07T00:00:00Z",
-    }
-    spec_path.write_text(f"{json.dumps(spec)}\n", encoding="utf-8")
 
 
 def expected_secret_names(fullspec: dict) -> set[str]:
@@ -134,7 +100,7 @@ def expected_secret_names(fullspec: dict) -> set[str]:
         klms["api"]["SESSION_SECRET_KEY_SECRET_NAME"],
         klms["ckan"]["CKAN_ADMIN_PASSWORD_SECRET_NAME"],
         klms["minio"]["MINIO_ROOT_PASSWORD_SECRET_NAME"],
-        "ckan-auth-secret",
+        klms["ckan"]["CKAN_AUTH_SECRET_NAME"],
     }
 
 
@@ -146,12 +112,15 @@ def set_status_cluster(
     statefulsets=None,
     jobs=None,
     missing=None,
+    lake_state_fullspec="current",
 ):
     existing_secrets = set(existing_secrets or ())
+    if lake_state_fullspec == "current":
+        lake_state_fullspec = CURRENT_STATUS_FULLSPEC
     deployments = dict(deployments or {})
     statefulsets = dict(statefulsets or {})
     jobs = {name: list(values) for name, values in dict(jobs or {}).items()}
-    calls = {"secrets": [], "deployments": [], "statefulsets": [], "jobs": []}
+    calls = {"secrets": [], "deployments": [], "statefulsets": [], "jobs": [], "configmaps": []}
 
     def not_found():
         raise status_commands.ApiException(status=404, reason="Not Found")
@@ -166,6 +135,20 @@ def set_status_cluster(
         return ([{"name": "current-context", "context": {"namespace": "test"}}], {"name": "current-context"})
 
     class CoreV1Api:
+        def read_namespaced_config_map(self, name, namespace):
+            calls["configmaps"].append((namespace, name))
+            if missing == "lake_state_forbidden":
+                forbidden()
+            if lake_state_fullspec is None:
+                not_found()
+            return SimpleNamespace(
+                data={
+                    "product_name": "generated",
+                    "product_filename": "generated.json",
+                    "fullspec.json": json.dumps(lake_state_fullspec),
+                }
+            )
+
         def read_namespaced_secret(self, name, namespace):
             calls["secrets"].append((namespace, name))
             if missing == "secret_forbidden":
@@ -264,159 +247,44 @@ def test_lake_status_reports_bootstrap_and_selected_workloads(tmp_path, monkeypa
     assert status.deployment.unchecked_components[0].component == "system"
 
 
-def test_lake_status_uses_stored_bootstrap_secret_names(
+def test_lake_status_uses_configmap_fullspec_when_local_active_product_differs(
     tmp_path,
     monkeypatch,
 ):
     workspace = make_workspace(tmp_path / "workspace")
     fullspec = base_fullspec(core_components=["redis"])
     environment_dir = write_status_environment(workspace, fullspec)
-    set_bootstrapped_product(
-        environment_dir,
-        secret_names=("old-postgres-secret", "old-auth-secret"),
-    )
-    calls = set_status_cluster(
-        monkeypatch,
-        existing_secrets={"old-postgres-secret", "old-auth-secret"},
-        deployments={"redis": (1, 1)},
-    )
-
-    status = inspect_lake_status("dev", workspace, job_timeout_seconds=0)
-
-    assert status.bootstrap.expected == ("old-postgres-secret", "old-auth-secret")
-    assert status.bootstrap.state == "bootstrapped"
-    assert calls["secrets"] == [
-        ("test", "old-postgres-secret"),
-        ("test", "old-auth-secret"),
-    ]
-
-
-
-def test_lake_status_reports_bootstrap_product_hash_mismatch(
-    tmp_path,
-    monkeypatch,
-):
-    workspace = make_workspace(tmp_path / "workspace")
-    fullspec = base_fullspec(core_components=["redis"])
-    environment_dir = write_status_environment(workspace, fullspec)
-    set_bootstrapped_product(
-        environment_dir,
-        secret_names=("old-postgres-secret", "old-auth-secret"),
-    )
     spec_path = environment_dir / "spec.json"
     spec = json.loads(spec_path.read_text(encoding="utf-8"))
     spec["spec"]["stelar"]["active_product"] = base_fullspec(core_components=["postgres"])
     spec_path.write_text(f"{json.dumps(spec)}\n", encoding="utf-8")
     calls = set_status_cluster(
         monkeypatch,
-        existing_secrets={"old-postgres-secret", "old-auth-secret"},
-        statefulsets={"db": (1, 1)},
+        existing_secrets=expected_secret_names(fullspec),
+        deployments={"redis": (1, 1)},
     )
 
     status = inspect_lake_status("dev", workspace, job_timeout_seconds=0)
 
-    assert status.bootstrap.expected == ("old-postgres-secret", "old-auth-secret")
+    assert status.selected_components == ("system", "redis")
     assert status.bootstrap.state == "bootstrapped"
     assert status.deployment.state == "deployed"
-    assert [
-        (workload.kind, workload.name, workload.state)
-        for workload in status.deployment.workloads
-    ] == [("StatefulSet", "db", "ready")]
-    assert calls["secrets"] == [
-        ("test", "old-postgres-secret"),
-        ("test", "old-auth-secret"),
-    ]
-    assert len(status.diagnostics) == 1
-    assert "Active product does not match" in status.diagnostics[0]
-    assert "purge-secrets" in status.diagnostics[0]
+    assert status.diagnostics == ("cluster product: generated",)
+    assert calls["secrets"] == [("test", name) for name in status.bootstrap.expected]
 
 
 def test_lake_status_rejects_invalid_active_product_scheme_tls(
     tmp_path,
+    monkeypatch,
 ):
     workspace = make_workspace(tmp_path / "workspace")
     fullspec = base_fullspec(core_components=["redis"])
     fullspec["klms"]["SCHEME"] = "https"
     fullspec["klms"]["ingress"] = {"tls": ["no_tls"], "no_tls": {}}
     write_status_environment(workspace, fullspec)
+    set_status_cluster(monkeypatch)
 
     with pytest.raises(CommandError, match="SCHEME https.*manual_tls"):
-        inspect_lake_status("dev", workspace, job_timeout_seconds=0)
-
-
-def test_lake_status_rejects_recorded_bootstrap_state_with_missing_target_fields_even_with_flags(
-    tmp_path,
-):
-    workspace = make_workspace(tmp_path / "workspace")
-    environment_dir = write_status_environment(workspace, base_fullspec())
-    set_bootstrapped_product(environment_dir)
-    spec_path = environment_dir / "spec.json"
-    spec = json.loads(spec_path.read_text(encoding="utf-8"))
-    spec["spec"]["stelar"]["active_product"]["klms"]["SCHEME"] = "ftp"
-    del spec["spec"]["contextNames"]
-    del spec["spec"]["namespace"]
-    spec_path.write_text(f"{json.dumps(spec)}\n", encoding="utf-8")
-
-    with pytest.raises(CommandError, match="recorded bootstrap state"):
-        inspect_lake_status(
-            "dev",
-            workspace,
-            context="current-context",
-            namespace="test",
-            job_timeout_seconds=0,
-        )
-
-
-def test_lake_status_rejects_bootstrap_target_overrides_after_bootstrap(
-    tmp_path,
-):
-    workspace = make_workspace(tmp_path / "workspace")
-    environment_dir = write_status_environment(workspace, base_fullspec())
-    set_bootstrapped_product(environment_dir)
-
-    with pytest.raises(CommandError, match="overrides are not allowed"):
-        inspect_lake_status(
-            "dev",
-            workspace,
-            context="current-context",
-            namespace="test",
-            job_timeout_seconds=0,
-        )
-
-
-def test_lake_status_rejects_bootstrap_target_hash_mismatch(
-    tmp_path,
-    monkeypatch,
-):
-    workspace = make_workspace(tmp_path / "workspace")
-    fullspec = base_fullspec(core_components=["redis"])
-    environment_dir = write_status_environment(workspace, fullspec)
-    set_bootstrapped_product(
-        environment_dir,
-        namespace="old-namespace",
-        secret_names=("old-secret",),
-    )
-    set_status_cluster(monkeypatch)
-
-    with pytest.raises(CommandError, match="Hash mismatch detected"):
-        inspect_lake_status("dev", workspace, job_timeout_seconds=0)
-
-
-def test_lake_status_checks_target_hash_before_resolving_context(
-    tmp_path,
-    monkeypatch,
-):
-    workspace = make_workspace(tmp_path / "workspace")
-    fullspec = base_fullspec(core_components=["redis"])
-    environment_dir = write_status_environment(workspace, fullspec)
-    set_bootstrapped_product(environment_dir, secret_names=("old-secret",))
-    spec_path = environment_dir / "spec.json"
-    spec = json.loads(spec_path.read_text(encoding="utf-8"))
-    spec["spec"]["contextNames"] = ["missing-context"]
-    spec_path.write_text(f"{json.dumps(spec)}\n", encoding="utf-8")
-    set_status_cluster(monkeypatch)
-
-    with pytest.raises(CommandError, match="Hash mismatch detected"):
         inspect_lake_status("dev", workspace, job_timeout_seconds=0)
 
 
@@ -529,43 +397,6 @@ def test_lake_status_cli_prints_status(tmp_path, monkeypatch):
     assert "Lake status: dev" in result.output
     assert "bootstrap: bootstrapped" in result.output
     assert "Deployment redis [redis]: ready" in result.output
-
-
-def test_lake_status_cli_prints_product_mismatch_diagnostic(tmp_path, monkeypatch):
-    workspace = make_workspace(tmp_path / "workspace")
-    fullspec = base_fullspec(core_components=["redis"])
-    environment_dir = write_status_environment(workspace, fullspec)
-    set_bootstrapped_product(
-        environment_dir,
-        secret_names=("old-postgres-secret", "old-auth-secret"),
-    )
-    spec_path = environment_dir / "spec.json"
-    spec = json.loads(spec_path.read_text(encoding="utf-8"))
-    spec["spec"]["stelar"]["active_product"] = base_fullspec(core_components=["postgres"])
-    spec_path.write_text(f"{json.dumps(spec)}\n", encoding="utf-8")
-    set_status_cluster(
-        monkeypatch,
-        existing_secrets={"old-postgres-secret", "old-auth-secret"},
-        statefulsets={"db": (1, 1)},
-    )
-
-    result = runner.invoke(
-        app,
-        [
-            "lake",
-            "status",
-            "dev",
-            "--workspace",
-            str(workspace),
-        ],
-    )
-
-    assert result.exit_code == 0, result.output
-    assert "diagnostic: Bad environment state" in result.output
-    assert "Active product does not match" in result.output
-    assert "stelarctl lake purge-secrets ENV" in result.output
-    assert "bootstrap: bootstrapped" in result.output
-    assert "StatefulSet db [postgres]: ready" in result.output
 
 
 def test_lake_status_cli_rejects_polling_options_without_wait(tmp_path, monkeypatch):
