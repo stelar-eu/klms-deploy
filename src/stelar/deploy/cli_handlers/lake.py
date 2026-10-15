@@ -554,11 +554,21 @@ def lake_unbootstrap_command(
     except CommandError as exc:
         raise typer.BadParameter(str(exc)) from exc
 
+    typer.echo(
+        "WARNING: destructive cleanup will purge all bootstrap Secrets selected "
+        f"by the lake fullspec and ConfigMap 'stelar-lake-state' (if present) "
+        f"from namespace {plan.namespace!r} on context {plan.context!r}, "
+        "regardless of Secret ownership labels.",
+        err=True,
+    )
+    typer.echo(
+        f"Secrets selected for purge: {item_list(plan.secret_names)}",
+        err=True,
+    )
+
     if not yes:
         confirmed = typer.confirm(
-            "Unbootstrap by deleting "
-            f"{len(plan.secret_names)} bootstrap Secrets from namespace "
-            f"{plan.namespace!r} on context {plan.context!r}?",
+            "Proceed with the unbootstrap purge?",
             default=False,
         )
         if not confirmed:

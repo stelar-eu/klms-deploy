@@ -111,16 +111,13 @@ it falls back to local `spec.stelar.active_product` only as cleanup for failed
 bootstraps that created Secrets before recording cluster state. It does not
 delete Tanka-rendered resources; use `tk delete ENV` for those.
 
-Before deleting anything, unbootstrap reads every existing candidate Secret and
-requires the ownership labels `app.kubernetes.io/managed-by=stelarctl`,
-`app.kubernetes.io/part-of=stelar`, and `stelar.eu/bootstrap-secret=true`. Bootstrap
-adds these labels only to newly created Secrets, including manual TLS Secrets;
-existing Secrets are never automatically adopted. If ownership cannot be verified,
-the command stops without deleting Secrets, the state ConfigMap, or local metadata.
-Deletion uses UID and resourceVersion preconditions so a concurrently changed or
-replaced Secret is preserved. `--yes` skips confirmation, not these safety checks.
-Unlabeled Secrets created by older versions require manual ownership inspection
-and cleanup; they are not deleted automatically.
+Unbootstrap prints a destructive warning and purges every bootstrap Secret name
+selected by that fullspec regardless of ownership labels, plus
+`stelar-lake-state` when present. It does not purge unrelated Secret or ConfigMap
+names from the namespace. Before deleting anything, it reads every existing
+candidate and binds deletion to its UID and resourceVersion so a concurrently
+changed or replaced Secret is preserved. `--yes` skips only the interactive
+confirmation; the warning is still printed.
 
 `lake remove` deletes the local marked environment directory after confirmation.
 It refuses environments with an active product unless `--force` is supplied. Use

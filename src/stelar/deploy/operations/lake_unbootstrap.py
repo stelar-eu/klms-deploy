@@ -21,7 +21,7 @@ from .lake_state_configmap import (
     delete_lake_state_configmap,
     read_lake_state_configmap,
 )
-from .secret_resources import BOOTSTRAP_SECRET_LABELS, expected_bootstrap_secret_names
+from .secret_resources import expected_bootstrap_secret_names
 
 # Expose kube_config for tests and integrations that monkeypatch this module.
 kube_config = kube_context_helpers.kube_config
@@ -98,12 +98,12 @@ def plan_lake_unbootstrap(
 
 
 def unbootstrap_lake(plan: LakeUnbootstrapPlan) -> LakeUnbootstrapResult:
-    """Delete only verified, stelarctl-owned bootstrap Secrets and state."""
+    """Delete planned bootstrap Secrets and state regardless of ownership labels."""
     load_kube_context(plan.context)
     core_api = kube_client.CoreV1Api()
     deleted: list[str] = []
-    # Verify every candidate before deleting anything, including the state marker.
-    # A fullspec records expected names, not proof that bootstrap created them.
+    # Resolve every candidate before deleting anything, including the state marker.
+    # The fullspec selects exact Secret names; labels do not restrict deletion.
     deletions, missing = _prepare_secret_deletions(core_api, plan)
 
     for secret_name, delete_options in deletions.items():
@@ -120,7 +120,7 @@ def unbootstrap_lake(plan: LakeUnbootstrapPlan) -> LakeUnbootstrapResult:
             if getattr(exc, "status", None) == 409:
                 raise CommandError(
                     f"Secret {secret_name!r} in namespace {plan.namespace!r} "
-                    "changed after ownership verification. Refusing to delete "
+                    "changed after deletion preflight. Refusing to delete "
                     "a changed or replaced Secret; inspect it before retrying."
                 ) from exc
             if _is_forbidden(exc):
@@ -156,7 +156,7 @@ def _prepare_secret_deletions(
     core_api: kube_client.CoreV1Api,
     plan: LakeUnbootstrapPlan,
 ) -> tuple[dict[str, kube_client.V1DeleteOptions], list[str]]:
-    """Fail closed on unowned/unreadable Secrets and bind deletion to their identity."""
+    """Resolve existing Secrets and bind deletion to their current identity."""
     deletions: dict[str, kube_client.V1DeleteOptions] = {}
     missing: list[str] = []
     for secret_name in plan.secret_names:
@@ -170,25 +170,15 @@ def _prepare_secret_deletions(
                 raise CommandError(
                     f"Kubernetes user is not authorized to read Secret "
                     f"{secret_name!r} in namespace {plan.namespace!r}. "
-                    "Unbootstrap requires permission to get secrets to verify "
-                    "ownership before deletion. No resources have been deleted."
+                    "Unbootstrap requires permission to get secrets before "
+                    "deletion. No resources have been deleted."
                 ) from exc
             raise CommandError(
-                f"Could not verify ownership of Secret {secret_name!r} in "
+                f"Could not inspect Secret {secret_name!r} in "
                 f"namespace {plan.namespace!r}: {exc}. No resources have been deleted."
             ) from exc
 
         metadata = getattr(secret, "metadata", None)
-        labels = getattr(metadata, "labels", None) or {}
-        if any(labels.get(key) != value for key, value in BOOTSTRAP_SECRET_LABELS.items()):
-            raise CommandError(
-                f"Refusing to delete Secret {secret_name!r} in namespace "
-                f"{plan.namespace!r}: it is not marked as a stelarctl-owned "
-                "bootstrap Secret. No resources have been deleted. Inspect "
-                "its ownership before manually removing it; Secrets from older "
-                "stelarctl versions are not automatically adopted."
-            )
-
         uid = getattr(metadata, "uid", None)
         resource_version = getattr(metadata, "resource_version", None)
         if (

@@ -358,14 +358,13 @@ LAKE_UNBOOTSTRAP_EPILOG = dedent(
     PVCs, Ingresses, or any other Tanka-rendered resource; run tk delete ENV for
     those.
 
-    Safety: all existing Secrets must carry the stelarctl bootstrap ownership
-    labels before any resources are deleted. Unlabeled Secrets, including those
-    from older stelarctl versions, must be inspected and cleaned up manually;
-    they are not automatically adopted. Missing Secrets are reported as already
-    missing. Secret read/delete access is required, and deletion uses UID and
-    resourceVersion preconditions to protect changed or replaced Secrets. The
-    command asks for confirmation unless --yes is supplied; --yes does not bypass
-    ownership checks.
+    Warning: the command purges every bootstrap Secret name selected by the
+    fullspec, regardless of ownership labels, plus ConfigMap stelar-lake-state
+    when present. It does not purge unrelated Secret or ConfigMap names from the
+    namespace. Missing Secrets are reported as already missing. Secret read/delete
+    access is required, and deletion uses UID and resourceVersion preconditions to
+    protect concurrently changed or replaced Secrets. The destructive warning is
+    always printed; --yes skips only the interactive confirmation.
     """
 ).strip()
 

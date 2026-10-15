@@ -390,14 +390,13 @@ def test_unbootstrap_lake_reports_forbidden_delete(tmp_path, monkeypatch):
         {**BOOTSTRAP_SECRET_LABELS, "stelar.eu/bootstrap-secret": "false"},
     ],
 )
-def test_unbootstrap_refuses_unowned_secrets_before_any_deletion(
+def test_unbootstrap_deletes_selected_secrets_regardless_of_labels(
     tmp_path, monkeypatch, has_state, labels,
 ):
     workspace = make_workspace(tmp_path / "workspace")
     fullspec = base_fullspec()
     environment_dir = write_unbootstrap_environment(workspace, fullspec)
     set_bootstrapped_product(environment_dir)
-    before = (environment_dir / "spec.json").read_text(encoding="utf-8")
     existing = {"product-postgres-secret", "product-ckan-auth-secret"}
     calls = set_secret_cluster(
         monkeypatch,
@@ -406,16 +405,18 @@ def test_unbootstrap_refuses_unowned_secrets_before_any_deletion(
         lake_state_fullspec=fullspec if has_state else None,
     )
 
-    with pytest.raises(CommandError, match="not marked as a stelarctl-owned"):
-        unbootstrap_lake(plan_lake_unbootstrap("dev", workspace))
+    result = unbootstrap_lake(plan_lake_unbootstrap("dev", workspace))
 
-    assert calls["deleted"] == []
-    assert calls["existing_secrets"] == existing
-    assert not any(action == "delete" for action, *_ in calls["configmaps"])
-    assert (environment_dir / "spec.json").read_text(encoding="utf-8") == before
+    assert set(result.deleted) == existing
+    assert calls["existing_secrets"] == set()
+    assert any(action == "delete" for action, *_ in calls["configmaps"]) is has_state
+    stelar_spec = json.loads(
+        (environment_dir / "spec.json").read_text(encoding="utf-8")
+    )["spec"]["stelar"]
+    assert "bootstrapped_product" not in stelar_spec
 
 
-def test_refused_bootstrap_does_not_authorize_deleting_preexisting_secret(
+def test_unbootstrap_deletes_selected_preexisting_secret_after_refused_bootstrap(
     tmp_path, monkeypatch,
 ):
     workspace = make_workspace(tmp_path / "workspace")
@@ -430,14 +431,11 @@ def test_refused_bootstrap_does_not_authorize_deleting_preexisting_secret(
 
     with pytest.raises(CommandError, match="partial bootstrap"):
         bootstrap_lake("dev", workspace, preflight="skip")
-    before = (environment_dir / "spec.json").read_text(encoding="utf-8")
-    with pytest.raises(CommandError, match="not marked as a stelarctl-owned"):
-        unbootstrap_lake(plan_lake_unbootstrap("dev", workspace))
+    result = unbootstrap_lake(plan_lake_unbootstrap("dev", workspace))
 
     assert calls["created_secrets"] == []
-    assert calls["deleted"] == []
-    assert calls["existing_secrets"] == {"product-postgres-secret"}
-    assert (environment_dir / "spec.json").read_text(encoding="utf-8") == before
+    assert result.deleted == ("product-postgres-secret",)
+    assert calls["existing_secrets"] == set()
 
 
 def test_failed_bootstrap_can_clean_up_its_owned_secrets_without_configmap(
@@ -486,7 +484,7 @@ def test_unbootstrap_refuses_secret_without_deletion_identity(
     ("failure", "message"),
     [
         ("secret_read_forbidden", "not authorized to read Secret"),
-        ("secret_read_error", "Could not verify ownership of Secret"),
+        ("secret_read_error", "Could not inspect Secret"),
     ],
 )
 def test_unbootstrap_read_failure_does_not_delete_any_resources(
@@ -509,7 +507,7 @@ def test_unbootstrap_read_failure_does_not_delete_any_resources(
 
 
 @pytest.mark.parametrize("failure", ["secret_replaced", "secret_relabeled"])
-def test_unbootstrap_preserves_secret_changed_after_ownership_verification(
+def test_unbootstrap_preserves_secret_changed_after_deletion_preflight(
     tmp_path, monkeypatch, failure,
 ):
     workspace = make_workspace(tmp_path / "workspace")
@@ -523,7 +521,7 @@ def test_unbootstrap_preserves_secret_changed_after_ownership_verification(
         missing=failure,
     )
 
-    with pytest.raises(CommandError, match="changed after ownership verification"):
+    with pytest.raises(CommandError, match="changed after deletion preflight"):
         unbootstrap_lake(plan_lake_unbootstrap("dev", workspace))
 
     assert calls["existing_secrets"] == {"product-postgres-secret"}
@@ -531,7 +529,7 @@ def test_unbootstrap_preserves_secret_changed_after_ownership_verification(
     assert (environment_dir / "spec.json").read_text(encoding="utf-8") == before
 
 
-def test_lake_unbootstrap_yes_does_not_bypass_ownership_checks(tmp_path, monkeypatch):
+def test_lake_unbootstrap_yes_warns_and_deletes_without_labels(tmp_path, monkeypatch):
     workspace = make_workspace(tmp_path / "workspace")
     fullspec = base_fullspec()
     write_unbootstrap_environment(workspace, fullspec)
@@ -545,9 +543,11 @@ def test_lake_unbootstrap_yes_does_not_bypass_ownership_checks(tmp_path, monkeyp
         app, ["lake", "unbootstrap", "dev", "--workspace", str(workspace), "--yes"],
     )
 
-    assert result.exit_code == 2
-    assert "not marked as a stelarctl-owned" in result.output
-    assert calls["deleted"] == []
+    assert result.exit_code == 0, result.output
+    assert "WARNING: destructive cleanup" in result.output
+    assert "regardless of Secret ownership labels" in result.output
+    assert "Secrets selected for purge:" in result.output
+    assert calls["deleted"] == [("test", "product-postgres-secret")]
 
 
 def test_lake_unbootstrap_cli_deletes_with_yes(tmp_path, monkeypatch):
