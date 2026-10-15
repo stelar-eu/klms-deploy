@@ -358,9 +358,14 @@ LAKE_UNBOOTSTRAP_EPILOG = dedent(
     PVCs, Ingresses, or any other Tanka-rendered resource; run tk delete ENV for
     those.
 
-    Safety: missing Secrets are reported as already missing. RBAC delete failures
-    stop the command with the Secret name and namespace. The command asks for
-    confirmation unless --yes is supplied.
+    Safety: all existing Secrets must carry the stelarctl bootstrap ownership
+    labels before any resources are deleted. Unlabeled Secrets, including those
+    from older stelarctl versions, must be inspected and cleaned up manually;
+    they are not automatically adopted. Missing Secrets are reported as already
+    missing. Secret read/delete access is required, and deletion uses UID and
+    resourceVersion preconditions to protect changed or replaced Secrets. The
+    command asks for confirmation unless --yes is supplied; --yes does not bypass
+    ownership checks.
     """
 ).strip()
 

@@ -9,6 +9,12 @@ from dataclasses import dataclass
 from .common import CommandError, JsonObject
 from .manual_tls import manual_tls_secret_names, manual_tls_selected
 
+BOOTSTRAP_SECRET_LABELS = {
+    "app.kubernetes.io/managed-by": "stelarctl",
+    "app.kubernetes.io/part-of": "stelar",
+    "stelar.eu/bootstrap-secret": "true",
+}
+
 PRODUCT_SECRET_FIELDS = (
     (
         "postgres",
@@ -233,6 +239,7 @@ def kubernetes_tls_secret(
         "metadata": {
             "name": secret_name,
             "namespace": namespace,
+            "labels": BOOTSTRAP_SECRET_LABELS.copy(),
         },
         "type": "kubernetes.io/tls",
         "data": {
@@ -254,6 +261,7 @@ def kubernetes_secret(
         "metadata": {
             "name": secret_name,
             "namespace": namespace,
+            "labels": BOOTSTRAP_SECRET_LABELS.copy(),
         },
         "type": "Opaque",
         "data": {key: _b64(value) for key, value in data.items()},

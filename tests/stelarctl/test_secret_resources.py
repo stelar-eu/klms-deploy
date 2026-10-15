@@ -5,6 +5,7 @@ import pytest
 
 from stelar.deploy.operations.common import CommandError
 from stelar.deploy.operations.secret_resources import (
+    BOOTSTRAP_SECRET_LABELS,
     BootstrapSecretValues,
     CKAN_AUTH_SECRET_NAME,
     ckan_auth_secret_data,
@@ -133,7 +134,11 @@ def test_kubernetes_secret_base64_encodes_opaque_data():
         {"password": "secret-value", "key": "abc"},
     )
 
-    assert secret["metadata"] == {"name": "app-secret", "namespace": "stelar"}
+    assert secret["metadata"] == {
+        "name": "app-secret",
+        "namespace": "stelar",
+        "labels": BOOTSTRAP_SECRET_LABELS,
+    }
     assert secret["type"] == "Opaque"
     assert decoded(secret) == {"password": "secret-value", "key": "abc"}
 
@@ -146,12 +151,32 @@ def test_kubernetes_tls_secret_base64_encodes_tls_data():
         "private-key-pem",
     )
 
-    assert secret["metadata"] == {"name": "tls-secret", "namespace": "stelar"}
+    assert secret["metadata"] == {
+        "name": "tls-secret",
+        "namespace": "stelar",
+        "labels": BOOTSTRAP_SECRET_LABELS,
+    }
     assert secret["type"] == "kubernetes.io/tls"
     assert decoded(secret) == {
         "tls.crt": "certificate-pem",
         "tls.key": "private-key-pem",
     }
+
+
+@pytest.mark.parametrize("tls", [False, True])
+def test_bootstrap_secret_ownership_labels_are_not_shared(tls):
+    if tls:
+        secret = kubernetes_tls_secret("tls-secret", "stelar", "cert", "key")
+    else:
+        secret = kubernetes_secret("app-secret", "stelar", {"password": "value"})
+
+    assert secret["metadata"]["labels"] == {
+        "app.kubernetes.io/managed-by": "stelarctl",
+        "app.kubernetes.io/part-of": "stelar",
+        "stelar.eu/bootstrap-secret": "true",
+    }
+    secret["metadata"]["labels"]["stelar.eu/bootstrap-secret"] = "false"
+    assert BOOTSTRAP_SECRET_LABELS["stelar.eu/bootstrap-secret"] == "true"
 
 
 def test_ckan_auth_secret_data_uses_expected_keys_and_values():
