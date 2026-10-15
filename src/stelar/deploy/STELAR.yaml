@@ -340,7 +340,7 @@ root:
               default: 9000
             IMAGE:
               type: string
-              default: "quay.io/minio/minio:RELEASE.2025-04-22T22-12-26Z-cpuv1"
+              default: "stelareu/minio:latest"
             MINIO_ROOT_USER:
               type: string
               minLength: 3

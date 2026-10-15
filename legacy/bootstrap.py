@@ -354,7 +354,7 @@ def generate_jsonnet_content(yaml_data, secrets_list, insecure_minio_override, c
               API_IMAGE: 'petroud/stelar-api:prod',
               CKAN_IMAGE: 'petroud/stelar-tuc:ckan',
               POSTGIS_IMAGE:"petroud/stelar-tuc:postgres",
-              MINIO_IMAGE:"quay.io/minio/minio:RELEASE.2025-04-22T22-12-26Z-cpuv1",
+              MINIO_IMAGE:"stelareu/minio:latest",
               ONTOP_IMAGE: "petroud/stelar-tuc:ontop",
               KEYCLOAK_IMAGE:"petroud/stelar-tuc:keycloak",
               REDIS_IMAGE:"redis:7",

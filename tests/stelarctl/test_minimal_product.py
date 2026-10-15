@@ -80,6 +80,7 @@ def test_build_minimal_product_validates_against_feature_model():
     assert "manual_tls" not in klms["ingress"]
     assert klms["minio"]["API_DOMAIN"] == "https://minio.example.test"
     assert klms["minio"]["CONSOLE_DOMAIN"] == "https://klms.example.test/s3"
+    assert klms["minio"]["IMAGE"] == "stelareu/minio:latest"
 
 
 def test_build_minimal_product_omits_defaulted_secret_names_from_product():
