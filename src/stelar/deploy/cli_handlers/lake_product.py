@@ -35,6 +35,7 @@ def lake_create_command(
     product_or_env: Annotated[
         str,
         typer.Argument(
+            metavar="PRODUCT",
             help="Product JSON/YAML file, or PRODUCT_NAME when --minimal is used",
         ),
     ],
@@ -315,7 +316,7 @@ def lake_switch_command(
     ],
     env: Annotated[
         str,
-        typer.Argument(help="Workspace-relative lake environment path"),
+        typer.Argument(help="Lake environment path relative to --workspace"),
     ],
     workspace: Annotated[
         Path,

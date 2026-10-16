@@ -51,6 +51,16 @@ to the same namespace.
 
 ## Commands
 
+Run `stelarctl` or `stelarctl --help` for the quick-start workflow and command
+groups. Every group and command accepts `-h`/`--help` and includes examples,
+behavior, and safety notes where applicable. For example:
+
+```bash
+stelarctl lake --help
+stelarctl lake bootstrap --help
+stelarctl --version
+```
+
 ```text
 stelarctl workspace init WORKSPACE [--force]
 stelarctl workspace info [WORKSPACE]

@@ -3150,51 +3150,76 @@ def test_root_cli_help_documents_current_workflow():
 
     assert result.exit_code == 0
     output = plain_help(result.stdout)
-    assert "Command reference" in output
-    assert "lake create" in output
-    assert "lake switch" in output
+    assert "Quick start:" in output
+    assert "workspace init" in output
+    assert "lake create --minimal" in output
     assert "lake bootstrap" in output
     assert "lake status" in output
     assert "lake unbootstrap" in output
-    assert "verify" in output
-    assert "lake list" in output
-    assert "lake info" in output
-    assert "lake remove" in output
-    assert "manual-tls-template" in output
-    assert "Typical workflow" in output
-    assert "Main concepts" in output
+    assert "lake verify" in output
+    assert "Inspect and clean up:" in output
+    assert "Concepts:" in output
     assert "fullspec" in output
-    assert "does not run tk apply" in output
+    assert "never runs tk apply" in output
 
 
-def test_root_cli_help_lists_all_subcommands_with_arguments():
+def test_root_cli_help_stays_concise_and_points_to_command_help():
     result = runner.invoke(app, ["--help"])
 
     assert result.exit_code == 0
     output = plain_help(result.stdout)
-    assert "stelarctl workspace init WORKSPACE" in output
-    assert "stelarctl workspace info [WORKSPACE]" in output
-    assert "stelarctl lake add ENV" in output
-    assert "stelarctl lake list" in output
-    assert "stelarctl lake info ENV" in output
-    assert "stelarctl lake remove ENV" in output
-    assert "--yes" in output
-    assert "stelarctl lake create --minimal PRODUCT_NAME ENV" in output
-    assert "stelarctl lake switch PRODUCT_NAME ENV" in output
-    assert "stelarctl lake verify ENV" in output
-    assert "stelarctl lake status ENV" in output
-    assert "--wait" in output
-    assert "stelarctl lake unbootstrap ENV" in output
-    assert "stelarctl lake bootstrap ENV" in output
-    assert "--context CONTEXT" in output
-    assert "--namespace NAMESPACE" in output
-    assert "--skip-preflight" in output
-    assert "--manual-secrets" in output
-    assert "--custom-secret-names" in output
-    assert "--infer-storage-from-cluster" in output
-    assert "stelarctl lake manual-tls-template [OUTPUT]" in output
-    assert "stelarctl lake create PRODUCT ENV" in output
-    assert "--workspace WORKSPACE" in output
+    assert "Commands:" in output
+    assert "workspace" in output
+    assert "lake" in output
+    assert "--version" in output
+    assert 'stelarctl COMMAND --help' in output
+    assert "--skip-preflight" not in output
+    assert "--manual-secrets" not in output
+
+
+def test_root_cli_version_option():
+    result = runner.invoke(app, ["--version"])
+
+    assert result.exit_code == 0
+    assert re.fullmatch(r"stelarctl \S+\n", result.stdout)
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        ["workspace", "init"],
+        ["workspace", "info"],
+        ["lake", "add"],
+        ["lake", "list"],
+        ["lake", "info"],
+        ["lake", "create"],
+        ["lake", "switch"],
+        ["lake", "manual-tls-template"],
+        ["lake", "verify"],
+        ["lake", "bootstrap"],
+        ["lake", "status"],
+        ["lake", "unbootstrap"],
+        ["lake", "remove"],
+    ],
+)
+def test_command_help_includes_examples(command):
+    result = runner.invoke(app, [*command, "--help"])
+
+    assert result.exit_code == 0
+    output = plain_help(result.stdout)
+    assert "Examples:" in output
+    assert f"stelarctl {' '.join(command)}" in output
+
+
+def test_lake_help_presents_deploy_and_cleanup_lifecycles():
+    result = runner.invoke(app, ["lake", "--help"])
+
+    assert result.exit_code == 0
+    output = plain_help(result.stdout)
+    assert "Deployment lifecycle:" in output
+    assert "Cleanup lifecycle:" in output
+    assert output.index("  bootstrap ") < output.index("  status ")
+    assert output.index("  status ") < output.index("  unbootstrap ")
 
 
 def test_product_group_is_not_registered():
@@ -3225,7 +3250,8 @@ def test_root_cli_short_help_alias_is_available():
     output = plain_help(result.stdout)
     assert "Usage:" in output
     assert "\n  lake       " in output
-    assert "\n  product" not in output
+    commands = output.split("Commands:", 1)[1].split("Quick start:", 1)[0]
+    assert "\n  product" not in commands
 
 
 def test_root_cli_without_args_shows_help():
@@ -3235,7 +3261,8 @@ def test_root_cli_without_args_shows_help():
     output = plain_help(result.stdout)
     assert "Usage:" in output
     assert "\n  lake       " in output
-    assert "\n  product" not in output
+    commands = output.split("Commands:", 1)[1].split("Quick start:", 1)[0]
+    assert "\n  product" not in commands
 
 
 def test_lake_create_help_documents_minimal_tls_modes():

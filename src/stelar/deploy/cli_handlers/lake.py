@@ -9,6 +9,8 @@ import typer
 
 from ..cli_help import (
     CONTEXT_SETTINGS,
+    LinePreservingEpilogCommand,
+    LinePreservingEpilogGroup,
     LAKE_SWITCH_EPILOG,
     LAKE_SWITCH_HELP,
     LAKE_BOOTSTRAP_EPILOG,
@@ -63,6 +65,7 @@ from ..operations import (
 def register_lake_commands(app: typer.Typer) -> None:
     """Register `lake` and its subcommands on the root CLI app."""
     lake_app = typer.Typer(
+        cls=LinePreservingEpilogGroup,
         help=LAKE_HELP,
         epilog=LAKE_EPILOG,
         invoke_without_command=True,
@@ -71,77 +74,88 @@ def register_lake_commands(app: typer.Typer) -> None:
     )
     lake_app.command(
         "add",
+        cls=LinePreservingEpilogCommand,
         help=LAKE_ADD_HELP,
         epilog=LAKE_ADD_EPILOG,
         short_help="Add an environment directory",
     )(lake_add_command)
     lake_app.command(
-        "create",
-        help=LAKE_CREATE_HELP,
-        epilog=LAKE_CREATE_EPILOG,
-        short_help="Create product files",
-    )(lake_create_command)
-    lake_app.command(
-        "switch",
-        help=LAKE_SWITCH_HELP,
-        epilog=LAKE_SWITCH_EPILOG,
-        short_help="Switch active product",
-    )(lake_switch_command)
-    lake_app.command(
         "list",
+        cls=LinePreservingEpilogCommand,
         help=LAKE_LIST_HELP,
         epilog=LAKE_LIST_EPILOG,
         short_help="List lake environments",
     )(lake_list_command)
     lake_app.command(
         "info",
+        cls=LinePreservingEpilogCommand,
         help=LAKE_INFO_HELP,
         epilog=LAKE_INFO_EPILOG,
-        short_help="Show one lake environment",
+        short_help="Show environment details",
     )(lake_info_command)
     lake_app.command(
-        "remove",
-        help=LAKE_REMOVE_HELP,
-        epilog=LAKE_REMOVE_EPILOG,
-        short_help="Remove a lake environment",
-    )(lake_remove_command)
+        "create",
+        cls=LinePreservingEpilogCommand,
+        help=LAKE_CREATE_HELP,
+        epilog=LAKE_CREATE_EPILOG,
+        short_help="Create product artifacts",
+    )(lake_create_command)
+    lake_app.command(
+        "switch",
+        cls=LinePreservingEpilogCommand,
+        help=LAKE_SWITCH_HELP,
+        epilog=LAKE_SWITCH_EPILOG,
+        short_help="Select the active product",
+    )(lake_switch_command)
     lake_app.command(
         "manual-tls-template",
+        cls=LinePreservingEpilogCommand,
         help=LAKE_MANUAL_TLS_TEMPLATE_HELP,
         epilog=LAKE_MANUAL_TLS_TEMPLATE_EPILOG,
-        short_help="Write manual TLS template",
+        short_help="Create a manual TLS template",
     )(lake_manual_tls_template_command)
     lake_app.command(
         "verify",
+        cls=LinePreservingEpilogCommand,
         help=LAKE_VERIFY_HELP,
         epilog=LAKE_VERIFY_EPILOG,
-        short_help="Verify cluster readiness",
+        short_help="Validate deployment prerequisites",
     )(lake_verify_command)
     lake_app.command(
+        "bootstrap",
+        cls=LinePreservingEpilogCommand,
+        help=LAKE_BOOTSTRAP_HELP,
+        epilog=LAKE_BOOTSTRAP_EPILOG,
+        short_help="Create bootstrap resources",
+    )(lake_bootstrap_command)
+    lake_app.command(
         "status",
+        cls=LinePreservingEpilogCommand,
         help=LAKE_STATUS_HELP,
         epilog=LAKE_STATUS_EPILOG,
-        short_help="Inspect deployment status",
+        short_help="Inspect bootstrap and workloads",
     )(lake_status_command)
     lake_app.command(
         "unbootstrap",
+        cls=LinePreservingEpilogCommand,
         help=LAKE_UNBOOTSTRAP_HELP,
         epilog=LAKE_UNBOOTSTRAP_EPILOG,
-        short_help="Undo lake bootstrap",
+        short_help="Remove bootstrap resources",
     )(lake_unbootstrap_command)
     lake_app.command(
-        "bootstrap",
-        help=LAKE_BOOTSTRAP_HELP,
-        epilog=LAKE_BOOTSTRAP_EPILOG,
-        short_help="Prepare cluster metadata and secrets",
-    )(lake_bootstrap_command)
+        "remove",
+        cls=LinePreservingEpilogCommand,
+        help=LAKE_REMOVE_HELP,
+        epilog=LAKE_REMOVE_EPILOG,
+        short_help="Delete a local environment",
+    )(lake_remove_command)
     app.add_typer(lake_app, name="lake")
 
 
 def lake_add_command(
     env: Annotated[
         str,
-        typer.Argument(help="Workspace-relative lake environment path"),
+        typer.Argument(help="Lake environment path relative to --workspace"),
     ],
     workspace: Annotated[
         Path,
@@ -226,7 +240,7 @@ def lake_list_command(
 def lake_info_command(
     env: Annotated[
         str,
-        typer.Argument(help="Workspace-relative lake environment path"),
+        typer.Argument(help="Lake environment path relative to --workspace"),
     ],
     workspace: Annotated[
         Path,
@@ -251,7 +265,7 @@ def lake_info_command(
 def lake_remove_command(
     env: Annotated[
         str,
-        typer.Argument(help="Workspace-relative lake environment path"),
+        typer.Argument(help="Lake environment path relative to --workspace"),
     ],
     workspace: Annotated[
         Path,
@@ -266,7 +280,7 @@ def lake_remove_command(
     ] = Path("."),
     yes: Annotated[
         bool,
-        typer.Option("--yes", "-y", help="Delete without an interactive prompt"),
+        typer.Option("--yes", "-y", help="Do not prompt for confirmation"),
     ] = False,
     force: Annotated[
         bool,
@@ -341,7 +355,7 @@ def lake_manual_tls_template_command(
 def lake_verify_command(
     env: Annotated[
         str,
-        typer.Argument(help="Workspace environment name"),
+        typer.Argument(help="Lake environment path relative to --workspace"),
     ],
     workspace: Annotated[
         Path,
@@ -389,7 +403,7 @@ def lake_verify_command(
 def lake_status_command(
     env: Annotated[
         str,
-        typer.Argument(help="Workspace environment name"),
+        typer.Argument(help="Lake environment path relative to --workspace"),
     ],
     workspace: Annotated[
         Path,
@@ -511,7 +525,7 @@ def _echo_lake_status(status) -> None:
 def lake_unbootstrap_command(
     env: Annotated[
         str,
-        typer.Argument(help="Workspace environment name"),
+        typer.Argument(help="Lake environment path relative to --workspace"),
     ],
     workspace: Annotated[
         Path,
@@ -541,7 +555,7 @@ def lake_unbootstrap_command(
     ] = None,
     yes: Annotated[
         bool,
-        typer.Option("--yes", "-y", help="Delete without an interactive prompt"),
+        typer.Option("--yes", "-y", help="Do not prompt for confirmation"),
     ] = False,
 ) -> None:
     try:
@@ -603,7 +617,7 @@ def _echo_lake_unbootstrap_result(result) -> None:
 def lake_bootstrap_command(
     env: Annotated[
         str,
-        typer.Argument(help="Workspace environment name"),
+        typer.Argument(help="Lake environment path relative to --workspace"),
     ],
     workspace: Annotated[
         Path,
@@ -620,7 +634,7 @@ def lake_bootstrap_command(
         bool,
         typer.Option(
             "--skip-preflight",
-            help="Skip read-only prerequisite checks before applying secrets",
+            help="Skip read-only cluster checks before creating Secrets",
         ),
     ] = False,
     manual_secrets: Annotated[

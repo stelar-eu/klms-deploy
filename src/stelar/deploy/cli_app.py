@@ -9,7 +9,7 @@ from .cli_help import (
     ROOT_EPILOG,
     ROOT_HELP,
     LinePreservingEpilogGroup,
-    show_help_on_no_args,
+    root_callback,
 )
 from .cli_handlers import register_commands
 
@@ -23,7 +23,7 @@ def build_app() -> typer.Typer:
         help=ROOT_HELP,
         epilog=ROOT_EPILOG,
         invoke_without_command=True,
-        callback=show_help_on_no_args,
+        callback=root_callback,
         context_settings=CONTEXT_SETTINGS,
     )
     register_commands(app)

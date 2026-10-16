@@ -9,6 +9,8 @@ import typer
 
 from ..cli_help import (
     CONTEXT_SETTINGS,
+    LinePreservingEpilogCommand,
+    LinePreservingEpilogGroup,
     WORKSPACE_EPILOG,
     WORKSPACE_HELP,
     WORKSPACE_INFO_EPILOG,
@@ -26,6 +28,7 @@ from .progress import TyperLakeWorkspaceProgress
 def register_workspace_commands(app: typer.Typer) -> None:
     """Register workspace lifecycle commands on the root CLI app."""
     workspace_app = typer.Typer(
+        cls=LinePreservingEpilogGroup,
         help=WORKSPACE_HELP,
         epilog=WORKSPACE_EPILOG,
         invoke_without_command=True,
@@ -34,12 +37,14 @@ def register_workspace_commands(app: typer.Typer) -> None:
     )
     workspace_app.command(
         "init",
+        cls=LinePreservingEpilogCommand,
         help=WORKSPACE_INIT_HELP,
         epilog=WORKSPACE_INIT_EPILOG,
         short_help="Initialize a workspace root",
     )(workspace_init_command)
     workspace_app.command(
         "info",
+        cls=LinePreservingEpilogCommand,
         help=WORKSPACE_INFO_HELP,
         epilog=WORKSPACE_INFO_EPILOG,
         short_help="Show workspace state",

@@ -1,14 +1,9 @@
-"""Centralized help text for the stelarctl CLI.
-
-The CLI uses Typer/Rich, so keeping command descriptions here avoids scattering
-operator-facing wording across command handlers. Keep this file focused on what
-an operator needs to know at the terminal: workflow order, generated files, and
-safety boundaries.
-"""
+"""Centralized terminal help for the stelarctl CLI."""
 
 from __future__ import annotations
 
 import inspect
+from importlib.metadata import PackageNotFoundError, version as package_version
 from textwrap import dedent
 
 import typer
@@ -16,8 +11,18 @@ import typer
 CONTEXT_SETTINGS = {"help_option_names": ["-h", "--help"]}
 
 
+class LinePreservingEpilogCommand(typer.core.TyperCommand):
+    """Render command epilogs as deliberately formatted terminal text."""
+
+    def format_epilog(self, ctx, formatter) -> None:  # noqa: ANN001
+        if not self.epilog:
+            return
+        formatter.write_paragraph()
+        formatter.write(inspect.cleandoc(self.epilog) + "\n")
+
+
 class LinePreservingEpilogGroup(typer.core.TyperGroup):
-    """Typer group that renders epilog text without collapsing newlines."""
+    """Render group epilogs as deliberately formatted terminal text."""
 
     def format_epilog(self, ctx, formatter) -> None:  # noqa: ANN001
         if not self.epilog:
@@ -32,381 +37,418 @@ def show_help_on_no_args(ctx: typer.Context) -> None:
         typer.echo(ctx.get_help())
         raise typer.Exit()
 
+
+def root_callback(
+    ctx: typer.Context,
+    version: bool = typer.Option(
+        False,
+        "--version",
+        "-V",
+        is_eager=True,
+        help="Show the installed stelarctl version and exit",
+    ),
+) -> None:
+    """Handle root options and show help when no command is supplied."""
+    if version:
+        try:
+            installed_version = package_version("stelar-deploy")
+        except PackageNotFoundError:
+            installed_version = "unknown"
+        typer.echo(f"stelarctl {installed_version}")
+        raise typer.Exit()
+    show_help_on_no_args(ctx)
+
+
 ROOT_HELP = (
-    "Prepare a STELAR KLMS lake deployment workspace before rendering or "
-    "applying Kubernetes manifests with Tanka. stelarctl creates the workspace "
-    "layout, resolves product specs into fullspecs, updates Tanka environment "
-    "metadata, checks cluster prerequisites, and creates deployment secrets."
+    "Prepare and operate STELAR KLMS lake deployments on Kubernetes. "
+    "stelarctl manages local deployment configuration, validates cluster "
+    "prerequisites, and creates bootstrap resources used by Tanka manifests."
 )
 ROOT_EPILOG = dedent(
     """
-    Command reference:
-      stelarctl workspace init WORKSPACE
-          options: --force
-      stelarctl workspace info [WORKSPACE]
-      stelarctl lake add ENV
-          options: --workspace WORKSPACE, --context CONTEXT, --namespace NAMESPACE,
-                   --adopt-existing-main
-      stelarctl lake list
-          options: --workspace WORKSPACE
-      stelarctl lake info ENV
-          options: --workspace WORKSPACE
-      stelarctl lake remove ENV
-          options: --workspace WORKSPACE, --yes, --force
-      stelarctl lake create PRODUCT ENV
-          options: --workspace WORKSPACE
-      stelarctl lake create --minimal PRODUCT_NAME ENV
-          options: --workspace WORKSPACE, --context CONTEXT, --namespace NAMESPACE,
-                   --custom-secret-names, --infer-storage-from-cluster
-      stelarctl lake switch PRODUCT_NAME ENV
-          options: --workspace WORKSPACE
-      stelarctl lake manual-tls-template [OUTPUT]
-          options: --force
-      stelarctl lake verify ENV
-          options: --workspace WORKSPACE, --context CONTEXT, --namespace NAMESPACE
-      stelarctl lake status ENV
-          options: --workspace WORKSPACE, --context CONTEXT, --namespace NAMESPACE,
-                   --wait, --job-timeout SECONDS, --poll-interval SECONDS
-      stelarctl lake unbootstrap ENV
-          options: --workspace WORKSPACE, --context CONTEXT, --namespace NAMESPACE, --yes
-      stelarctl lake bootstrap ENV
-          options: --workspace WORKSPACE, --skip-preflight, --manual-secrets
+    Quick start:
+      stelarctl workspace init ./klms-deploy
+      cd ./klms-deploy
+      jb install
+      stelarctl lake add dev --context CONTEXT --namespace stelar-dev
+      stelarctl lake create --minimal minimal dev
+      stelarctl lake verify dev
+      stelarctl lake bootstrap dev
+      tk apply dev
 
-    Typical workflow: run `workspace init`, then `jb install`, then
-    `lake add`, then `lake create --minimal PRODUCT_NAME ENV` or `lake create PRODUCT ENV`.
-    The first created product is selected automatically; run
-    `lake switch PRODUCT_NAME ENV` only when switching products or after
-    regenerating the active product. If manual TLS is selected, create
-    `ENV/manual_tls.yaml` with `lake manual-tls-template`. Optionally run
-    `lake verify`, then `lake bootstrap`, and finally `tk apply ENV`. Cleanup
-    is explicit too: run `tk delete ENV` for rendered manifests, then
-    `lake unbootstrap ENV` if bootstrap Secrets
-    should also be removed.
+    Inspect and clean up:
+      stelarctl lake status dev --wait --job-timeout 600 --poll-interval 5
+      tk delete dev
+      stelarctl lake unbootstrap dev
 
-    Main concepts: a workspace is the root with jsonnetfile.json, vendor/, and
-    lake environments. An environment is one Tanka directory marked by spec.json
-    at the path selected with `lake add`; a product is the user-selected
-    feature/configuration input; a fullspec is the generated, fully defaulted
-    config. The active fullspec in spec.json is consumed by Jsonnet; cluster status uses the stelar-lake-state ConfigMap written during bootstrap.
+    Concepts:
+      workspace    Root containing jsonnetfile.json, vendor/, and environments.
+      environment  Tanka directory managed by stelarctl, such as dev or prod.
+      product      User-selected feature and configuration input.
+      fullspec     Generated product configuration with all defaults resolved.
 
-    Safety boundary: stelarctl scaffolds files and creates missing Kubernetes
-    Secrets. It does not run tk apply for you. Read-only preflight checks can be
-    skipped with --skip-preflight when RBAC prevents inspection. Cleanup is
-    split deliberately: use tk delete ENV for rendered manifests and
-    lake unbootstrap ENV for bootstrap Secrets created outside Tanka.
-    """
-).strip()
+    Deployment boundary:
+      stelarctl prepares files and bootstrap resources. It never runs tk apply
+      or tk delete. Applying and deleting rendered workloads remains explicit.
 
-LAKE_MANUAL_TLS_TEMPLATE_HELP = (
-    "Write the manual_tls.yaml input template used by lake bootstrap when a "
-    "product selects ingress.tls manual_tls. The file maps each public endpoint "
-    "to a directory containing tls.crt and tls.key."
-)
-LAKE_MANUAL_TLS_TEMPLATE_EPILOG = dedent(
-    """
-    Place the edited file at ENV/manual_tls.yaml before running
-    lake bootstrap. The YAML contains certificate directories only; Kubernetes
-    Secret names come from spec.stelar.active_product ingress.manual_tls.
-
-    Expected endpoint keys are primary, keycloak, minio_api, and registry. Each
-    referenced directory must contain a matching PEM certificate/key pair named
-    tls.crt and tls.key.
-    """
-).strip()
-
-LAKE_CREATE_HELP = (
-    "Create product files inside a lake environment. Use PRODUCT ENV to resolve "
-    "an existing product, or --minimal PRODUCT_NAME ENV to create a prompted minimal product."
-)
-LAKE_CREATE_EPILOG = dedent(
-    """
-    Modes: PRODUCT ENV validates an existing product JSON/YAML file.
-    --minimal PRODUCT_NAME ENV prompts for a core-only lake product and writes
-    it directly into ENV. PRODUCT_NAME may be given as name or name.json.
-
-    Outputs: ENV/<productName>.json keeps the validated product input.
-    ENV/<productName>_fullspec.json contains all feature-model defaults. Use
-    --print-fullspec to also print the generated fullspec JSON to stdout.
-    lake create selects the generated product only when the environment has no
-    active product yet. Later creations do not change ENV/spec.json; use
-    lake switch PRODUCT_NAME ENV to switch the deployable product.
-
-    Minimal mode does not write password values into product files. Secret names
-    use feature-model defaults unless --custom-secret-names is provided. Actual
-    Secret values are generated later by lake bootstrap. In minimal mode,
-    --namespace and --context write deployment target fields to ENV/spec.json;
-    --context is also used by --infer-storage-from-cluster.
-
-    Minimal mode supports only http/no_tls and https/cert_manager. It does not
-    generate manual_tls products; use an existing product plus lake
-    manual-tls-template when manually supplied certificates are needed.
-
-    Validation highlights: http requires no_tls and minio.INSECURE_MC_CLIENT=true;
-    https requires cert_manager or manual_tls; manual_tls requires
-    PRIMARY_TLS_SECRET_NAME, KEYCLOAK_TLS_SECRET_NAME, MINIO_API_TLS_SECRET_NAME,
-    and REGISTRY_TLS_SECRET_NAME.
-    """
-).strip()
-
-LAKE_SWITCH_HELP = (
-    "Set one generated product as the active deployable product for a lake "
-    "environment."
-)
-LAKE_SWITCH_EPILOG = dedent(
-    """
-    PRODUCT_NAME may be given as name or name.json. The command reads
-    ENV/<productName>.json and ENV/<productName>_fullspec.json, validates the
-    fullspec, and writes it to ENV/spec.json at spec.stelar.active_product.
-    The selected name is recorded at spec.stelar.current_product.
-
-    Switching does not run preflight checks, create Kubernetes Secrets, or run
-    tk apply. It only changes the local fullspec that main.jsonnet renders. If
-    the target namespace already contains stelar-lake-state for a different
-    product, the command warns; unbootstrap and rerun lake bootstrap before
-    applying the switched product to that same namespace.
+    Run "stelarctl COMMAND --help" for command-specific options and examples.
     """
 ).strip()
 
 
 WORKSPACE_HELP = (
-    "Create, inspect, and maintain STELAR deployment workspace roots. A "
-    "workspace contains jsonnetfile.json, vendor/ after jb install, and "
-    "workspace-relative lake environment directories."
+    "Manage STELAR deployment workspaces. A workspace contains the Jsonnet "
+    "dependency manifest, local overrides, vendored libraries, and lake "
+    "environment directories."
 )
 WORKSPACE_EPILOG = dedent(
     """
-    Use workspace init before running jb install. Use workspace info when you
-    need to check whether dependencies, environments, and generated product files
-    are present.
+    Typical workflow:
+      stelarctl workspace init ./klms-deploy
+      cd ./klms-deploy
+      jb install
+      stelarctl workspace info
+
+    Run "stelarctl workspace COMMAND --help" for command-specific details.
     """
 ).strip()
 
 WORKSPACE_INIT_HELP = (
-    "Create or update a deployment workspace root. The command creates "
-    "the workspace directory, ensures local lib/ exists, and writes or "
-    "merges jsonnetfile.json."
+    "Initialize a workspace directory and its Jsonnet dependency manifest. "
+    "Existing compatible manifests are updated without discarding unrelated "
+    "dependencies."
 )
 WORKSPACE_INIT_EPILOG = dedent(
     """
-    After this command, run jb install from the workspace root. Jsonnet Bundler
-    downloads the vendored STELAR deployment library and its Jsonnet dependencies
-    into vendor/.
+    Examples:
+      stelarctl workspace init ./klms-deploy
+      stelarctl workspace init . --force
 
-    Existing jsonnetfile.json files are merged with the required dependency when
-    possible. Use --force only when you intentionally want to rewrite it from the
-    packaged template.
+    Creates or updates:
+      WORKSPACE/jsonnetfile.json  Required Jsonnet dependencies.
+      WORKSPACE/lib/              Local Jsonnet overrides.
+
+    Existing jsonnetfile.json files are merged by default. --force rewrites the
+    file from the packaged template and should be used only intentionally.
+
+    Next step:
+      cd WORKSPACE && jb install
     """
 ).strip()
 
 WORKSPACE_INFO_HELP = (
-    "Print read-only workspace state: jsonnetfile.json, lib/, vendor/, "
-    "lake environments, and generated files inside each environment."
+    "Inspect local workspace state without running Jsonnet, Tanka, or kubectl."
 )
 WORKSPACE_INFO_EPILOG = dedent(
     """
-    WORKSPACE defaults to the current directory. The command does not run jb,
-    Tanka, or kubectl; it only inspects local files.
+    Examples:
+      stelarctl workspace info
+      stelarctl workspace info ./klms-deploy
+
+    Reports:
+      - workspace initialization and dependency files
+      - vendor/ availability
+      - managed lake environments
+      - active and generated products per environment
+
+    WORKSPACE defaults to the current directory. This command is read-only.
     """
 ).strip()
 
+
 LAKE_HELP = (
-    "Manage lake environments inside an existing workspace. Use this group to "
-    "add, list, inspect, remove, and prepare environments for Kubernetes."
+    "Manage lake environments, product configuration, cluster validation, "
+    "bootstrap resources, and deployment status."
 )
 LAKE_EPILOG = dedent(
     """
-    Required order: workspace init, then jb install from the workspace root,
-    then lake add, then lake create. The first created product is selected
-    automatically; use lake switch only to switch products or refresh a
-    regenerated active product. Use lake list and lake info to inspect local environments. Use lake status
-    to inspect the target cluster. The final Kubernetes apply is explicit: run
-    tk apply ENV after lake bootstrap succeeds. Cleanup is also explicit: run
-    tk delete ENV for rendered resources and lake unbootstrap ENV for
-    bootstrap Secrets created outside Tanka.
+    Deployment lifecycle:
+      stelarctl lake add ENV
+      stelarctl lake create --minimal PRODUCT_NAME ENV
+      stelarctl lake verify ENV
+      stelarctl lake bootstrap ENV
+      tk apply ENV
+      stelarctl lake status ENV
+
+    Cleanup lifecycle:
+      tk delete ENV
+      stelarctl lake unbootstrap ENV
+      stelarctl lake remove ENV
+
+    The first product created in an environment becomes active automatically.
+    Use lake switch when selecting another product or refreshing a regenerated
+    active product.
+
+    Run "stelarctl lake COMMAND --help" for command-specific details.
     """
 ).strip()
 
 LAKE_ADD_HELP = (
-    "Create one Tanka environment at ENV relative to the workspace. The "
-    "spec.json marker identifies it as a stelarctl lake environment. The "
-    "environment later receives "
-    "named product artifacts, active product state in spec.json, "
-    "and optional manual_tls.yaml."
+    "Create a managed Tanka environment inside a workspace and optionally "
+    "record its kubectl context and Kubernetes namespace."
 )
 LAKE_ADD_EPILOG = dedent(
     """
-    This command expects jb install to have populated vendor/ because the Tanka
-    main_template.jsonnet is copied from the vendored STELAR deployment library
-    as the environment main.jsonnet entrypoint.
-    Pass --context and/or --namespace to write the initial Kubernetes target into
-    spec.json before the first successful bootstrap. Each flag is optional; omitted
-    target fields can still be inferred later by lake bootstrap before the
-    cluster-side stelar-lake-state ConfigMap is written.
+    Examples:
+      stelarctl lake add dev
+      stelarctl lake add prod --context okeanos --namespace stelar-prod
+      stelarctl lake add dev --adopt-existing-main
 
-    Existing marked environments are preserved for idempotent pre-bootstrap reruns. If
-    main.jsonnet already exists but spec.json is missing or unmarked, the command
-    stops to avoid silently taking over an arbitrary Tanka entrypoint.
-    --adopt-existing-main means: keep the existing main.jsonnet only when
-    it matches the managed stelarctl main_template.jsonnet, create or mark
-    spec.json with the stelarctl lake marker, and treat the directory as managed
-    by stelarctl from then on. Custom Tanka entrypoints are rejected.
+    Creates:
+      ENV/main.jsonnet  Managed Tanka entrypoint copied from vendor/.
+      ENV/spec.json     Environment marker, target, and active product state.
+
+    Requirements:
+      Run jb install first so vendor/lib/environment_templates is available.
+
+    Target behavior:
+      --context and --namespace are optional. If omitted, lake bootstrap can
+      infer and persist missing values from kubeconfig.
+
+    Safety:
+      Existing managed environments are preserved. --adopt-existing-main only
+      accepts an entrypoint identical to the stelarctl template; custom Tanka
+      entrypoints are never silently replaced.
     """
 ).strip()
 
-LAKE_LIST_HELP = (
-    "List stelarctl-marked lake environments in a workspace. The command scans "
-    "spec.json markers and ignores ordinary unmarked Tanka directories."
-)
+LAKE_LIST_HELP = "List all stelarctl-managed lake environments in a workspace."
 LAKE_LIST_EPILOG = dedent(
     """
-    Use this to see which workspace-relative paths stelarctl will accept for
-    lake create, lake switch, lake info, lake remove, lake verify, lake status,
-    lake unbootstrap, and lake bootstrap.
+    Examples:
+      stelarctl lake list
+      stelarctl lake list --workspace ./klms-deploy
+
+    The command scans spec.json markers and ignores ordinary, unmanaged Tanka
+    directories. It is read-only.
     """
 ).strip()
 
 LAKE_INFO_HELP = (
-    "Show file-level state for one stelarctl-marked lake environment."
+    "Show local files, active product state, and generated products for one "
+    "managed lake environment."
 )
 LAKE_INFO_EPILOG = dedent(
     """
-    The environment must already contain main.jsonnet and a marked spec.json.
-    The command reports whether an active product is set and which generated
-    named products are available.
+    Examples:
+      stelarctl lake info dev
+      stelarctl lake info lakes/prod --workspace ./klms-deploy
+
+    The environment must contain main.jsonnet and a stelarctl-marked spec.json.
+    This command inspects local files only; use lake status for cluster state.
     """
 ).strip()
 
-LAKE_REMOVE_HELP = (
-    "Delete one stelarctl-marked lake environment directory from the workspace."
+LAKE_CREATE_HELP = (
+    "Generate validated product and fullspec files in a lake environment. Use "
+    "an existing JSON/YAML product or create an interactive minimal product."
 )
-LAKE_REMOVE_EPILOG = dedent(
+LAKE_CREATE_EPILOG = dedent(
     """
-    Removal is intentionally limited to marked lake environments so arbitrary
-    workspace directories are not deleted by typo. The command asks for
-    confirmation unless --yes is supplied. It refuses to remove environments
-    that still contain an active product unless --force is supplied. Use --force
-    only after `tk delete ENV` and `stelarctl lake unbootstrap ENV`, or when
-    you intentionally want to discard local metadata.
+    Examples:
+      stelarctl lake create ./product.yaml dev
+      stelarctl lake create --minimal minimal dev
+      stelarctl lake create --minimal minimal dev --infer-storage-from-cluster
+      stelarctl lake create --minimal minimal dev --context okeanos
+      stelarctl lake create ./product.yaml dev --print-fullspec
+
+    Modes:
+      PRODUCT ENV
+          Validate an existing JSON/YAML product and resolve feature defaults.
+      --minimal PRODUCT_NAME ENV
+          Prompt for a core-only product and write it directly into ENV.
+
+    Outputs:
+      ENV/<product>.json           Validated product input.
+      ENV/<product>_fullspec.json  Fully resolved deployment configuration.
+
+    Product selection:
+      The first created product becomes active. Later products do not replace
+      spec.stelar.active_product; use lake switch PRODUCT_NAME ENV.
+
+    Secrets and TLS:
+      Minimal products contain Secret names, never password values. lake
+      bootstrap creates the values later. Minimal mode supports http/no_tls and
+      https/cert_manager; it does not generate manual_tls products. HTTP requires
+      minio.INSECURE_MC_CLIENT=true. Existing manual_tls products must define
+      PRIMARY_TLS_SECRET_NAME, KEYCLOAK_TLS_SECRET_NAME,
+      MINIO_API_TLS_SECRET_NAME, and REGISTRY_TLS_SECRET_NAME.
     """
 ).strip()
 
+LAKE_SWITCH_HELP = "Select a generated product as the environment's active product."
+LAKE_SWITCH_EPILOG = dedent(
+    """
+    Examples:
+      stelarctl lake switch minimal dev
+      stelarctl lake switch production.json prod --workspace ./klms-deploy
+
+    Behavior:
+      Reads ENV/<product>.json and ENV/<product>_fullspec.json, validates the
+      fullspec, and updates spec.stelar.current_product and
+      spec.stelar.active_product in ENV/spec.json.
+
+    Safety:
+      Switching changes local render input only. It does not run preflight,
+      create Secrets, or run tk apply. If the namespace is already bootstrapped
+      for another product, unbootstrap it before applying the switched product.
+    """
+).strip()
+
+LAKE_MANUAL_TLS_TEMPLATE_HELP = (
+    "Write a manual_tls.yaml template that maps public endpoints to local "
+    "certificate directories."
+)
+LAKE_MANUAL_TLS_TEMPLATE_EPILOG = dedent(
+    """
+    Examples:
+      stelarctl lake manual-tls-template dev/manual_tls.yaml
+      stelarctl lake manual-tls-template dev/manual_tls.yaml --force
+
+    Required location:
+      Place the completed file at ENV/manual_tls.yaml before lake bootstrap.
+
+    Required endpoint keys:
+      primary, keycloak, minio_api, registry
+
+    Each value must reference a directory containing tls.crt and tls.key. The
+    Kubernetes Secret names are read from
+    spec.stelar.active_product.ingress.manual_tls.
+    """
+).strip()
 
 LAKE_VERIFY_HELP = (
-    "Verify that a lake environment is ready for bootstrap/apply against a "
-    "Kubernetes cluster. The command requires spec.stelar.active_product plus an "
-    "explicit or spec.json context and namespace, and it never writes spec.json "
-    "or creates Secrets."
+    "Run read-only product and Kubernetes prerequisite checks before bootstrap "
+    "or apply. The command never writes spec.json or creates Secrets."
 )
 LAKE_VERIFY_EPILOG = dedent(
     """
-    Required inputs: the environment must be a stelarctl-marked lake environment,
-    ENV/spec.json must define spec.stelar.active_product, and a Kubernetes context
-    and namespace must be available either in ENV/spec.json or through
-    --context/--namespace.
+    Examples:
+      stelarctl lake verify dev
+      stelarctl lake verify dev --context okeanos --namespace stelar-dev
 
-    Missing target fields are not inferred and not written. If context or
-    namespace is missing from spec.json, rerun this command with --context
-    and/or --namespace, or let lake bootstrap infer and persist them.
+    Required state:
+      - a managed environment with spec.stelar.active_product
+      - a context and namespace in spec.json or supplied as command options
 
-    Checks performed: fullspec scheme/TLS/MinIO consistency, storage class
-    prerequisites, nginx ingress prerequisites, cert-manager/ClusterIssuer
-    prerequisites when cert_manager TLS is selected, and manual TLS input
-    validation when manual_tls is selected. No Kubernetes Secrets are created.
-    """
-).strip()
+    Checks:
+      - fullspec scheme, TLS, and MinIO consistency
+      - namespace and configured StorageClasses
+      - nginx IngressClass and controller
+      - cert-manager and ClusterIssuer for cert_manager TLS
+      - ENV/manual_tls.yaml inputs for manual_tls
 
-LAKE_STATUS_HELP = (
-    "Inspect bootstrap Secret state and selected-component workload status for "
-    "one lake environment. The command is read-only and never writes spec.json."
-)
-LAKE_STATUS_EPILOG = dedent(
-    """
-    Required inputs: the environment must have a Kubernetes context/namespace
-    in spec.json or supplied with --context/--namespace. Missing target fields
-    are not inferred or written. Local active_product is not used as status
-    truth; status reads the cluster-side stelar-lake-state ConfigMap.
-
-    Bootstrap state is cluster-side: if ConfigMap stelar-lake-state is absent
-    from the target namespace, the lake is reported as not_bootstrapped. When
-    the ConfigMap exists, status reads the fullspec stored in it and checks the
-    corresponding bootstrap Secrets and workloads.
-
-    Deployment state is inferred from the Deployments, StatefulSets, and init
-    Jobs expected by the selected fullspec components. By default the
-    command performs one snapshot check. Use --wait together with required
-    --job-timeout and a positive --poll-interval value when init Jobs
-    should be polled until they complete.
-    """
-).strip()
-
-LAKE_UNBOOTSTRAP_HELP = (
-    "Undo lake bootstrap for one environment by deleting bootstrap and "
-    "init-generated resources. Use tk delete ENV separately for rendered manifests."
-)
-LAKE_UNBOOTSTRAP_EPILOG = dedent(
-    """
-    Required inputs: the environment must have a Kubernetes context/namespace
-    in spec.json or supplied with --context/--namespace. Missing target fields
-    are not inferred or written.
-
-    Scope: when ConfigMap stelar-lake-state exists, this command reads its
-    fullspec, deletes the corresponding bootstrap Secrets, init-generated
-    Secrets and ConfigMaps, and the state ConfigMap. If the state ConfigMap is
-    absent, it falls back to spec.stelar.active_product as a cleanup path for
-    partial deployments. It does not delete Deployments, StatefulSets, Jobs,
-    Services, PVCs, Ingresses, or any other Tanka-rendered resource; run
-    tk delete ENV for those.
-
-    Warning: the command purges every exact generated resource name selected by
-    the fullspec regardless of ownership labels. This includes Keycloak client
-    and admin Secrets, the CKAN admin-token Secret, Quay's registry-config
-    ConfigMap, and stelar-lake-state when present. It does not purge unrelated
-    Secret or ConfigMap names. Read/delete access is required, and deletion uses
-    UID and resourceVersion preconditions to protect concurrently changed or
-    replaced resources. The warning is always printed; --yes skips only the
-    interactive confirmation.
+    Overrides supplied with --context or --namespace are temporary. Missing
+    target fields are not inferred or written. No Kubernetes Secrets are created.
     """
 ).strip()
 
 LAKE_BOOTSTRAP_HELP = (
-    "Prepare an initialized environment for Kubernetes. The command completes "
-    "missing spec.json context/namespace from kubeconfig, validates cluster "
-    "prerequisites, and creates required fullspec/manual-TLS Secrets from a clean bootstrap state."
+    "Prepare a lake environment for deployment by resolving its target, "
+    "validating prerequisites, and creating bootstrap Secrets and state."
 )
 LAKE_BOOTSTRAP_EPILOG = dedent(
     """
-    Context/namespace behavior: lake bootstrap preserves whichever fields are
-    already present in ENV/spec.json. If contextNames is missing, it records the active kubectl context.
-    If namespace is missing, it records the namespace configured on that context,
-    falling back to Kubernetes default namespace when kubeconfig has none.
+    Examples:
+      stelarctl lake bootstrap dev
+      stelarctl lake bootstrap dev --manual-secrets
+      stelarctl lake bootstrap dev --skip-preflight
 
-    Preflight checks verify namespace, storage classes, nginx ingress, and, when
-    cert_manager TLS is selected, cert-manager plus the configured ClusterIssuer.
+    Target resolution:
+      Existing context and namespace values in ENV/spec.json are preserved.
+      Missing values are inferred from the active kubeconfig context and then
+      persisted. A missing kubeconfig namespace defaults to "default".
 
-    RBAC behavior: if the Kubernetes user cannot perform a read-only check, the
-    command stops and explains the missing access. Rerun with --skip-preflight
-    only when you accept that cluster readiness will be discovered later by tk apply.
+    Preflight:
+      Checks the namespace, StorageClasses, nginx ingress, and cert-manager plus
+      the configured ClusterIssuer when cert_manager TLS is selected.
+      --skip-preflight bypasses these read-only checks; use it only when RBAC
+      prevents inspection and you accept later failure during tk apply.
 
-    Bootstrap state: after successful Secret creation, lake bootstrap writes
-    ConfigMap stelar-lake-state in the target namespace. That ConfigMap records
-    the product name, product input when available, and deployed fullspec. Its
-    presence is the bootstrap marker for lake status and future bootstrap runs.
+    Bootstrap state:
+      Creates required product and manual_tls Secrets, then writes the
+      stelar-lake-state ConfigMap. Secret values are generated with OS-backed
+      randomness unless --manual-secrets is used. Existing, partial, or
+      inconsistent bootstrap state causes the command to stop without overwrite.
 
-    Secret behavior: by default, lake bootstrap generates password and session
-    Secret values with OS-backed randomness. Use --manual-secrets only when you
-    want to type those values yourself; password prompts enforce at least 8
-    characters. Before creating anything, lake bootstrap checks for
-    stelar-lake-state and the required bootstrap Secrets for the active fullspec.
-    If the ConfigMap exists, the command stops because bootstrap has already run.
-    If all required Secrets exist but the ConfigMap is missing, the command stops
-    because the namespace has inconsistent bootstrap state. If only some required
-    Secrets exist, the command stops because the namespace is partially
-    bootstrapped. If Secret reads are blocked by RBAC, it warns and attempts
-    Secret creation directly; Kubernetes conflicts stop the command before the
-    ConfigMap is recorded. If spec.stelar.active_product selects manual_tls,
-    ENV/manual_tls.yaml must exist and point to valid tls.crt/tls.key pairs.
+    This command does not apply rendered workloads. Run tk apply ENV after it
+    succeeds. HTTP products skip cert-manager checks and require MinIO insecure
+    client mode in the fullspec.
+    """
+).strip()
 
-    HTTP behavior: HTTP deployments skip cert-manager checks and require MinIO
-    insecure client mode in the fullspec.
+LAKE_STATUS_HELP = (
+    "Inspect cluster-side bootstrap state and workload readiness for the "
+    "components selected by a lake environment."
+)
+LAKE_STATUS_EPILOG = dedent(
+    """
+    Examples:
+      stelarctl lake status dev
+      stelarctl lake status dev --context okeanos --namespace stelar-dev
+      stelarctl lake status dev --wait --job-timeout 600 --poll-interval 5
+
+    Source of truth:
+      Reads the stelar-lake-state ConfigMap from the target namespace. The local
+      active product is not substituted when cluster state is absent.
+
+    Reports:
+      - bootstrapped, not_bootstrapped, partial, or unknown Secret state
+      - readiness of expected Deployments, StatefulSets, and init Jobs
+      - missing or unchecked components and access diagnostics
+
+    The default is a single read-only snapshot. --wait polls init Jobs until
+    success or --job-timeout; it requires a positive --poll-interval. Context
+    and namespace overrides are temporary and never write spec.json.
+    """
+).strip()
+
+LAKE_UNBOOTSTRAP_HELP = (
+    "Remove bootstrap and init-generated resources for one lake environment. "
+    "Rendered workloads must be deleted separately with Tanka."
+)
+LAKE_UNBOOTSTRAP_EPILOG = dedent(
+    """
+    Examples:
+      stelarctl lake unbootstrap dev
+      stelarctl lake unbootstrap dev --yes
+      stelarctl lake unbootstrap dev --context okeanos --namespace stelar-dev
+
+    Cleanup scope:
+      Uses the fullspec in stelar-lake-state, or the local active product for a
+      partial deployment without cluster state. It deletes bootstrap Secrets by
+      exact name, plus init-generated Secret/ConfigMap names including Keycloak
+      client/admin Secrets, ckan-admin-token-secret, Quay registry-config, and
+      stelar-lake-state. Unrelated namespace resources are preserved.
+
+    Safety:
+      This is destructive. Every selected resource is printed before the prompt.
+      --yes skips the prompt but not the warning. UID and resourceVersion
+      preconditions protect resources replaced during cleanup. The command does
+      not delete Deployments, StatefulSets, Jobs, Services, PVCs, or Ingresses.
+
+    Recommended order:
+      tk delete ENV
+      stelarctl lake unbootstrap ENV
+    """
+).strip()
+
+LAKE_REMOVE_HELP = "Delete a managed lake environment directory from the workspace."
+LAKE_REMOVE_EPILOG = dedent(
+    """
+    Examples:
+      stelarctl lake remove dev
+      stelarctl lake remove dev --yes
+      stelarctl lake remove dev --force --yes
+
+    Safety:
+      Only stelarctl-marked environment directories can be removed. Confirmation
+      is required unless --yes is supplied. An active product blocks removal
+      unless --force is used.
+
+    Recommended order for a deployed environment:
+      tk delete ENV
+      stelarctl lake unbootstrap ENV
+      stelarctl lake remove ENV
     """
 ).strip()
