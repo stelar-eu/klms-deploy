@@ -555,14 +555,18 @@ def lake_unbootstrap_command(
         raise typer.BadParameter(str(exc)) from exc
 
     typer.echo(
-        "WARNING: destructive cleanup will purge all bootstrap Secrets selected "
-        f"by the lake fullspec and ConfigMap 'stelar-lake-state' (if present) "
+        "WARNING: destructive cleanup will purge all bootstrap and init-generated "
+        "Secrets and ConfigMaps selected by the lake fullspec "
         f"from namespace {plan.namespace!r} on context {plan.context!r}, "
-        "regardless of Secret ownership labels.",
+        "regardless of resource ownership labels.",
         err=True,
     )
     typer.echo(
         f"Secrets selected for purge: {item_list(plan.secret_names)}",
+        err=True,
+    )
+    typer.echo(
+        f"ConfigMaps selected for purge: {item_list(plan.configmap_names)}",
         err=True,
     )
 
@@ -589,9 +593,11 @@ def _echo_lake_unbootstrap_result(result) -> None:
     typer.echo(f"expected secrets: {len(result.plan.secret_names)}")
     typer.echo(f"deleted secrets: {item_list(result.deleted)}")
     typer.echo(f"already missing secrets: {item_list(result.missing)}")
-    if result.plan.delete_state_configmap:
-        state = "deleted" if result.state_configmap_deleted else "already missing"
-        typer.echo(f"lake state ConfigMap: {state}")
+    typer.echo(f"expected ConfigMaps: {len(result.plan.configmap_names)}")
+    typer.echo(f"deleted ConfigMaps: {item_list(result.deleted_configmaps)}")
+    typer.echo(
+        f"already missing ConfigMaps: {item_list(result.missing_configmaps)}"
+    )
 
 
 def lake_bootstrap_command(

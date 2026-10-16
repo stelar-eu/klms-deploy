@@ -340,8 +340,8 @@ LAKE_STATUS_EPILOG = dedent(
 ).strip()
 
 LAKE_UNBOOTSTRAP_HELP = (
-    "Undo lake bootstrap for one environment by deleting bootstrap Secrets "
-    "and the cluster state ConfigMap. Use tk delete ENV separately for rendered manifests."
+    "Undo lake bootstrap for one environment by deleting bootstrap and "
+    "init-generated resources. Use tk delete ENV separately for rendered manifests."
 )
 LAKE_UNBOOTSTRAP_EPILOG = dedent(
     """
@@ -350,21 +350,21 @@ LAKE_UNBOOTSTRAP_EPILOG = dedent(
     are not inferred or written.
 
     Scope: when ConfigMap stelar-lake-state exists, this command reads its
-    fullspec, deletes the corresponding bootstrap Secrets, and then deletes the
-    ConfigMap so the namespace is no longer considered bootstrapped. If the
-    ConfigMap is absent, it falls back to spec.stelar.active_product only as a
-    cleanup path for failed bootstraps that created Secrets before recording
-    cluster state. It does not delete Deployments, StatefulSets, Jobs, Services,
-    PVCs, Ingresses, or any other Tanka-rendered resource; run tk delete ENV for
-    those.
+    fullspec, deletes the corresponding bootstrap Secrets, init-generated
+    Secrets and ConfigMaps, and the state ConfigMap. If the state ConfigMap is
+    absent, it falls back to spec.stelar.active_product as a cleanup path for
+    partial deployments. It does not delete Deployments, StatefulSets, Jobs,
+    Services, PVCs, Ingresses, or any other Tanka-rendered resource; run
+    tk delete ENV for those.
 
-    Warning: the command purges every bootstrap Secret name selected by the
-    fullspec, regardless of ownership labels, plus ConfigMap stelar-lake-state
-    when present. It does not purge unrelated Secret or ConfigMap names from the
-    namespace. Missing Secrets are reported as already missing. Secret read/delete
-    access is required, and deletion uses UID and resourceVersion preconditions to
-    protect concurrently changed or replaced Secrets. The destructive warning is
-    always printed; --yes skips only the interactive confirmation.
+    Warning: the command purges every exact generated resource name selected by
+    the fullspec regardless of ownership labels. This includes Keycloak client
+    and admin Secrets, the CKAN admin-token Secret, Quay's registry-config
+    ConfigMap, and stelar-lake-state when present. It does not purge unrelated
+    Secret or ConfigMap names. Read/delete access is required, and deletion uses
+    UID and resourceVersion preconditions to protect concurrently changed or
+    replaced resources. The warning is always printed; --yes skips only the
+    interactive confirmation.
     """
 ).strip()
 

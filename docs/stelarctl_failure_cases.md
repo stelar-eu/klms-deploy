@@ -48,5 +48,6 @@
 
 - Fails when context or namespace is missing and not provided by flags.
 - Uses `stelar-lake-state` when present; otherwise falls back to the local active fullspec for failed-bootstrap cleanup.
-- Fails on Secret or ConfigMap delete RBAC/API errors.
+- Deletes exact bootstrap and init-generated Secret/ConfigMap names selected by the fullspec, but leaves unrelated namespace resources intact.
+- Fails on Secret or ConfigMap read/delete RBAC/API errors before deleting anything when the failure occurs during preflight.
 - Does not delete Tanka-rendered resources.

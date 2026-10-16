@@ -85,6 +85,32 @@ def base_fullspec() -> dict:
     }
 
 
+def init_generated_fullspec() -> dict:
+    fullspec = base_fullspec()
+    fullspec["klms"]["core_components"] = [
+        "redis",
+        "keycloak",
+        "ckan",
+        "quay",
+    ]
+    fullspec["klms"]["keycloak"].update(
+        KC_API_CLIENT_NAME="stelar-api",
+        KC_MINIO_CLIENT_NAME="minio",
+        KC_CKAN_CLIENT_NAME="ckan",
+    )
+    return fullspec
+
+
+def expected_init_secret_names() -> set[str]:
+    return {
+        "stelar-api-client-secret",
+        "minio-client-secret",
+        "ckan-client-secret",
+        "stelar-admin-id",
+        "ckan-admin-token-secret",
+    }
+
+
 def bootstrap_ready_fullspec() -> dict:
     fullspec = base_fullspec()
     fullspec["klms"].update(
@@ -141,12 +167,14 @@ def set_secret_cluster(
     monkeypatch,
     *,
     existing_secrets=None,
+    existing_configmaps=None,
     missing=None,
     lake_state_fullspec="current",
     labels_by_secret=None,
     metadata_overrides=None,
 ):
     existing_secrets = set(existing_secrets or ())
+    existing_configmaps = set(existing_configmaps or ())
     secret_metadata = {
         name: {
             "name": name,
@@ -159,13 +187,25 @@ def set_secret_cluster(
     }
     if lake_state_fullspec == "current":
         lake_state_fullspec = CURRENT_UNBOOTSTRAP_FULLSPEC
+    if lake_state_fullspec is not None:
+        existing_configmaps.add("stelar-lake-state")
+    configmap_metadata = {
+        name: {
+            "name": name,
+            "uid": f"uid-{name}",
+            "resource_version": "1",
+        }
+        for name in existing_configmaps
+    }
     calls = {
         "deleted": [],
         "configmaps": [],
         "read_secrets": [],
         "delete_options": {},
+        "configmap_delete_options": {},
         "created_secrets": [],
         "existing_secrets": existing_secrets,
+        "existing_configmaps": existing_configmaps,
         "secret_metadata": secret_metadata,
     }
 
@@ -211,24 +251,42 @@ def set_secret_cluster(
 
         def read_namespaced_config_map(self, name, namespace):
             calls["configmaps"].append(("read", namespace, name))
-            if missing == "lake_state_forbidden":
+            if missing == "lake_state_forbidden" and name == "stelar-lake-state":
                 forbidden()
-            if lake_state_fullspec is None:
+            if missing == "configmap_read_forbidden" and name != "stelar-lake-state":
+                forbidden()
+            if name not in existing_configmaps:
                 not_found()
+            if name != "stelar-lake-state":
+                return SimpleNamespace(
+                    data={},
+                    metadata=SimpleNamespace(**configmap_metadata[name]),
+                )
             return SimpleNamespace(
                 data={
                     "product_name": "generated",
                     "product_filename": "generated.json",
                     "fullspec.json": json.dumps(lake_state_fullspec),
-                }
+                },
+                metadata=SimpleNamespace(**configmap_metadata[name]),
             )
 
-        def delete_namespaced_config_map(self, name, namespace):
+        def delete_namespaced_config_map(self, name, namespace, *, body=None):
             calls["configmaps"].append(("delete", namespace, name))
+            calls["configmap_delete_options"][name] = body
             if missing == "configmap_delete_forbidden":
                 forbidden()
-            if lake_state_fullspec is None:
+            if name not in existing_configmaps:
                 not_found()
+            if missing == "configmap_replaced":
+                configmap_metadata[name]["uid"] = f"replacement-{name}"
+            if body is not None and (
+                body.preconditions.uid != configmap_metadata[name]["uid"]
+                or body.preconditions.resource_version
+                != configmap_metadata[name]["resource_version"]
+            ):
+                raise unbootstrap_commands.ApiException(status=409, reason="Conflict")
+            existing_configmaps.remove(name)
             return SimpleNamespace(metadata=SimpleNamespace(name=name))
 
         def delete_namespaced_secret(self, name, namespace, *, body):
@@ -293,6 +351,21 @@ def test_plan_lake_unbootstrap_uses_configmap_fullspec_without_active_product(
 
     assert set(plan.secret_names) == expected_secret_names(fullspec)
     assert plan.delete_state_configmap is True
+
+
+def test_plan_lake_unbootstrap_includes_selected_init_generated_resources(
+    tmp_path,
+    monkeypatch,
+):
+    workspace = make_workspace(tmp_path / "workspace")
+    fullspec = init_generated_fullspec()
+    write_unbootstrap_environment(workspace, fullspec)
+    set_secret_cluster(monkeypatch)
+
+    plan = plan_lake_unbootstrap("dev", workspace)
+
+    assert expected_init_secret_names() <= set(plan.secret_names)
+    assert plan.configmap_names == ("registry-config", "stelar-lake-state")
 
 
 def test_unbootstrap_lake_uses_configmap_fullspec_and_clears_legacy_state(
@@ -460,6 +533,54 @@ def test_failed_bootstrap_can_clean_up_its_owned_secrets_without_configmap(
     assert result.state_configmap_deleted is False
 
 
+def test_partial_deployment_cleanup_removes_init_resources_but_not_unrelated(
+    tmp_path,
+    monkeypatch,
+):
+    workspace = make_workspace(tmp_path / "workspace")
+    fullspec = init_generated_fullspec()
+    write_unbootstrap_environment(workspace, fullspec)
+    generated_secrets = expected_init_secret_names()
+    calls = set_secret_cluster(
+        monkeypatch,
+        existing_secrets=generated_secrets | {"unrelated-secret"},
+        existing_configmaps={"registry-config", "unrelated-config"},
+        lake_state_fullspec=None,
+    )
+
+    result = unbootstrap_lake(plan_lake_unbootstrap("dev", workspace))
+
+    assert set(result.deleted) == generated_secrets
+    assert result.deleted_configmaps == ("registry-config",)
+    assert calls["existing_secrets"] == {"unrelated-secret"}
+    assert calls["existing_configmaps"] == {"unrelated-config"}
+    options = calls["configmap_delete_options"]["registry-config"]
+    assert options.preconditions.uid == "uid-registry-config"
+    assert options.preconditions.resource_version == "1"
+
+
+def test_configmap_preflight_failure_does_not_delete_any_resources(
+    tmp_path,
+    monkeypatch,
+):
+    workspace = make_workspace(tmp_path / "workspace")
+    fullspec = init_generated_fullspec()
+    write_unbootstrap_environment(workspace, fullspec)
+    calls = set_secret_cluster(
+        monkeypatch,
+        existing_secrets=expected_init_secret_names(),
+        existing_configmaps={"registry-config"},
+        lake_state_fullspec=None,
+        missing="configmap_read_forbidden",
+    )
+
+    with pytest.raises(CommandError, match="not authorized to read ConfigMap"):
+        unbootstrap_lake(plan_lake_unbootstrap("dev", workspace))
+
+    assert calls["deleted"] == []
+    assert not any(action == "delete" for action, *_ in calls["configmaps"])
+
+
 @pytest.mark.parametrize("field", ["uid", "resource_version"])
 def test_unbootstrap_refuses_secret_without_deletion_identity(
     tmp_path, monkeypatch, field,
@@ -545,8 +666,9 @@ def test_lake_unbootstrap_yes_warns_and_deletes_without_labels(tmp_path, monkeyp
 
     assert result.exit_code == 0, result.output
     assert "WARNING: destructive cleanup" in result.output
-    assert "regardless of Secret ownership labels" in result.output
+    assert "regardless of resource ownership labels" in result.output
     assert "Secrets selected for purge:" in result.output
+    assert "ConfigMaps selected for purge:" in result.output
     assert calls["deleted"] == [("test", "product-postgres-secret")]
 
 
@@ -572,6 +694,7 @@ def test_lake_unbootstrap_cli_deletes_with_yes(tmp_path, monkeypatch):
     assert "Lake unbootstrap: dev" in result.output
     assert "deleted secrets:" in result.output
     assert "already missing secrets: (none)" in result.output
+    assert "deleted ConfigMaps: stelar-lake-state" in result.output
 
 
 def test_lake_unbootstrap_cli_help_documents_scope():

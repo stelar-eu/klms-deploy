@@ -105,19 +105,21 @@ stored fullspec, checks the corresponding bootstrap Secrets, and inspects the
 expected Deployments, StatefulSets, and Jobs. `--wait` polls init Jobs until they
 succeed or `--job-timeout` expires.
 
-`lake unbootstrap` deletes bootstrap Secrets derived from the fullspec stored
-in `stelar-lake-state`, then deletes the ConfigMap. If the ConfigMap is absent,
-it falls back to local `spec.stelar.active_product` only as cleanup for failed
-bootstraps that created Secrets before recording cluster state. It does not
-delete Tanka-rendered resources; use `tk delete ENV` for those.
+`lake unbootstrap` deletes bootstrap and init-generated resources derived from
+the fullspec stored in `stelar-lake-state`, then deletes the state ConfigMap. If
+the ConfigMap is absent, it falls back to local `spec.stelar.active_product` as
+cleanup for partial deployments. It does not delete Tanka-rendered resources;
+use `tk delete ENV` for those.
 
-Unbootstrap prints a destructive warning and purges every bootstrap Secret name
-selected by that fullspec regardless of ownership labels, plus
-`stelar-lake-state` when present. It does not purge unrelated Secret or ConfigMap
-names from the namespace. Before deleting anything, it reads every existing
-candidate and binds deletion to its UID and resourceVersion so a concurrently
-changed or replaced Secret is preserved. `--yes` skips only the interactive
-confirmation; the warning is still printed.
+Unbootstrap prints a destructive warning and purges every exact generated name
+selected by that fullspec regardless of ownership labels. In addition to
+bootstrap Secrets, this covers Keycloak client/admin Secrets,
+`ckan-admin-token-secret`, Quay's `registry-config`, and `stelar-lake-state` when
+their components or state are present. It does not purge unrelated Secret or
+ConfigMap names from the namespace. Before deleting anything, it reads every
+existing candidate and binds deletion to its UID and resourceVersion so a
+concurrently changed or replaced resource is preserved. `--yes` skips only the
+interactive confirmation; the warning is still printed.
 
 `lake remove` deletes the local marked environment directory after confirmation.
 It refuses environments with an active product unless `--force` is supplied. Use
