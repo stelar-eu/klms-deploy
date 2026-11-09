@@ -120,6 +120,15 @@ class TyperLakeSwitchProgress(LakeSwitchProgress):
 class TyperLakeEnvironmentProgress(LakeEnvironmentProgress):
     """Render lake environment initialization progress through Typer."""
 
+    def inferred_context(self, context_name: str) -> None:
+        typer.echo(f"ℹ️ Using active kubectl context {context_name!r}.")
+
+    def inferred_namespace(self, namespace: str, context_name: str) -> None:
+        typer.echo(
+            f"ℹ️ Using namespace {namespace!r} from kubectl context "
+            f"{context_name!r}."
+        )
+
     def creating_directory(self, path: str) -> None:
         typer.echo(f"🌐 Creating directory {path!r}...")
 

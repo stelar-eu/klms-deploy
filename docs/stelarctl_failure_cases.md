@@ -5,6 +5,8 @@
 - Fails when the workspace is invalid or `vendor/lib/environment_templates/main_template.jsonnet` is missing.
 - Fails when `main.jsonnet` exists in an unmarked environment unless `--adopt-existing-main` is used.
 - Fails adoption when the existing `main.jsonnet` does not match the managed template.
+- With `--infer`, fails before creating the environment when kubeconfig has no active context or an explicit context does not exist.
+- With `--infer`, preserves either explicit target flag and infers only the missing context or namespace.
 
 ## `lake create`
 

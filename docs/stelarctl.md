@@ -43,6 +43,10 @@ tk apply dev
 stelarctl lake status dev
 ```
 
+To use the active kubeconfig target during environment creation, run
+`stelarctl lake add dev --infer`. An explicit `--context` or `--namespace` can
+be combined with `--infer`; only the missing value is derived from kubeconfig.
+
 The first created product is selected automatically. Use
 `stelarctl lake switch PRODUCT_NAME ENV` to change the local render selection.
 If the target namespace is already bootstrapped for another product, switch warns;
@@ -64,7 +68,7 @@ stelarctl --version
 ```text
 stelarctl workspace init WORKSPACE [--force]
 stelarctl workspace info [WORKSPACE]
-stelarctl lake add ENV [--workspace WORKSPACE] [--context CONTEXT] [--namespace NAMESPACE] [--adopt-existing-main]
+stelarctl lake add ENV [--workspace WORKSPACE] [--context CONTEXT] [--namespace NAMESPACE] [--infer] [--adopt-existing-main]
 stelarctl lake list [--workspace WORKSPACE]
 stelarctl lake info ENV [--workspace WORKSPACE]
 stelarctl lake remove ENV [--workspace WORKSPACE] [--yes] [--force]
@@ -86,6 +90,11 @@ Run `jb install` afterwards so `vendor/lib/...` exists.
 `lake add` creates a marked Tanka environment. It copies the managed
 `main_template.jsonnet` from `vendor/lib/environment_templates/` and creates or
 marks `spec.json`. `--context` and `--namespace` write the initial target fields.
+`--infer` fills only a missing target field from kubeconfig: the active context
+is used when `--context` is absent, and the namespace configured for the resolved
+context (or Kubernetes' `default`) is used when `--namespace` is absent. Either
+flag can therefore be supplied explicitly while the other is inferred; when
+both are supplied, both explicit values are preserved.
 
 `lake create` resolves a product into named product/fullspec files. Minimal mode
 prompts for a core-only product and never stores password values. Secret names

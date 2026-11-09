@@ -16,7 +16,12 @@ from .common import (
     validate_workspace,
     write_environment_json,
 )
-from .environment_spec import validate_environment_target_fields
+from .environment_spec import (
+    environment_context_name_or_none,
+    environment_namespace_or_none,
+    validate_environment_target_fields,
+)
+from .kube_context import resolve_kube_context, resolve_kube_namespace
 from .progress import LakeEnvironmentProgress
 
 ENVIRONMENT_TEMPLATE_DIR = Path("vendor") / "lib" / "environment_templates"
@@ -44,6 +49,7 @@ def add_lake_environment(
     adopt_existing_main: bool = False,
     context_name: str | None = None,
     namespace: str | None = None,
+    infer_target: bool = False,
 ) -> None:
     """Initialize a Tanka environment folder for a lake.
 
@@ -61,6 +67,16 @@ def add_lake_environment(
         namespace=namespace,
     )
     workspace = validate_workspace(workspace_path)
+    if infer_target:
+        configured_context, configured_namespace = _configured_target_fields_if_present(
+            workspace.path,
+            environment,
+        )
+        context_name, namespace = _infer_missing_target_fields(
+            context_name=context_name or configured_context,
+            namespace=namespace or configured_namespace,
+            progress=progress,
+        )
     environment_dir = _ensure_lake_environment_dir(
         workspace.path,
         environment,
@@ -80,6 +96,45 @@ def add_lake_environment(
         spec_json_path,
         context_name=context_name,
         namespace=namespace,
+    )
+
+
+def _infer_missing_target_fields(
+    *,
+    context_name: str | None,
+    namespace: str | None,
+    progress: LakeEnvironmentProgress,
+) -> tuple[str, str]:
+    """Fill only missing target values from kubeconfig."""
+    if context_name is None:
+        context_name = resolve_kube_context(None)
+        progress.inferred_context(context_name)
+    elif namespace is None:
+        # Validate an explicit context before using it for inference.
+        context_name = resolve_kube_context(context_name)
+
+    if namespace is None:
+        # resolve_kube_namespace defaults to "default", matching kubectl.
+        namespace = resolve_kube_namespace(context_name)
+        progress.inferred_namespace(namespace, context_name)
+
+    return context_name, namespace
+
+
+def _configured_target_fields_if_present(
+    workspace_path: Path,
+    environment: str,
+) -> tuple[str | None, str | None]:
+    """Return an existing managed environment target without changing it."""
+    environment_dir = workspace_path / normalize_lake_environment_name(environment)
+    spec_path = environment_dir / "spec.json"
+    if not spec_path.is_file() or not is_lake_environment_spec(spec_path):
+        return None, None
+
+    spec_json = read_environment_json(spec_path)
+    return (
+        environment_context_name_or_none(spec_json),
+        environment_namespace_or_none(spec_json),
     )
 
 

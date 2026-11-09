@@ -191,6 +191,9 @@ LAKE_ADD_EPILOG = dedent(
     """
     Examples:
       stelarctl lake add dev
+      stelarctl lake add dev --infer
+      stelarctl lake add dev --context okeanos --infer
+      stelarctl lake add dev --namespace stelar-dev --infer
       stelarctl lake add prod --context okeanos --namespace stelar-prod
       stelarctl lake add dev --adopt-existing-main
 
@@ -202,8 +205,10 @@ LAKE_ADD_EPILOG = dedent(
       Run jb install first so vendor/lib/environment_templates is available.
 
     Target behavior:
-      --context and --namespace are optional. If omitted, lake bootstrap can
-      infer and persist missing values from kubeconfig.
+      --context and --namespace are optional. --infer fills only missing values:
+      it uses the active context and the namespace configured for the resolved
+      context (or "default"). Explicit values always take precedence. Without
+      --infer, lake bootstrap can still infer and persist missing target values.
 
     Safety:
       Existing managed environments are preserved. --adopt-existing-main only

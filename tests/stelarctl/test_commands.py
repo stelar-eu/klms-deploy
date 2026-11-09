@@ -965,6 +965,152 @@ def test_add_lake_environment_writes_context_and_namespace(tmp_path):
     }
 
 
+@pytest.mark.parametrize(
+    (
+        "context_name",
+        "namespace",
+        "expected_context",
+        "expected_namespace",
+        "expected_calls",
+    ),
+    [
+        (
+            None,
+            None,
+            "active-context",
+            "active-namespace",
+            [("context", None), ("namespace", "active-context")],
+        ),
+        (
+            "explicit-context",
+            None,
+            "explicit-context",
+            "explicit-namespace",
+            [
+                ("context", "explicit-context"),
+                ("namespace", "explicit-context"),
+            ],
+        ),
+        (
+            None,
+            "typed-namespace",
+            "active-context",
+            "typed-namespace",
+            [("context", None)],
+        ),
+        (
+            "explicit-context",
+            "typed-namespace",
+            "explicit-context",
+            "typed-namespace",
+            [],
+        ),
+    ],
+)
+def test_add_lake_environment_infers_only_missing_target_fields(
+    tmp_path,
+    monkeypatch,
+    context_name,
+    namespace,
+    expected_context,
+    expected_namespace,
+    expected_calls,
+):
+    workspace = make_workspace(tmp_path / "workspace")
+    calls = []
+
+    def resolve_context(value):
+        calls.append(("context", value))
+        return "active-context" if value is None else value
+
+    def resolve_namespace(value):
+        calls.append(("namespace", value))
+        return {
+            "active-context": "active-namespace",
+            "explicit-context": "explicit-namespace",
+        }[value]
+
+    monkeypatch.setattr(
+        lake_environment_commands,
+        "resolve_kube_context",
+        resolve_context,
+    )
+    monkeypatch.setattr(
+        lake_environment_commands,
+        "resolve_kube_namespace",
+        resolve_namespace,
+    )
+
+    add_lake_environment(
+        "dev",
+        workspace,
+        context_name=context_name,
+        namespace=namespace,
+        infer_target=True,
+    )
+
+    assert read_json(workspace / "dev" / "spec.json")["spec"] == {
+        "contextNames": [expected_context],
+        "namespace": expected_namespace,
+    }
+    assert calls == expected_calls
+
+
+def test_add_lake_environment_inference_fails_before_creating_environment(
+    tmp_path,
+    monkeypatch,
+):
+    workspace = make_workspace(tmp_path / "workspace")
+
+    def reject_context(_value):
+        raise CommandError("No active kubectl context found")
+
+    monkeypatch.setattr(
+        lake_environment_commands,
+        "resolve_kube_context",
+        reject_context,
+    )
+
+    with pytest.raises(CommandError, match="No active kubectl context found"):
+        add_lake_environment("dev", workspace, infer_target=True)
+
+    assert not (workspace / "dev").exists()
+
+
+def test_add_lake_environment_inference_preserves_existing_target(
+    tmp_path,
+    monkeypatch,
+):
+    workspace = make_workspace(tmp_path / "workspace")
+    add_lake_environment(
+        "dev",
+        workspace,
+        context_name="configured-context",
+        namespace="configured-namespace",
+    )
+
+    def unexpected_inference(_value):
+        raise AssertionError("configured target should not be inferred again")
+
+    monkeypatch.setattr(
+        lake_environment_commands,
+        "resolve_kube_context",
+        unexpected_inference,
+    )
+    monkeypatch.setattr(
+        lake_environment_commands,
+        "resolve_kube_namespace",
+        unexpected_inference,
+    )
+
+    add_lake_environment("dev", workspace, infer_target=True)
+
+    assert read_json(workspace / "dev" / "spec.json")["spec"] == {
+        "contextNames": ["configured-context"],
+        "namespace": "configured-namespace",
+    }
+
+
 def test_add_lake_environment_writes_only_provided_target_fields(tmp_path):
     workspace = make_workspace(tmp_path / "workspace")
     environment_dir = workspace / "dev"
@@ -2461,6 +2607,53 @@ def test_lake_add_cli_writes_context_and_namespace(tmp_path):
         "contextNames": ["okeanos-context"],
         "namespace": "stelar-dev",
     }
+
+
+def test_lake_add_cli_infers_missing_context_with_explicit_namespace(
+    tmp_path,
+    monkeypatch,
+):
+    workspace = make_workspace(tmp_path / "workspace")
+    monkeypatch.setattr(
+        lake_environment_commands,
+        "resolve_kube_context",
+        lambda value: "active-context" if value is None else value,
+    )
+
+    result = runner.invoke(
+        app,
+        [
+            "lake",
+            "add",
+            "dev",
+            "--workspace",
+            str(workspace),
+            "--namespace",
+            "typed-namespace",
+            "--infer",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "Using active kubectl context 'active-context'" in result.output
+    assert read_json(workspace / "dev" / "spec.json")["spec"] == {
+        "contextNames": ["active-context"],
+        "namespace": "typed-namespace",
+    }
+
+
+def test_lake_add_help_documents_target_inference():
+    result = runner.invoke(app, ["lake", "add", "--help"])
+
+    assert result.exit_code == 0
+    output = plain_help(result.output)
+    normalized_output = " ".join(output.split())
+    assert "--infer" in output
+    assert (
+        "explicit --context/--namespace values take precedence"
+        in normalized_output
+    )
+    assert "namespace configured for the resolved context" in normalized_output
 
 
 def test_lake_add_cli_rejects_empty_target_before_creating_environment(tmp_path):

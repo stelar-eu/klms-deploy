@@ -183,6 +183,16 @@ def lake_add_command(
             help="Write this Kubernetes namespace to spec.json",
         ),
     ] = None,
+    infer: Annotated[
+        bool,
+        typer.Option(
+            "--infer",
+            help=(
+                "Infer any missing context and namespace from kubeconfig; "
+                "explicit --context/--namespace values take precedence"
+            ),
+        ),
+    ] = False,
     adopt_existing_main: Annotated[
         bool,
         typer.Option(
@@ -202,6 +212,7 @@ def lake_add_command(
             adopt_existing_main=adopt_existing_main,
             context_name=context,
             namespace=namespace,
+            infer_target=infer,
         )
     except CommandError as exc:
         raise typer.BadParameter(str(exc)) from exc

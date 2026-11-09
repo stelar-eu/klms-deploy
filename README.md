@@ -35,6 +35,10 @@ tk apply dev
 stelarctl lake status dev
 ```
 
+To record the active kubeconfig target instead, use
+`stelarctl lake add dev --infer`. You can still provide either `--context` or
+`--namespace`; only the missing value is inferred.
+
 The first created product is selected automatically. Use
 `stelarctl lake switch PRODUCT_NAME ENV` only when switching to a different
 generated product or after regenerating an existing selected product.
