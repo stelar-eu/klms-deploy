@@ -35,6 +35,16 @@ tk apply dev
 stelarctl lake status dev
 ```
 
+To save the exact generated site credentials during bootstrap, add an explicit
+plaintext destination that does not already exist:
+
+```bash
+stelarctl lake bootstrap dev --export-credentials ./dev-credentials.txt
+```
+
+The file contains sensitive values and is created with mode `0600` on POSIX
+systems. Protect it and delete it when it is no longer needed.
+
 To record the active kubeconfig target instead, use
 `stelarctl lake add dev --infer`. You can still provide either `--context` or
 `--namespace`; only the missing value is inferred.

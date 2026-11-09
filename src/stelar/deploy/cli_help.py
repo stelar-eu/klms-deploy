@@ -357,6 +357,7 @@ LAKE_BOOTSTRAP_EPILOG = dedent(
     Examples:
       stelarctl lake bootstrap dev
       stelarctl lake bootstrap dev --manual-secrets
+      stelarctl lake bootstrap dev --export-credentials ./dev-credentials.txt
       stelarctl lake bootstrap dev --skip-preflight
 
     Target resolution:
@@ -375,6 +376,14 @@ LAKE_BOOTSTRAP_EPILOG = dedent(
       stelar-lake-state ConfigMap. Secret values are generated with OS-backed
       randomness unless --manual-secrets is used. Existing, partial, or
       inconsistent bootstrap state causes the command to stop without overwrite.
+
+    Credential export:
+      --export-credentials PATH writes the exact generated site credentials to
+      a new plaintext .txt file after bootstrap succeeds. Existing files are
+      never overwritten. On POSIX systems the file mode is 0600. Protect and
+      delete this file when it is no longer needed. The file covers KLMS and
+      Quay SSO, CKAN local administration, Keycloak administration, and MinIO.
+      Other services do not receive separate human credentials from bootstrap.
 
     This command does not apply rendered workloads. Run tk apply ENV after it
     succeeds. HTTP products skip cert-manager checks and require MinIO insecure

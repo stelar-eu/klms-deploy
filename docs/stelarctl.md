@@ -77,7 +77,7 @@ stelarctl lake create --minimal PRODUCT_NAME ENV [--workspace WORKSPACE] [--cont
 stelarctl lake switch PRODUCT_NAME ENV [--workspace WORKSPACE]
 stelarctl lake manual-tls-template [OUTPUT] [--force]
 stelarctl lake verify ENV [--workspace WORKSPACE] [--context CONTEXT] [--namespace NAMESPACE]
-stelarctl lake bootstrap ENV [--workspace WORKSPACE] [--skip-preflight] [--manual-secrets]
+stelarctl lake bootstrap ENV [--workspace WORKSPACE] [--skip-preflight] [--manual-secrets] [--export-credentials PATH]
 stelarctl lake status ENV [--workspace WORKSPACE] [--context CONTEXT] [--namespace NAMESPACE] [--wait --job-timeout SECONDS --poll-interval SECONDS]
 stelarctl lake unbootstrap ENV [--workspace WORKSPACE] [--context CONTEXT] [--namespace NAMESPACE] [--yes]
 ```
@@ -117,6 +117,13 @@ or only some expected bootstrap Secrets exist while the ConfigMap is absent,
 bootstrap stops because the namespace is inconsistent. If Secret reads are
 blocked by RBAC, stelarctl warns and attempts creation; Kubernetes conflicts
 still stop the command before ConfigMap state is recorded.
+
+`--export-credentials PATH` writes the exact site usernames and passwords used
+by that bootstrap to a new plaintext `.txt` file. The export covers KLMS SSO,
+CKAN local administration, Keycloak administration, MinIO, and Quay SSO. Other
+components do not receive independent human credentials from bootstrap. The
+destination must not already exist and is created with mode `0600` on POSIX
+systems. Keep the file private and delete it when it is no longer needed.
 
 `lake status` is read-only and cluster-driven. It reads `stelar-lake-state`; if
 the ConfigMap is absent it reports `not_bootstrapped`. If present, it reads the

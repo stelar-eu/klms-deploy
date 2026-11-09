@@ -38,6 +38,10 @@
 - Warns and attempts Secret creation when Secret reads are forbidden by RBAC.
 - Fails on Secret creation conflicts or create/delete RBAC errors before recording ConfigMap state.
 - Fails when manual TLS is selected but `ENV/manual_tls.yaml` or valid cert/key files are missing.
+- `--export-credentials` fails before cluster mutation when the output is not a
+  `.txt` path, its parent directory is missing, or the destination already
+  exists. If the final file write fails after a successful bootstrap, the error
+  explicitly says not to rerun bootstrap.
 
 ## `lake status`
 

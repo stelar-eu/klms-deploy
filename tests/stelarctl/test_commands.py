@@ -1,5 +1,6 @@
 import base64
 import json
+import os
 import re
 from pathlib import Path
 from types import SimpleNamespace
@@ -160,15 +161,29 @@ def write_generated_lake_files(
             "dynamicStorageClass": dynamic_storage_class,
             "dynamic_volume_storage_class": provisioning_storage_class,
             "SCHEME": scheme,
+            "ROOT_DOMAIN": "example.test",
+            "PRIMARY_SUBDOMAIN": "klms",
             "postgres": product_json["spec"]["postgres"],
-            "keycloak": product_json["spec"]["keycloak"],
+            "keycloak": {
+                **product_json["spec"]["keycloak"],
+                "KEYCLOAK_ADMIN": "admin",
+                "SUBDOMAIN": "kc",
+                "REALM": "master",
+            },
             "api": product_json["spec"]["api"],
-            "ckan": product_json["spec"]["ckan"],
+            "ckan": {
+                **product_json["spec"]["ckan"],
+                "CKAN_SYSADMIN_NAME": "ckan-admin",
+                "CKAN__ROOT_PATH": "/dc",
+            },
             "minio": {
                 **product_json["spec"]["minio"],
                 "INSECURE_MC_CLIENT": "true" if scheme == "http" else "false",
                 "MINIO_ROOT_USER": "root",
+                "S3_CONSOLE_URL": f"{scheme}://klms.example.test/s3/login",
+                "API_DOMAIN": f"{scheme}://minio.example.test",
             },
+            "quay": {"SUBDOMAIN": "reg"},
             "ingress": ingress,
         }
     }
@@ -3283,6 +3298,160 @@ def test_bootstrap_lake_cli_accepts_preflight_skip(tmp_path, monkeypatch):
     assert "🔐 Generating secret 'product-postgres-secret'..." in result.stdout
 
 
+def test_bootstrap_lake_cli_exports_exact_site_credentials(
+    tmp_path,
+    monkeypatch,
+):
+    workspace = make_workspace(tmp_path / "workspace")
+    add_lake_environment("dev", workspace)
+    environment_dir = write_generated_lake_files(workspace)
+    calls = set_cluster_preflight(monkeypatch)
+    credentials_path = tmp_path / "dev-credentials.txt"
+
+    result = runner.invoke(
+        app,
+        [
+            "lake",
+            "bootstrap",
+            "dev",
+            "--workspace",
+            str(workspace),
+            "--export-credentials",
+            str(credentials_path),
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert credentials_path.is_file()
+    if os.name == "posix":
+        assert credentials_path.stat().st_mode & 0o777 == 0o600
+    assert f"Credentials written to {credentials_path}" in result.stdout
+
+    content = credentials_path.read_text(encoding="utf-8")
+    assert "Environment: dev" in content
+    assert "Kubernetes context: current-context" in content
+    assert "Kubernetes namespace: test" in content
+    assert "[STELAR KLMS]" in content
+    assert "URL: https://klms.example.test" in content
+    assert "[CKAN local administration]" in content
+    assert "URL: https://klms.example.test/dc/user/login" in content
+    assert "Username: ckan-admin" in content
+    assert "[Keycloak administration]" in content
+    assert "URL: https://kc.example.test/admin/master/console/" in content
+    assert "[MinIO console]" in content
+    assert "URL: https://klms.example.test/s3/login" in content
+    assert "API URL: https://minio.example.test" in content
+    assert "[Quay registry]" in content
+    assert "URL: https://reg.example.test" in content
+
+    active_config = read_active_config(environment_dir)
+    created_secrets = {
+        secret_name: body
+        for _, secret_name, body in calls["created_secrets"]
+    }
+    keycloak_password = decoded_secret_data(
+        created_secrets[
+            active_config["keycloak"]["KEYCLOAK_ROOT_PASSWORD_SECRET_NAME"]
+        ]
+    )["password"]
+    ckan_password = decoded_secret_data(
+        created_secrets[active_config["ckan"]["CKAN_ADMIN_PASSWORD_SECRET_NAME"]]
+    )["password"]
+    minio_password = decoded_secret_data(
+        created_secrets[active_config["minio"]["MINIO_ROOT_PASSWORD_SECRET_NAME"]]
+    )["password"]
+    assert f"Password: {keycloak_password}" in content
+    assert f"Password: {ckan_password}" in content
+    assert f"Password: {minio_password}" in content
+
+
+@pytest.mark.parametrize("filename", ["credentials", "credentials.json"])
+def test_bootstrap_lake_cli_requires_txt_credentials_output(
+    tmp_path,
+    monkeypatch,
+    filename,
+):
+    workspace = make_workspace(tmp_path / "workspace")
+    add_lake_environment("dev", workspace)
+    write_generated_lake_files(workspace)
+    calls = set_cluster_preflight(monkeypatch)
+
+    result = runner.invoke(
+        app,
+        [
+            "lake",
+            "bootstrap",
+            "dev",
+            "--workspace",
+            str(workspace),
+            "--export-credentials",
+            str(tmp_path / filename),
+        ],
+    )
+
+    assert result.exit_code != 0
+    assert "must use a .txt filename" in result.output
+    assert calls["created_secrets"] == []
+
+
+def test_bootstrap_lake_cli_refuses_existing_credentials_file_before_mutation(
+    tmp_path,
+    monkeypatch,
+):
+    workspace = make_workspace(tmp_path / "workspace")
+    add_lake_environment("dev", workspace)
+    write_generated_lake_files(workspace)
+    calls = set_cluster_preflight(monkeypatch)
+    credentials_path = tmp_path / "credentials.txt"
+    credentials_path.write_text("keep me\n", encoding="utf-8")
+
+    result = runner.invoke(
+        app,
+        [
+            "lake",
+            "bootstrap",
+            "dev",
+            "--workspace",
+            str(workspace),
+            "--export-credentials",
+            str(credentials_path),
+        ],
+    )
+
+    assert result.exit_code != 0
+    assert "already exists; refusing to overwrite" in result.output
+    assert credentials_path.read_text(encoding="utf-8") == "keep me\n"
+    assert calls["created_secrets"] == []
+
+
+def test_bootstrap_lake_cli_requires_credentials_parent_before_mutation(
+    tmp_path,
+    monkeypatch,
+):
+    workspace = make_workspace(tmp_path / "workspace")
+    add_lake_environment("dev", workspace)
+    write_generated_lake_files(workspace)
+    calls = set_cluster_preflight(monkeypatch)
+
+    result = runner.invoke(
+        app,
+        [
+            "lake",
+            "bootstrap",
+            "dev",
+            "--workspace",
+            str(workspace),
+            "--export-credentials",
+            str(tmp_path / "missing" / "credentials.txt"),
+        ],
+    )
+
+    assert result.exit_code != 0
+    assert "parent directory" in result.output
+    assert "does not exist" in result.output
+    assert calls["created_secrets"] == []
+
+
 def test_bootstrap_lake_cli_reports_already_bootstrapped(
     tmp_path,
     monkeypatch,
@@ -3402,6 +3571,21 @@ def test_command_help_includes_examples(command):
     output = plain_help(result.stdout)
     assert "Examples:" in output
     assert f"stelarctl {' '.join(command)}" in output
+
+
+def test_lake_bootstrap_help_documents_credentials_export():
+    result = runner.invoke(app, ["lake", "bootstrap", "--help"])
+
+    assert result.exit_code == 0
+    output = plain_help(result.stdout)
+    assert "--export-credentials PATH" in output
+    assert "plaintext .txt file" in output
+    assert "KLMS and" in output
+    assert "CKAN local administration" in output
+    assert "Keycloak administration" in output
+    assert "MinIO" in output
+    assert "never overwritten" in output
+    assert "0600" in output
 
 
 def test_lake_help_presents_deploy_and_cleanup_lifecycles():

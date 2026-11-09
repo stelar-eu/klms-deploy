@@ -38,6 +38,14 @@ from ..cli_help import (
     show_help_on_no_args,
 )
 from ..operations.lake_workspace import WorkspaceEnvironmentInfo
+from ..operations.bootstrap_credentials import (
+    validate_bootstrap_credentials_output,
+    write_environment_bootstrap_credentials,
+)
+from ..operations.secret_resources import (
+    BootstrapSecretValues,
+    generate_bootstrap_secret_values,
+)
 from .bootstrap_secrets import prompt_bootstrap_secret_values
 from .formatting import item_list, presence
 from .lake_product import lake_create_command, lake_switch_command
@@ -655,17 +663,66 @@ def lake_bootstrap_command(
             help="Prompt for bootstrap Secret values instead of generating them",
         ),
     ] = False,
+    export_credentials: Annotated[
+        Path | None,
+        typer.Option(
+            "--export-credentials",
+            metavar="PATH",
+            file_okay=True,
+            dir_okay=False,
+            resolve_path=True,
+            help="Write generated STELAR site credentials to a new plaintext .txt file",
+        ),
+    ] = None,
 ) -> None:
+    captured_secret_values: BootstrapSecretValues | None = None
+
+    def bootstrap_secret_values() -> BootstrapSecretValues:
+        nonlocal captured_secret_values
+        captured_secret_values = (
+            prompt_bootstrap_secret_values()
+            if manual_secrets
+            else generate_bootstrap_secret_values()
+        )
+        return captured_secret_values
+
     try:
+        if export_credentials is not None:
+            validate_bootstrap_credentials_output(export_credentials)
         bootstrap_lake(
             env,
             workspace,
             preflight="skip" if skip_preflight else "strict",
             progress=TyperClusterProgress(),
             secret_values_factory=(
-                prompt_bootstrap_secret_values if manual_secrets else None
+                bootstrap_secret_values
+                if manual_secrets or export_credentials is not None
+                else None
             ),
         )
+        if export_credentials is not None:
+            if captured_secret_values is None:
+                raise CommandError(
+                    "Lake bootstrap succeeded, but generated credentials "
+                    "were not available for export"
+                )
+            try:
+                written_path = write_environment_bootstrap_credentials(
+                    env,
+                    workspace,
+                    export_credentials,
+                    captured_secret_values,
+                )
+            except CommandError as exc:
+                raise CommandError(
+                    "Lake bootstrap succeeded, but credential export failed: "
+                    f"{exc}. Do not rerun bootstrap; recover the values from "
+                    "the Kubernetes Secrets or unbootstrap before retrying."
+                ) from exc
+            typer.echo(
+                f"Credentials written to {written_path} "
+                "(plaintext; file permissions: 0600 on POSIX)."
+            )
     except PreflightAccessError as exc:
         typer.echo(f"Warning: {exc}", err=True)
         raise typer.Exit(code=1) from exc
