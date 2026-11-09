@@ -1,192 +1,107 @@
-# Overview
-This repository provides instructions, documentation, and examples regarding deployment of the Knowledge Lake Management System (KLMS) developed by the [STELAR project](https://stelar-project.eu/). The STELAR KLMS supports and facilitates a holistic approach for FAIR (Findable, Accessible, Interoperable, Reusable) and AI-ready (high-quality, reliably labeled) data. It allows to (semi-)automatically turn a raw data lake into a knowledge lake by: (a) enhancing the data lake with a knowledge layer; and (b) developing and integrating a set of data management tools and workflows. 
-The knowledge layer comprises: (a) a data catalog that offers automatically enhanced metadata for the raw data assets in the lake; and (b) a knowledge graph that semantically describes and interlinks these data assets using suitable domain ontologies and vocabularies. The provided STELAR tools and workflows offer novel functionalities for: (a) data discovery and quality management; (b) data linking and alignment, and (c) data annotation and synthetic data generation.
+# STELAR KLMS deployment tooling
 
-![alt text](https://github.com/stelar-eu/klms-deploy/blob/main/misc/klms_architecture.jpg?raw=true)
+This repository publishes two things used to deploy the STELAR Knowledge Lake
+Management System (KLMS):
 
-## Deployment CLI
+- `stelarctl`, the operator CLI distributed as the `stelar-deploy` Python
+  package;
+- `lib/`, the Jsonnet/Tanka deployment library downloaded into an operator's
+  workspace by Jsonnet Bundler.
 
-This repository includes `stelarctl`, the operator CLI for preparing a STELAR
-KLMS lake deployment before running Tanka. It creates the workspace layout,
-creates Tanka environment directories, validates product specs, generates
-`<productName>_fullspec.json`, records the active fullspec at
-`spec.stelar.active_product`, writes `spec.json`, runs cluster preflight checks,
-and creates missing deployment Secrets. `lake add` copies the managed
-`main.jsonnet` entrypoint from the vendored deployment library.
+The repository itself is source code, not a deployable Tanka workspace. Do not
+clone it to create a lake. Install `stelarctl`, initialize a separate workspace,
+and let `jb install` download the deployment library and its dependencies.
 
-The intended operator install path is:
+## Install
+
+Install the CLI with `pipx`:
 
 ```bash
 pipx install stelar-deploy
 stelarctl --help
 ```
 
-A minimal deployment flow is:
+The operator machine also needs Tanka (`tk`), Jsonnet Bundler (`jb`), Jsonnet,
+and `kubectl`. Keep `kubectl` configured with the context that will host the
+lake.
+
+## Deployment lifecycle
+
+Create and enter a workspace outside this source checkout:
 
 ```bash
 stelarctl workspace init ./lake-workspace
 cd ./lake-workspace
 jb install
-stelarctl lake add dev --context my-kube-context --namespace stelar-dev
-stelarctl lake create --minimal minimal dev --namespace stelar-dev
-stelarctl lake verify dev --context my-kube-context --namespace stelar-dev
-stelarctl lake bootstrap dev
+```
+
+Create an environment and product, validate the target cluster, bootstrap the
+non-rendered resources, and then apply the Tanka environment:
+
+```bash
+stelarctl lake add dev --infer
+stelarctl lake create --minimal minimal dev
+stelarctl lake verify dev
+stelarctl lake bootstrap dev --export-credentials ./dev-credentials.txt
 tk apply dev
 stelarctl lake status dev
 ```
 
-To save the exact generated site credentials during bootstrap, add an explicit
-plaintext destination that does not already exist:
+`lake add --infer` records the active kubeconfig context and its configured
+namespace. Either value can instead be supplied explicitly with `--context` or
+`--namespace`; `--infer` fills only a missing value.
+
+The credentials export is optional, contains plaintext secrets, and is created
+with mode `0600` on POSIX systems. Store it securely and delete it when it is no
+longer needed.
+
+Cleanup has two explicit phases:
 
 ```bash
-stelarctl lake bootstrap dev --export-credentials ./dev-credentials.txt
+tk delete dev
+stelarctl lake unbootstrap dev
 ```
 
-The file contains sensitive values and is created with mode `0600` on POSIX
-systems. Protect it and delete it when it is no longer needed.
+`tk delete` removes rendered Kubernetes workloads. `lake unbootstrap` removes
+the bootstrap and init-generated Secrets and ConfigMaps selected by the lake
+fullspec.
 
-To record the active kubeconfig target instead, use
-`stelarctl lake add dev --infer`. You can still provide either `--context` or
-`--namespace`; only the missing value is inferred.
+## Repository layout
 
-The first created product is selected automatically. Use
-`stelarctl lake switch PRODUCT_NAME ENV` only when switching to a different
-generated product or after regenerating an existing selected product.
+- `src/stelar/deploy/` — CLI, feature model, operations, and packaged workspace
+  templates.
+- `lib/` — active Jsonnet/Tanka deployment library consumed through `jb`.
+- `tests/stelarctl/` — CLI and operation tests.
+- `tests/jsonnet_lib/` — Jsonnet library tests and their development-only
+  dependency manifest.
+- `docs/stelarctl.md` — current command and lifecycle reference.
 
-Cleanup is split by ownership: use `tk delete dev` for Tanka-rendered
-resources, and `stelarctl lake unbootstrap dev` when you also want to delete
-the bootstrap Secrets created by `stelarctl`.
+The dependency manifest written by `stelarctl workspace init` is
+`src/stelar/deploy/templates/jsonnetfile.json`. It downloads the `lib`
+subdirectory of this repository plus the required external Jsonnet libraries.
+The source repository deliberately has no root `jsonnetfile.json`, `spec.json`,
+or committed Tanka environment.
 
-See [docs/stelarctl.md](docs/stelarctl.md) for the full command reference,
-TLS modes, generated files, preflight behavior, cleanup behavior, and
-troubleshooting notes.
+## Documentation
 
-## KLMS core components
+- [stelarctl command reference](docs/stelarctl.md)
+- [Failure and safety behavior](docs/stelarctl_failure_cases.md)
+- [Jsonnet library structure](lib/README.md)
+- [Feature model diagram](artifacts/feature-model/stelar-feature-model.svg)
 
-* [STELAR API](https://github.com/stelar-eu/data-api). The main entry point to the KLMS system, exposing RESTful endpoints for managing and searching resources in the KLMS. Houses the core services of the KLMS, including user management, dataset management, metadata extraction, and search functionalities, task and workflow invocation. Exposes a GUI for interacting with the KLMS system, the STELAR KLMS Console, supporting the full spectrum of KLMS functionalities.
+## Development
 
-* [Data Catalog](https://github.com/stelar-eu/klms-core-components-setup/tree/main/ckan-k8s) of datasets in KLMS, deployed as a [CKAN](https://ckan.org/) instance, mainly utilized under the hood.
+Install the package and test dependencies in a virtual environment, then run:
 
-* [Keycloak](https://www.keycloak.org/) is used for Identity and Access Management;
-
-* [PostgreSQL](https://github.com/stelar-eu/klms-core-components-setup/tree/main/image-registry) serves as the main relational database backbone for storing KLMS metadata and user information.
-
-* [Ontop](https://ontop-vkg.org/) a knowledge graph, employing [mappings](https://github.com/stelar-eu/klms-ontology/tree/main/mappings) from the database to a virtual RDF graph according to the [KLMS ontology](https://github.com/stelar-eu/klms-ontology).
-
-* [QUAY Registry](https://quay.io/), via a custom [distribution](https://github.com/stelar-eu/klms-core-components-setup/tree/main/image-registry) for managing STELAR Data Analysis Tools container images.
-
-* [MinIO](https://min.io/) serves as a storage layer for the data assets tracked by the Data Catalog as well as for tool images.
-
-* [Redis](https://redis.io/) is used as an in-memory data structure store for caching.
-
-* [LLM-powered Semantic Dataset Search Facility](https://github.com/stelar-eu/semantic-dataset-search) is a tool for enhancing dataset search capabilities using large language models. It is integrated into the KLMS Console and implemented as a FastAPI service under the hood.
-
-* [STELAR Resource Previewer](https://github.com/stelar-eu/stelar-resource-previewer) is a streamlit-based tool for visualizing and exploring the resources of the data catalog artifacts. It is exposed via the central ingress controller of the KLMS deployment and embedded in the KLMS Console.
-
-* [STELAR Profile Visualizer](https://github.com/stelar-eu/klms-profile-visualizer) is a tool for visualizing and exploring the profiles of the data catalog artifacts. It is also exposed via the central ingress controller of the KLMS deployment and embedded in the KLMS Console.
-
-
-
-
-
-
-The STELAR KLMS supports two alternative workflow engines: 
-
-* In its Community Edition, it supports [Apache Airflow](https://airflow.apache.org/), which is a very popular open-source platform for this purpose. 
-
-* In its Professional and Enterprise editions, it supports the [RapidMiner Studio & AI Hub](https://rapidminer.com/), which is a widely used commercial platform for machine learning and data science workflows.
-
-***While both options have been well-tested in regards with their compatibility, the range of open-source tools and systems STELAR can integrate with is limitless. Integration can be achieved by the STELAR API directly or indirectly through the STELAR Python SDK.***
-
-Access to the STELAR API is provided either directly via its RESTful endpoints or via the STELAR Python SDK, a client library for interacting with the STELAR API. The SDK is available via [PyPI](https://pypi.org/project/stelar-client/) and can be installed via pip:
-
+```bash
+python -m pytest tests/stelarctl
 ```
-pip install stelar_client
-```
-The source code of the SDK is available at its [GitHub repository](https://github.com/stelar-eu/stelar_client).
-# STELAR Toolkit — Tools Index
 
-## Discovery
+Jsonnet library tests need their external dependencies in the ignored root
+`vendor/` directory. See
+[tests/jsonnet_lib/README.md](tests/jsonnet_lib/README.md) for the isolated
+development setup.
 
-- **Synopsis Data Engine (SDE)** — data stream summarization with persistent synopses.  
-  **Lang:** Java · **Integration:** In-cluster via client · **Partners:** ARC, TUE  
-  **GitHub:** `stelar-eu/Synopses-Data-Engine`  
+## License
 
-- **Correlation Detective** — scalable multivariate correlation mining for vector datasets.  
-  **Lang:** Java · **Integration:** In-cluster · **Partner:** TUE  
-  **GitHub:** `stelar-eu/correlation-detective` · **Docker:** `stelareu/correlation-detective`  
-
-- **Forecasting Model Orchestrator (FOMO)** — orchestrates/optimizes time-series forecasting models under a compute budget.  
-  **Lang:** Python 3.10 · **Integration:** In-cluster · **Partner:** TUE  
-  **GitHub:** `stelar-eu/fomo` · **Docker:** `stelareu/fomo`  
-
-- **TableSage** — LLM-powered tabular profiling, summarization, and metadata enrichment.  
-  **Lang:** Python 3.10 · **Integration:** In-cluster · **Partner:** ARC  
-  **GitHub:** `stelar-eu/TableSage-Docker` · **Docker:** `stelareu/tablesage`  
-
-- **Data Profiler** — automatic profiling for tabular, time-series, raster, text, hierarchical, and RDF data.  
-  **Lang:** Python 3.8 · **Integration:** In-cluster · **Partner:** ARC  
-  **GitHub:** `stelar-eu/stelardataprofiler-docker` · **Docker:** `stelareu/data-profiler`  
-
-
-## Interlinking
-
-- **pyJedAI Entity Matching (pyJedAI EM)** — duplicate detection across datasets via multi-stage pipelines.  
-  **Lang:** Python 3.9 · **Integration:** In-cluster · **Partner:** UoA  
-  **GitHub:** `stelar-eu/pyjedai-em` · **Docker:** `stelareu/pyjedai-em`  
-
-- **pyJedAI Schema Matching (pyJedAI SM)** — schema alignment for highly heterogeneous datasets.  
-  **Lang:** Python 3.9 · **Integration:** In-cluster · **Partner:** UoA  
-  **GitHub:** `stelar-eu/pyjedai-sm` · **Docker:** `stelareu/pyjedai-sm`  
-
-- **JedAI-spatial** — interlinking for geospatial RDF; computes DE9IM topological relations.  
-  **Lang:** Java · **Integration:** In-cluster · **Partner:** UoA  
-  **GitHub:** `stelar-eu/jedai-spatial` · **Docker:** `stelareu/jedai-spatial`  
-
-- **Spatio-Temporal Time Series Extraction (TS-Extraction)** — extracts per-pixel/field LAI statistics over time from satellite imagery.  
-  **Lang:** Python 3.10 · **Integration:** In-cluster · **Partner:** TUE  
-  **GitHub:** `stelar-eu/spatiotemporal_timeseries_extraction` · **Docker:** `stelareu/ts-extract`  
-
-- **Time Series Imputation (TS-Imputation)** — SOTA imputation for time series (DL, statistical, and LLM-based methods).  
-  **Lang:** C#, Python 3.12 · **Integration:** In-cluster / Remote · **Partner:** ARC  
-  **GitHub:** `stelar-eu/TS-Impute` · **Docker:** `stelareu/ts-impute`  
-
-- **Missing Data Interpolation** — fills gaps in daily weather data via inverse-distance weighted interpolation.  
-  **Lang:** Python 3.8 · **Integration:** In-cluster · **Partner:** ABACO  
-  **GitHub:** `stelar-eu/missing-data-interpolation` · **Docker:** `stelareu/missing-data-interpolation`  
-
-
-## Annotation
-
-- **Field Segmentation** — automatic agricultural field boundary extraction from satellite imagery (RGB/NIR).  
-  **Lang:** Python 3.9 · **Integration:** In-cluster · **Partner:** TUE  
-  **GitHub:** `stelar-eu/field_segmentation` · **Docker:** `stelareu/field-segmentation`  
-
-- **AvengER** — LLM ensembling/fine-tuning for entity resolution with configurable workflows and evaluation.  
-  **Lang:** Python 3.8 · **Integration:** In-cluster · **Partner:** ARC  
-  **GitHub:** `stelar-eu/AvengER-Docker` · **Docker:** `stelareu/avenger`  
-
-- **Generic NER** — translation, summarization, NER, main-entity selection, and entity linking pipeline.  
-  **Lang:** Python 3.12 · **Integration:** In-cluster · **Partner:** ARC  
-  **GitHub:** `stelar-eu/GenericNER` · **Docker:** `stelareu/generic-ner`  
-
-- **Crop Classification** — DL pipeline on LAI-derived time series for crop type & growth prediction.  
-  **Lang:** Python 3.11 · **Integration:** In-cluster / Remote · **Partner:** UniBwM  
-  **GitHub:** `stelar-eu/crop_prediction_tool` · **Docker:** `stelareu/crop-prediction`  
-
-- **Vocational Score Raster** — generates rasterized vocational-skill score maps across regions.  
-  **Lang:** Python 3.8 · **Integration:** In-cluster · **Partner:** ABACO  
-  **GitHub:** `stelar-eu/vocational-score-raster` · **Docker:** `stelareu/vocational-score-raster`  
-
-- **Agri Products Match** — matches fertilizers/pesticides to reference products via NPK/active substances; multilingual.  
-  **Lang:** Python 3.8 · **Integration:** In-cluster · **Partner:** ABACO  
-  **GitHub:** `stelar-eu/agri-products-match` · **Docker:** `stelareu/agri-products-match`  
-
-- **Hazard Classification** — incident reporting for the agri-food domain.  
-  **Lang:** Python · **Integration:** None · **Partner:** UniBwM  
-  **GitHub:** `stelar-eu/Hazard-classification` · **Docker:** `stelareu/hazard-classification`  
-
-
-# License
-
-The contents of this project are licensed under the [GPL-2.0 license](https://github.com/stelar-eu/klms-deploy/blob/main/LICENSE).
+This project is licensed under the [GPL-2.0 license](LICENSE).

@@ -1,118 +1,58 @@
-# lib
+# STELAR Jsonnet deployment library
 
-`lib` is the current deployment model and Jsonnet layout.
+`lib/` is the active Jsonnet/Tanka library rendered by STELAR lake workspaces.
+It is not a standalone workspace and contains no cluster-specific environment.
+`stelarctl workspace init` writes a dependency manifest that points Jsonnet
+Bundler at this subdirectory; `jb install` then installs it as `vendor/lib/` in
+the operator's workspace.
 
-The current shape is:
+## Public entrypoints
 
-- one component directory per deployable unit
-- one stable `entrypoint.libsonnet` per component
-- one flat `resources/` directory per component
-- one shared component registry under `lib/util/`
-- static environment templates under `lib/environment_templates/`
-- one archive area for legacy files under `lib/unused/`
+- `environment_templates/main_template.jsonnet` is copied by `stelarctl lake
+  add` into each managed environment as `main.jsonnet`.
+- `util/build_lake.libsonnet` reads `spec.stelar.active_product`, derives the
+  selected components and shared configuration, and renders their manifests.
+- `util/components.libsonnet` maps feature-model component names to stable
+  component entrypoints.
 
-## Component structure
+These files form the integration contract between `stelarctl` and the Tanka
+library. Changes to their paths or inputs must remain synchronized with the
+packaged workspace template and the CLI tests.
 
-Each component follows this pattern:
+## Component layout
+
+Each deployable component has a stable entrypoint and resource constructors:
 
 ```text
 <component>/
   entrypoint.libsonnet
   resources/
+    deployment.libsonnet
+    service.libsonnet
     ...
 ```
 
-### Files
+An entrypoint exposes `manifest(config)` and returns the Kubernetes resources
+for that component. Resource constructors use the shared fullspec-derived
+configuration. Component values live under sections such as `config.api` or
+`config.postgres`; deployment-wide values such as `ROOT_DOMAIN` live at the
+configuration root.
 
-- `entrypoint.libsonnet`
-  Stable component entry interface. It imports the component resources and
-  mounts them directly from `manifest(psm)`.
+## Shared code
 
-- `resources/*.libsonnet`
-  Individual Kubernetes resource constructors used by the entrypoint.
+- `util/` contains Kubernetes constructors, component selection, fullspec
+  transformation, ingress helpers, storage helpers, and the `k.libsonnet`
+  alias for the installed Kubernetes Jsonnet library.
+- `system/` renders deployment-wide resources such as network policy,
+  certificates, and init-job RBAC.
+- `environment_templates/` contains only the static managed environment
+  entrypoint copied into operator workspaces.
 
-## Fullspec Config
+No generated product, Kubernetes target, credentials, or Tanka `spec.json`
+belongs in this directory.
 
-The component entrypoints now consume one shared config object derived from the
-generated product fullspec. Component-owned values are read from their feature
-section, for example `config.api.*` or `config.postgres.*`, while deployment-
-wide values live at the root, for example `config.ROOT_DOMAIN`.
+## Tests
 
-## Component entrypoints
-
-Each root component entrypoint imports its resource files directly and mounts
-them inside `manifest(config)`.
-
-Example pattern:
-
-```jsonnet
-local deployment = import "resources/deployment.libsonnet";
-local service = import "resources/service.libsonnet";
-
-{
-  manifest(config): {
-    deployment: deployment.new(config),
-    service: service.new(config),
-  },
-}
-```
-
-## Environment template
-
-`lib/environment_templates/main_template.jsonnet` is the target static environment template.
-
-It is intended to be copied into an environment directory and then consume a
-generated product fullspec JSON file. In that model:
-
-- the Jsonnet file is static
-- only the product fullspec JSON changes per environment
-- the component names come from `lib/util/components.libsonnet`
-- entrypoint files are resolved through `lib/util/components.libsonnet`
-
-## Shared utilities
-
-`lib/util/` holds shared helpers used by the component entrypoints and the
-environment template.
-
-Current shared files include:
-
-- `components.libsonnet`
-  Static component registry. It exposes:
-  - `get(component_name)` to fetch a component entrypoint
-  - `get_names()` to fetch the ordered component list
-
-- `transform.libsonnet`
-  Legacy composition helper for callers that still want a composition layer.
-
-## System component
-
-`lib/system/` holds deployment-wide resources rather than a product
-component. Examples:
-
-- certificates
-- RBAC for init jobs
-- network policy
-
-These use the same flat pattern as the product components:
-
-```text
-lib/system/
-  entrypoint.libsonnet
-  resources/
-    certificates.libsonnet
-    initrbac.libsonnet
-    network_policy.libsonnet
-```
-
-## Unused archive
-
-`lib/unused/` contains legacy Jsonnet files that were moved out of the active
-tree because they do not currently have a direct component counterpart.
-
-This directory is not part of the active rendering path.
-
-## Notes
-
-- `lib` is the active refactor tree.
-- Some review templates in `lib/environment_templates/` are target-shape artifacts and
-  are not necessarily the currently active deployment path.
+The Python-based Jsonnet tests live under `tests/jsonnet_lib/`. Their dependency
+manifest is deliberately kept with the tests rather than at the repository
+root, so this source repository cannot be mistaken for an operator workspace.

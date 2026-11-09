@@ -6,6 +6,21 @@ manifests are rendered or applied with Tanka. It does not replace `jb`,
 resolves products into fullspecs, checks cluster prerequisites, and creates the
 bootstrap Secrets that are intentionally outside the Tanka render path.
 
+The `klms-deploy` source repository is not an operator workspace and should not
+be cloned as one. Install the CLI with `pipx`, then initialize a separate
+workspace:
+
+```bash
+pipx install stelar-deploy
+stelarctl workspace init ./lake-workspace
+cd ./lake-workspace
+jb install
+```
+
+`workspace init` writes the packaged dependency manifest. `jb install` uses it
+to download the active `lib/` subdirectory from this repository together with
+the required external Jsonnet libraries.
+
 ## Mental Model
 
 A workspace is a local deployment root. It contains `jsonnetfile.json`,

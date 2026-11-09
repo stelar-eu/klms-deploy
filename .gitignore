@@ -10,7 +10,8 @@ __pycache__/
 *.so
 
 
-# Jsonnet libraries
+# Source-development Jsonnet dependencies. Operator workspaces live outside
+# this repository and receive their own vendor/ from `jb install`.
 /vendor
 
 # Vendored helm charts
@@ -31,6 +32,8 @@ eggs/
 *.egg
 MANIFEST
 
+# Protect local scratch environments in source checkouts. Deployable
+# environments belong in a separate workspace created by stelarctl.
 /environments/*
 
 # PyInstaller
